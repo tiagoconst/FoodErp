@@ -216,6 +216,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <div id="cloud-bar" style="display:none">
       <div id="sync-status"></div>
       <div id="user-line" style="word-break:break-all"></div>
+      <div id="trial-line" style="margin-top:4px;font-weight:600"></div>
       <button class="btn sm" style="margin-top:6px;background:transparent;color:var(--sb-text,#D7D6CB);border-color:var(--sb-hover,rgba(255,255,255,.2))" onclick="sairConta()">Sair da conta</button>
     </div>
     <div class="foot">Item nunca muda de identidade — apenas ganha funções. Todo saldo nasce de um evento.</div>
@@ -1723,26 +1724,18 @@ VIEWS.eventos=function(){
 VIEWS.dados=function(){
   const cfg=cloudCfg();
   let cloudCard;
-  if(!cfg){
-    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem (Supabase)</h3><span class="tag mut">desativado — dados apenas neste navegador</span></div>
-      <div class="card-b">
-        <p class="subtle" style="margin-bottom:12px">Conecte a um projeto Supabase para ter login, acesso multiusuário simultâneo e sincronização em tempo real entre dispositivos. Antes, execute o script <b>supabase-setup.sql</b> no SQL Editor do seu projeto.</p>
-        <div class="frow c2">
-          <div class="field"><label>URL do projeto</label><input id="cl-url" placeholder="https://xxxx.supabase.co"></div>
-          <div class="field"><label>Chave anon (public)</label><input id="cl-key" placeholder="eyJhbGciOi…"><span class="hint">Settings → API → anon public. Nunca use a service_role aqui.</span></div>
-        </div>
-        <button class="btn primary" onclick="conectarNuvem()">Conectar à nuvem</button></div></div>`;
-  } else if(empresa){
-    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem</h3><span class="tag f">conectado</span></div>
+  if(empresa){
+    const planoTxt=empresa.status==='ativa'?'<span class="tag f">plano ativo</span>'
+      :empresa.status==='trial'?'<span class="tag warn">teste grátis — '+(diasRestantes(empresa.trial_expira_em)||0)+' dia(s) restante(s)</span>'
+      :'<span class="tag bad">bloqueado</span>';
+    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem</h3>${planoTxt}</div>
       <div class="card-b">
         <p style="margin-bottom:10px"><b>${esc(empresa.nome||'')}</b> · usuário <b>${esc(sessao&&sessao.user?sessao.user.email:'')}</b> (${esc(empresa.papel||'')})</p>
         <p class="subtle" style="margin-bottom:12px">Código de convite da empresa — compartilhe com funcionários para que criem conta e entrem nesta mesma base: <b style="color:var(--ink);font-size:15px;letter-spacing:.06em">${esc(empresa.codigo_convite||'—')}</b></p>
-        <button class="btn" onclick="sairConta()">Sair da conta</button>
-        <button class="btn danger" onclick="desconectarNuvem()">Desconectar deste navegador</button></div></div>`;
+        <button class="btn" onclick="sairConta()">Sair da conta</button></div></div>`;
   } else {
-    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem</h3><span class="tag warn">projeto configurado — aguardando login</span></div>
-      <div class="card-b"><button class="btn primary" onclick="showAuth('login')">Fazer login</button>
-        <button class="btn danger" onclick="desconectarNuvem()">Desconectar deste navegador</button></div></div>`;
+    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem</h3><span class="tag warn">aguardando login</span></div>
+      <div class="card-b"><button class="btn primary" onclick="showAuth('login')">Fazer login</button></div></div>`;
   }
   const idn=getIdent();
   const presetBtns=IDENT_PRESETS.map((p,k)=>`<button class="btn sm" onclick="usarPreset(${k})" style="gap:6px">
@@ -1784,7 +1777,7 @@ VIEWS.dados=function(){
       </div>
       <p class="subtle" style="margin-top:10px">A prévia é aplicada enquanto você edita — mas só vale de forma permanente após salvar.</p>
     </div></div>`;
-  return header('Dados & Backup','#6E7468',cfg?'Modo nuvem: dados no Supabase, sincronizados em tempo real.':'Seus dados ficam salvos neste navegador. Exporte um backup em JSON regularmente.')+
+  return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
   `<div class="grid g2">${cloudCard}${identCard}
     <div class="card"><div class="card-h"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
@@ -1915,7 +1908,10 @@ document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>
    Sincronização por diferença: compara o estado atual com o último
    snapshot sincronizado e envia apenas inserções/alterações/remoções.
    Realtime aplica mudanças de outros usuários/dispositivos ao vivo. */
-const CFG_KEY='food-erp-cloud-cfg';
+/* Conexão fixa: este produto é multiempresa sobre um único projeto Supabase
+   (a separação entre empresas é feita por RLS/empresa_id no banco).
+   Não há UI para trocar de projeto nem para "desconectar" — isso é intencional,
+   já que o app é comercializado como serviço, não como instalação local por cliente. */
 const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
@@ -1924,31 +1920,7 @@ const TABLES=['itens','composicoes','movimentos','compras','producoes','pedidos'
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
-function cloudCfg(){
-  try{
-    const c = JSON.parse(localStorage.getItem(CFG_KEY));
-
-    if(c && c.url && c.key){
-      return c;
-    }
-
-    return DEFAULT_SUPABASE;
-
-  }catch(e){
-    return DEFAULT_SUPABASE;
-  }
-}
-function conectarNuvem(){
-  const url=$('#cl-url').value.trim(), key=$('#cl-key').value.trim();
-  if(!/^https:\/\/.+supabase\.co\/?$/.test(url))return toast('URL inválida — formato: https://xxxx.supabase.co',true);
-  if(key.length<40)return toast('Chave anon inválida.',true);
-  localStorage.setItem(CFG_KEY,JSON.stringify({url:url.replace(/\/$/,''),key}));
-  toast('Configuração salva. Recarregando…'); setTimeout(()=>location.reload(),700);
-}
-function desconectarNuvem(){
-  if(!confirm('Desconectar deste navegador? Os dados continuam no Supabase; este navegador volta ao modo local (vazio).'))return;
-  localStorage.removeItem(CFG_KEY); location.reload();
-}
+function cloudCfg(){ return DEFAULT_SUPABASE; }
 async function sairConta(){ if(sb)await sb.auth.signOut(); location.reload(); }
 function setSync(txt,cor){ const el=$('#sync-status'); if(el)el.innerHTML='<b style="color:'+cor+'">●</b> '+txt; }
 
@@ -2048,7 +2020,20 @@ async function afterLogin(){
   if(error)return toast('Erro ao carregar empresa: '+error.message,true);
   if(!data||!data.empresa_id){ showAuth('empresa'); return; }
   empresa=data;
+  if(empresa.status==='bloqueada')
+    return showBloqueado('O acesso desta empresa está bloqueado. Fale com o suporte para reativar.');
+  if(empresa.status==='trial' && diasRestantes(empresa.trial_expira_em)<=0)
+    return showBloqueado('Seu período de teste grátis (15 dias) terminou. Fale com a gente para continuar usando o sistema — seus dados continuam salvos.');
   await entrarNoSistema();
+}
+function diasRestantes(iso){
+  if(!iso)return null;
+  return Math.ceil((new Date(iso)-new Date())/86400000);
+}
+function showBloqueado(msg){
+  const c=$('#auth-card'); $('#auth').classList.add('open');
+  c.innerHTML=`<div class="logo">🔒</div><h2>Acesso bloqueado</h2><div class="sub">${esc(msg)}</div>
+    <div class="auth-alt"><a class="link" onclick="sairConta()">Sair e entrar com outra conta</a></div>`;
 }
 
 /* ---------- Carga, sincronização e tempo real ---------- */
@@ -2070,6 +2055,14 @@ async function entrarNoSistema(){
   subscribeRealtime();
   const bar=$('#cloud-bar'); if(bar)bar.style.display='block';
   const ul=$('#user-line'); if(ul)ul.textContent=(sessao&&sessao.user?sessao.user.email:'')+' · '+(empresa.nome||'');
+  const tl=$('#trial-line');
+  if(tl){
+    if(empresa.status==='trial'){
+      const d=diasRestantes(empresa.trial_expira_em);
+      tl.style.color='var(--m-financeiro,#E0A63C)';
+      tl.textContent='Teste grátis · '+(d>0?d+' dia(s) restante(s)':'expira hoje');
+    } else tl.textContent='';
+  }
   setSync('sincronizado','#7FBF9B');
   nav('dashboard');
 }

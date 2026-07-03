@@ -11,7 +11,7 @@
 :root{
   --bg:#F6F4EE; --panel:#FFFFFF; --ink:#22271F; --muted:#6F7568; --line:#E4E1D6; --soft:#EFEDE4;
   --primary:#2E6E4E; --primary-dark:#20523A; --accent:#E0A63C; --danger:#B3372C; --ok:#2E6E4E;
-  --m-dashboard:#5B3A8C; --m-itens:#1F4E79; --m-composicao:#0F6E6E; --m-compras:#7A4A12;
+  --m-dashboard:#5B3A8C; --m-itens:#1F4E79; --m-composicao:#0F6E6E; --m-produtos:#9C4221; --m-compras:#7A4A12;
   --m-estoque:#5F6B1B; --m-producao:#C05E10; --m-pedidos:#1F6FB2; --m-financeiro:#9E2B25; --m-eventos:#8C1D3F; --m-clientes:#7A3E6B; --m-margens:#A87718; --m-planejamento:#2F6B7A; --m-fornecedores:#8A6642; --m-integracoes:#4A5FA5; --m-funcionarios:#3D7A6E;
   --radius:10px; --shadow:0 1px 2px rgba(30,35,25,.06),0 4px 14px rgba(30,35,25,.05);
   font-size:15px;
@@ -220,6 +220,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <div class="nav-label">Cadastro</div>
     <button class="nav-btn" data-view="itens"><span class="nav-dot" style="background:var(--m-itens)"></span>Itens<span class="count" id="cnt-itens"></span></button>
     <button class="nav-btn" data-view="composicoes"><span class="nav-dot" style="background:var(--m-composicao)"></span>Composições</button>
+    <button class="nav-btn" data-view="produtos"><span class="nav-dot" style="background:var(--m-produtos)"></span>Produtos</button>
     <button class="nav-btn" data-view="clientes"><span class="nav-dot" style="background:var(--m-clientes)"></span>Clientes</button>
     <button class="nav-btn" data-view="fornecedores"><span class="nav-dot" style="background:var(--m-fornecedores)"></span>Fornecedores</button>
     <button class="nav-btn" data-view="funcionarios"><span class="nav-dot" style="background:var(--m-funcionarios)"></span>Funcionários</button>
@@ -231,6 +232,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <button class="nav-btn" data-view="pedidos"><span class="nav-dot" style="background:var(--m-pedidos)"></span>Pedidos<span class="count" id="cnt-pedidos"></span></button>
     <div class="nav-label">Gestão</div>
     <button class="nav-btn" data-view="financeiro"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Financeiro</button>
+    <button class="nav-btn" data-view="custosfixos"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Custos Fixos</button>
     <button class="nav-btn" data-view="margens"><span class="nav-dot" style="background:var(--m-margens)"></span>Margens</button>
     <button class="nav-btn" data-view="integracoes"><span class="nav-dot" style="background:var(--m-integracoes)"></span>Integrações</button>
     <button class="nav-btn" data-view="dados"><span class="nav-dot" style="background:#6E7468"></span>Dados &amp; Backup</button>
@@ -287,7 +289,7 @@ const EVENTO_CORES = {
 
 var S = {
   empresa:{nome:'Meu Restaurante'},
-  itens:[], composicoes:[], movimentos:[], compras:[], producoes:[],
+  itens:[], categorias:[], composicoes:[], custos_fixos:[], movimentos:[], compras:[], producoes:[],
   pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], seq:{}
 };
 let currentView='dashboard';
@@ -382,7 +384,7 @@ function sugestaoCompras(alvoDias){ alvoDias=alvoDias||7;
     return {item:i,disp,cons,cobertura:cons>0?disp/cons:null,sug:alvo-disp};
   }).filter(x=>x.sug>0.0001);
 }
-const MODS=[['dashboard','Dashboard','#5B3A8C'],['itens','Itens','#1F4E79'],['composicao','Composições','#0F6E6E'],
+const MODS=[['dashboard','Dashboard','#5B3A8C'],['itens','Itens','#1F4E79'],['composicao','Composições','#0F6E6E'],['produtos','Produtos','#9C4221'],
   ['clientes','Clientes','#7A3E6B'],['compras','Compras','#7A4A12'],['estoque','Estoque','#5F6B1B'],
   ['producao','Produção','#C05E10'],['pedidos','Pedidos','#1F6FB2'],['financeiro','Financeiro','#9E2B25'],
   ['margens','Margens','#A87718'],['eventos','Eventos','#8C1D3F'],['planejamento','Planejamento','#2F6B7A'],['fornecedores','Fornecedores','#8A6642'],['integracoes','Integrações','#4A5FA5'],['funcionarios','Funcionários','#3D7A6E']];
@@ -445,6 +447,34 @@ function rendimentoDe(paiId){ const c=componentesDe(paiId); return (c.length&&c[
 function garantirFormasPadrao(){ if(S.formas.length)return;
   [['Dinheiro',0],['Pix',0],['Cartão débito',1.5],['Cartão crédito',3.5]].forEach(([n,t])=>
     S.formas.push({id:uid('FPG'),nome:n,taxa_percentual:t,ativo:true,criado_em:new Date().toISOString()})); }
+function garantirCategoriasPadrao(){
+  if(!S.categorias)S.categorias=[];
+  if(S.categorias.length)return;
+  const nomes=[...new Set(S.itens.map(i=>(i.categoria||'').trim()).filter(Boolean))];
+  if(!nomes.length)return;
+  nomes.forEach(n=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,criado_em:new Date().toISOString()}));
+}
+const categoriaById=id=>S.categorias.find(c=>c.id===id);
+function custoFixoMensalTotal(){ return (S.custos_fixos||[]).filter(c=>c.ativo!==false).reduce((a,c)=>a+(c.valor_mensal||0),0); }
+function producaoEstimadaSugerida(){
+  const porMes={};
+  S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega).forEach(p=>{
+    const mes=p.data_entrega.slice(0,7);
+    const un=p.itens.reduce((a,l)=>{ const it=itemById(l.item_id); return a+l.quantidade*((it&&it.unidades_equivalentes)||1); },0);
+    porMes[mes]=(porMes[mes]||0)+un;
+  });
+  const meses=Object.keys(porMes).sort();
+  if(!meses.length)return 0;
+  const ultimos=meses.slice(-3);
+  return Math.round(ultimos.reduce((a,m)=>a+porMes[m],0)/ultimos.length);
+}
+function getCustosFixosCfg(){ if(!S.config)S.config=[]; return Object.assign({producao_estimada:0},S.config.find(x=>x.id==='custosfixos')||{}); }
+function custoFixoPorUnidade(){
+  const total=custoFixoMensalTotal(); if(!total)return 0;
+  const cfg=getCustosFixosCfg();
+  const producao=cfg.producao_estimada>0?cfg.producao_estimada:producaoEstimadaSugerida();
+  return producao?total/producao:0;
+}
 function statusValidade(v){ if(!v)return '';
   const dd=Math.ceil((new Date(v+'T12:00:00').getTime()-Date.now())/864e5);
   if(dd<0)return '<span class="tag bad">vencido</span>';
@@ -553,8 +583,13 @@ VIEWS.dashboard=function(){
 
 /* ================= ITENS ================= */
 let filtroItens='';
+let filtroCategoriaItens='';
 VIEWS.itens=function(){
-  const lista=S.itens.filter(i=>!filtroItens||i.nome.toLowerCase().includes(filtroItens)||(i.categoria||'').toLowerCase().includes(filtroItens));
+  garantirCategoriasPadrao();
+  const lista=S.itens.filter(i=>{
+    if(filtroCategoriaItens&&i.categoria!==filtroCategoriaItens)return false;
+    return !filtroItens||i.nome.toLowerCase().includes(filtroItens)||(i.categoria||'').toLowerCase().includes(filtroItens);
+  });
   const rows=lista.map(i=>{
     const fs=(i.funcoes||[]).map(f=>{const F=FUNCOES.find(x=>x.id===f);return `<span class="tag f">${F?F.nome:f}</span>`;}).join(' ');
     const s=temFuncao(i,'estocavel')?qty(saldo(i.id),i.unidade_base):'—';
@@ -568,24 +603,68 @@ VIEWS.itens=function(){
       <td class="r"><button class="btn sm" onclick="modalItem('${i.id}')">Editar</button>
         <button class="btn sm ghost" onclick="toggleItem('${i.id}')">${i.ativo===false?'Reativar':'Inativar'}</button></td></tr>`;
   }).join('')||`<tr><td colspan="6"><div class="empty"><b>Nenhum item cadastrado</b>Item representa qualquer coisa que exista no sistema: insumo, preparo, produto, embalagem, serviço ou equipamento.</div></td></tr>`;
+  const catChips=`<button class="cat-chip ${!filtroCategoriaItens?'active':''}" style="${!filtroCategoriaItens?'background:var(--primary)':''}" onclick="filtroCategoriaItens='';render()">Todas</button>`+
+    S.categorias.filter(c=>c.ativo!==false).map(c=>`<button class="cat-chip ${filtroCategoriaItens===c.nome?'active':''}" style="${filtroCategoriaItens===c.nome?'background:'+corCategoria(c.nome):''}" onclick="filtroCategoriaItens=${JSON.stringify(c.nome)};render()">${esc(c.nome)}</button>`).join('');
 
   return header('Itens','var(--m-itens)','Um item nunca muda de identidade — apenas ganha funções.',
     `<input class="search" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();this.focus();this.setSelectionRange(99,99)">
+     <button class="btn" onclick="modalCategorias()">🏷️ Categorias</button>
      <button class="btn primary" onclick="modalItem()">+ Novo item</button>`)+
+  `<div class="cat-chips">${catChips}</div>`+
   `<div class="card"><table><thead><tr><th>Item</th><th>Funções</th><th class="r">Saldo</th><th class="r">Custo</th><th class="r">Preço venda</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 
+function modalCategorias(){
+  openModal(`<div class="m-h"><h3>Categorias de itens</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <p class="subtle" style="margin-bottom:12px">Grupos fixos pra organizar os itens (ex.: Matéria-prima, Embalagem, Pré-preparo, Produto). Renomear aqui atualiza automaticamente todos os itens que usam a categoria.</p>
+    <div id="cat-crud-list">${renderCategoriasCrud()}</div>
+    <button class="btn sm" style="margin-top:8px" onclick="S.categorias.push({id:uid('CAT'),nome:'',ativo:true,criado_em:new Date().toISOString()});$('#cat-crud-list').innerHTML=renderCategoriasCrud();setTimeout(()=>{const ins=document.querySelectorAll('#cat-crud-list input');if(ins.length)ins[ins.length-1].focus()},30)">+ Nova categoria</button>
+  </div>
+  <div class="m-f"><button class="btn primary" onclick="closeModal();render()">Concluído</button></div>`,true);
+}
+function renderCategoriasCrud(){
+  return S.categorias.map(c=>{
+    const n=S.itens.filter(i=>i.categoria===c.nome&&i.ativo!==false).length;
+    return `<div class="line" style="grid-template-columns:1fr 110px 34px;opacity:${c.ativo===false?.5:1}">
+      <input value="${esc(c.nome)}" placeholder="ex.: Matéria-prima" onchange="renomearCategoria('${c.id}',this.value)">
+      <span class="subtle" style="align-self:center;text-align:center">${n?n+' item(ns)':'—'}</span>
+      <button class="rm" title="Remover" onclick="removerCategoria('${c.id}')">✕</button></div>`;
+  }).join('')||'<p class="subtle">Nenhuma categoria ainda — clique em "+ Nova categoria".</p>';
+}
+function renomearCategoria(id,valor){
+  const c=categoriaById(id); if(!c)return;
+  const nome=valor.trim();
+  if(!nome){ removerCategoria(id); return; }
+  if(S.categorias.some(x=>x.id!==id&&x.nome.toLowerCase()===nome.toLowerCase()))
+    return toast('Já existe uma categoria com esse nome.',true);
+  const anterior=c.nome;
+  c.nome=nome;
+  if(anterior&&anterior!==nome)S.itens.forEach(i=>{ if(i.categoria===anterior)i.categoria=nome; });
+  scheduleSave(); const el=$('#cat-crud-list'); if(el)el.innerHTML=renderCategoriasCrud();
+}
+function removerCategoria(id){
+  const c=categoriaById(id); if(!c)return;
+  const emUso=S.itens.some(i=>i.categoria===c.nome&&i.ativo!==false);
+  if(emUso&&!confirm('Esta categoria está em uso por itens ativos. Remover mesmo assim? Os itens ficarão sem categoria.'))return;
+  S.categorias=S.categorias.filter(x=>x.id!==id);
+  if(emUso)S.itens.forEach(i=>{ if(i.categoria===c.nome)i.categoria=''; });
+  scheduleSave(); const el=$('#cat-crud-list'); if(el)el.innerHTML=renderCategoriasCrud();
+}
+
 function modalItem(id){
+  garantirCategoriasPadrao();
   const it=id?itemById(id):null;
   const checks=FUNCOES.map(f=>{
     const on=it&&temFuncao(it,f.id);
     return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
   }).join('');
+  const catOpts=S.categorias.filter(c=>c.ativo!==false||(it&&it.categoria===c.nome)).map(c=>`<option value="${esc(c.nome)}" ${it&&it.categoria===c.nome?'selected':''}>${esc(c.nome)}</option>`).join('');
   openModal(`<div class="m-h"><h3>${it?'Editar item':'Novo item'}</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     <div class="frow c2">
       <div class="field"><label>Nome *</label><input id="it-nome" value="${it?esc(it.nome):''}" placeholder="ex.: Arroz cru, Marmita G, Etiqueta"></div>
-      <div class="field"><label>Categoria</label><input id="it-cat" list="cat-list" value="${it?esc(it.categoria||''):''}" placeholder="ex.: Insumo, Produto, Embalagem"><datalist id="cat-list">${[...new Set(S.itens.map(i=>i.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt')).map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div class="field"><label>Categoria</label><select id="it-cat"><option value="">— sem categoria —</option>${catOpts}</select></div>
     </div>
     <div class="frow c3">
       <div class="field"><label>Unidade-base *</label><select id="it-un">${UNIDADES.map(u=>`<option ${it&&it.unidade_base===u?'selected':''}>${u}</option>`).join('')}</select><span class="hint">g (peso) · ml (volume) · un (quantidade)</span></div>
@@ -601,7 +680,7 @@ function modalItem(id){
 function salvarItem(id){
   const nome=$('#it-nome').value.trim(); if(!nome)return toast('Informe o nome do item.',true);
   const funcoes=[...document.querySelectorAll('input[name=funcao]:checked')].map(c=>c.value);
-  const dados={nome,categoria:$('#it-cat').value.trim(),unidade_base:$('#it-un').value,
+  const dados={nome,categoria:$('#it-cat').value,unidade_base:$('#it-un').value,
     preco_venda:parseFloat($('#it-preco').value)||null,estoque_minimo:parseFloat($('#it-min').value)||0,
     funcoes,observacao:$('#it-obs').value.trim(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(itemById(id),dados); registrarEvento('ITEM_ATUALIZADO',`${nome} atualizado (${funcoes.length} funções)`,id); }
@@ -612,49 +691,75 @@ function salvarItem(id){
 function toggleItem(id){ const i=itemById(id); i.ativo=i.ativo===false; // registros não são excluídos, apenas inativados
   registrarEvento('ITEM_ATUALIZADO',`${i.nome} ${i.ativo?'reativado':'inativado'}`,id); scheduleSave(); render(); }
 
-/* ================= COMPOSIÇÕES ================= */
+/* ================= COMPOSIÇÕES (pré-preparos e itens intermediários) & PRODUTOS (vendáveis) ================= */
+function blocoComposicao(pid,mostrarPreco){
+  const it=itemById(pid); if(!it)return'';
+  const comps=componentesDe(pid);
+  const custo=custoItem(pid);
+  const linhas=comps.map(c=>{
+    const f=itemById(c.item_filho_id); const cu=custoItem(c.item_filho_id);
+    const sub=f&&componentesDe(f.id).length?` <span class="tag info">também composto</span>`:'';
+    return `<tr><td>${esc(f?f.nome:'?')}${sub}</td><td class="r num">${qty(c.quantidade,c.unidade)}</td>
+      <td class="r num">${c.perda_percentual?c.perda_percentual+'%':'—'}</td>
+      <td class="r num">${cu!=null?money(cu*c.quantidade*(1+(c.perda_percentual||0)/100)):'—'}</td></tr>`;
+  }).join('');
+  const rend=rendimentoDe(pid);
+  let extra='';
+  if(mostrarPreco){
+    const cf=custoFixoPorUnidade()*(it.unidades_equivalentes||1);
+    const custoTotal=custo!=null?custo+cf:null;
+    extra=` &nbsp;<span class="tag ${it.preco_venda?'f':'warn'}">${it.preco_venda?'venda '+money(it.preco_venda):'sem preço definido'}</span>`;
+    if(cf)extra+=` &nbsp;<span class="subtle">+ fixo ${money(cf)}</span>`;
+    if(it.preco_venda&&custoTotal!=null)extra+=` &nbsp;<span class="subtle">margem ${(((it.preco_venda-custoTotal)/it.preco_venda)*100).toFixed(0)}%</span>`;
+  }
+  return `<details class="comp-tree"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span></span>
+    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a></span></summary>
+    <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
+}
 VIEWS.composicoes=function(){
-  const pais=[...new Set(S.composicoes.map(c=>c.item_pai_id))];
-  const blocos=pais.map(pid=>{
-    const it=itemById(pid); if(!it)return'';
-    const comps=componentesDe(pid);
-    const custo=custoItem(pid);
-    const linhas=comps.map(c=>{
-      const f=itemById(c.item_filho_id); const cu=custoItem(c.item_filho_id);
-      const sub=f&&componentesDe(f.id).length?` <span class="tag info">também composto</span>`:'';
-      return `<tr><td>${esc(f?f.nome:'?')}${sub}</td><td class="r num">${qty(c.quantidade,c.unidade)}</td>
-        <td class="r num">${c.perda_percentual?c.perda_percentual+'%':'—'}</td>
-        <td class="r num">${cu!=null?money(cu*c.quantidade*(1+(c.perda_percentual||0)/100)):'—'}</td></tr>`;
-    }).join('');
-    const rend=rendimentoDe(pid);
-    return `<details class="comp-tree"><summary><span>🧩 ${esc(it.nome)} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span></span>
-      <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a></span></summary>
-      <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
-  }).join('')||`<div class="card"><div class="empty"><b>Nenhuma composição definida</b>Composições definem quais itens compõem outros itens e em que quantidade. Funciona para qualquer combinação: produto → preparo, preparo → insumo, produto → embalagem.</div></div>`;
-
-  return header('Composições','var(--m-composicao)','Estrutura única e reutilizável — fichas técnicas usam a mesma estrutura.',
-    `<button class="btn primary" onclick="modalComposicao()">+ Definir composição</button>`)+blocos;
+  const pais=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&!temFuncao(it,'vendavel'); });
+  const blocos=pais.map(pid=>blocoComposicao(pid,false)).join('')||
+    `<div class="card"><div class="empty"><b>Nenhuma composição definida</b>Composições são as fichas técnicas dos seus pré-preparos e itens intermediários — insumo → pré-preparo → pré-preparo. Para o produto final que você vende (com preço), use a aba <b>Produtos</b>.</div></div>`;
+  return header('Composições','var(--m-composicao)','Fichas técnicas de pré-preparos e itens intermediários — não são vendidos diretamente.',
+    `<button class="btn primary" onclick="modalComposicao(null,'preparo')">+ Definir composição</button>`)+blocos;
+};
+VIEWS.produtos=function(){
+  const pais=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&temFuncao(it,'vendavel'); });
+  const semComposicao=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&!componentesDe(i.id).length);
+  const blocos=pais.map(pid=>blocoComposicao(pid,true)).join('')||
+    `<div class="card"><div class="empty"><b>Nenhum produto com ficha técnica</b>Marque um item como <b>Vendável</b> em Itens, depois defina aqui do que ele é composto (itens e/ou pré-preparos) e o preço de venda.</div></div>`;
+  const aviso=semComposicao.length?`<div class="card section-gap"><div class="card-b"><p class="subtle"><b>${semComposicao.length} produto(s) vendável(is) sem ficha técnica:</b> ${semComposicao.map(i=>esc(i.nome)).join(', ')}. Sem composição definida o custo (CMV) não é calculado.</p></div></div>`:'';
+  return header('Produtos','var(--m-produtos)','O que você vende — composto por itens e/ou pré-preparos, com preço de venda definido aqui.',
+    `<button class="btn primary" onclick="modalComposicao(null,'produto')">+ Definir produto</button>`)+blocos+aviso;
 };
 
-let compLinhas=[];
-function modalComposicao(paiId){
-  const compostos=S.itens.filter(i=>i.ativo!==false);
+let compLinhas=[], compTipo='preparo';
+function modalComposicao(paiId,tipo){
+  compTipo = tipo || (paiId ? (temFuncao(itemById(paiId),'vendavel')?'produto':'preparo') : 'preparo');
+  const compostos=S.itens.filter(i=>i.ativo!==false&&(compTipo==='produto'?temFuncao(i,'vendavel'):!temFuncao(i,'vendavel')));
+  const pai=paiId?itemById(paiId):null;
   compLinhas=paiId?componentesDe(paiId).map(c=>({item:c.item_filho_id,qtd:c.quantidade,perda:c.perda_percentual||0})):[{item:'',qtd:'',perda:0}];
-  openModal(`<div class="m-h"><h3>${paiId?'Editar composição':'Nova composição'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  const rotulo=compTipo==='produto'?'Produto (item vendável) *':'Item composto (pré-preparo) *';
+  const dica=compTipo==='produto'?'Ex.: Marmita G = arroz branco + frango + feijão + embalagem + etiqueta':'Ex.: Frango grelhado (pré-preparo) = peito de frango cru + tempero';
+  openModal(`<div class="m-h"><h3>${paiId?(compTipo==='produto'?'Editar produto':'Editar composição'):(compTipo==='produto'?'Novo produto':'Nova composição')}</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     <div class="frow c2">
-    <div class="field"><label>Item composto (pai) *</label>
+    <div class="field"><label>${rotulo}</label>
       <select id="cp-pai" ${paiId?'disabled':''}>${!paiId?'<option value="">Selecione…</option>':''}${compostos.map(i=>`<option value="${i.id}" ${i.id===paiId?'selected':''}>${esc(i.nome)} (${i.unidade_base})</option>`).join('')}</select>
-      <span class="hint">Ex.: Marmita G = arroz branco + frango + feijão + embalagem + etiqueta</span></div>
+      <span class="hint">${dica}</span></div>
     <div class="field"><label>Rendimento da receita *</label>
       <input id="cp-rend" type="number" step="any" min="0" value="${paiId?rendimentoDe(paiId):1}">
       <span class="hint">Quanto esta receita produz, na unidade-base do item. Ex.: 1000 g de arroz cru rendem <b>2700</b> (g) de arroz cozido — o custo por grama cai sozinho.</span></div>
     </div>
+    ${compTipo==='produto'?`<div class="frow c2">
+      <div class="field"><label>Preço de venda (R$)</label><input id="cp-preco" type="number" step="0.01" min="0" value="${pai&&pai.preco_venda?pai.preco_venda:''}" placeholder="ex.: 22.00"></div>
+      <div class="field"><label>Unidades equivalentes</label><input id="cp-unideq" type="number" step="any" min="0" value="${pai&&pai.unidades_equivalentes?pai.unidades_equivalentes:1}"><span class="hint">pra rateio de custo fixo — ex.: combo de 5 marmitas = 5</span></div>
+    </div>`:''}
     <div class="field"><label>Componentes (quantidade na unidade-base do componente)</label>
       <div class="lines" id="cp-lines"></div>
       <button class="btn sm" onclick="compLinhas.push({item:'',qtd:'',perda:0});drawCompLines()">+ Adicionar componente</button></div>
   </div>
-  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarComposicao('${paiId||''}')">Salvar composição</button></div>`,true);
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarComposicao('${paiId||''}')">Salvar</button></div>`,true);
   drawCompLines();
 }
 function drawCompLines(){
@@ -667,7 +772,7 @@ function drawCompLines(){
   compLinhas.forEach((l,k)=>{ if(l.item)$('#cp-lines').children[k].querySelector('select').value=l.item; });
 }
 function salvarComposicao(paiId){
-  const pai=paiId||$('#cp-pai').value; if(!pai)return toast('Selecione o item composto.',true);
+  const pai=paiId||$('#cp-pai').value; if(!pai)return toast('Selecione o item.',true);
   const validas=compLinhas.filter(l=>l.item&&parseFloat(l.qtd)>0);
   if(!validas.length)return toast('Adicione ao menos um componente com quantidade.',true);
   if(validas.some(l=>l.item===pai))return toast('Um item não pode compor a si mesmo.',true);
@@ -676,8 +781,9 @@ function salvarComposicao(paiId){
   validas.forEach(l=>{ const f=itemById(l.item);
     S.composicoes.push({id:uid('CMP'),item_pai_id:pai,item_filho_id:l.item,quantidade:parseFloat(l.qtd),
       unidade:f?f.unidade_base:'un',perda_percentual:parseFloat(l.perda)||0,rendimento:rend,ativo:true,criado_em:new Date().toISOString()}); });
+  if(compTipo==='produto'){ const p=itemById(pai); if(p){ p.preco_venda=parseFloat($('#cp-preco').value)||null; p.unidades_equivalentes=parseFloat($('#cp-unideq').value)||1; } }
   registrarEvento('COMPOSICAO_DEFINIDA',`${nomeItem(pai)}: ${validas.length} componentes definidos`,pai);
-  closeModal(); scheduleSave(); render(); toast('Composição salva.');
+  closeModal(); scheduleSave(); render(); toast(compTipo==='produto'?'Produto salvo.':'Composição salva.');
 }
 </script>
 <script>
@@ -1803,34 +1909,91 @@ function modalHistFornecedor(id){
 /* ================= MARGENS ================= */
 VIEWS.margens=function(){
   const vend=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  const cfPorUnidade=custoFixoPorUnidade();
   const ini=Date.now()-30*864e5;
-  let totRec=0, totCmv=0;
+  let totRec=0, totCmv=0, totFixo=0;
   const rows=vend.map(i=>{
     const cmv=custoItem(i.id), pv=i.preco_venda;
-    const margem=(pv!=null&&cmv!=null)?pv-cmv:null;
+    const cf=cfPorUnidade*(i.unidades_equivalentes||1);
+    const custoTotal=cmv!=null?cmv+cf:null;
+    const margem=(pv!=null&&custoTotal!=null)?pv-custoTotal:null;
     const mp=(margem!=null&&pv)?margem/pv*100:null;
     let q30=0, rec30=0, cmv30=0, temCmv=false;
     S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega&&new Date(p.data_entrega+'T12:00:00').getTime()>=ini)
       .forEach(p=>p.itens.filter(l=>l.item_id===i.id).forEach(l=>{
         q30+=l.quantidade; rec30+=l.quantidade*l.preco_unitario;
         const cu=(l.cmv_unitario!=null)?l.cmv_unitario:cmv;
-        if(cu!=null){ temCmv=true; cmv30+=cu*l.quantidade; } }));
-    totRec+=rec30; totCmv+=temCmv?cmv30:0;
+        if(cu!=null){ temCmv=true; cmv30+=(cu+cf)*l.quantidade; } }));
+    totRec+=rec30; totCmv+=temCmv?cmv30:0; totFixo+=q30*cf;
     const mtag=mp==null?'':(mp<0?'<span class="tag bad">'+Math.round(mp)+'%</span>':(mp<30?'<span class="tag warn">'+Math.round(mp)+'%</span>':'<span class="tag f">'+Math.round(mp)+'%</span>'));
     return `<tr><td><b>${esc(i.nome)}</b></td>
       <td class="r num">${pv!=null?money(pv):'—'}</td>
       <td class="r num">${cmv!=null?money(cmv):'—'}</td>
+      <td class="r num">${cf?money(cf):'—'}</td>
       <td class="r num ${margem!=null&&margem<0?'neg':'pos'}">${margem!=null?money(margem):'—'}</td>
       <td class="r">${mtag||'—'}</td>
       <td class="r num">${q30?q30.toLocaleString('pt-BR'):'—'}</td>
       <td class="r num">${q30?money(rec30):'—'}</td>
       <td class="r num">${q30&&temCmv?money(rec30-cmv30):'—'}</td></tr>`;
-  }).join('')||`<tr><td colspan="8"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
-  const resumo=totRec?`Receita 30 d: <b class="num">${money(totRec)}</b> · CMV: <b class="num">${money(totCmv)}</b> · Margem bruta: <b class="num">${money(totRec-totCmv)} (${Math.round((totRec-totCmv)/totRec*100)}%)</b>`:'Sem vendas nos últimos 30 dias.';
-  return header('Margens por produto','var(--m-margens)','CMV = custo da composição · o custo é fotografado no momento da entrega de cada pedido.')+
+  }).join('')||`<tr><td colspan="9"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
+  const resumo=totRec?`Receita 30 d: <b class="num">${money(totRec)}</b> · CMV+fixo: <b class="num">${money(totCmv)}</b> · Margem: <b class="num">${money(totRec-totCmv)} (${Math.round((totRec-totCmv)/totRec*100)}%)</b>`:'Sem vendas nos últimos 30 dias.';
+  return header('Margens por produto','var(--m-margens)','Custo total = CMV (matéria-prima, fotografado na entrega) + custo fixo rateado (definido em Custos Fixos).')+
   `<div class="card"><div class="card-h"><h3>Margem por item vendável</h3><span class="subtle">${resumo}</span></div>
-    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV atual</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Vendidos 30 d</th><th class="r">Receita 30 d</th><th class="r">Margem 30 d</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Vendidos 30 d</th><th class="r">Receita 30 d</th><th class="r">Margem 30 d</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
+
+/* ================= CUSTOS FIXOS ================= */
+VIEWS.custosfixos=function(){
+  const total=custoFixoMensalTotal();
+  const cfg=getCustosFixosCfg();
+  const sugestao=producaoEstimadaSugerida();
+  const producao=cfg.producao_estimada>0?cfg.producao_estimada:sugestao;
+  const rate=producao?total/producao:0;
+  const rows=(S.custos_fixos||[]).slice().sort((a,b)=>(b.valor_mensal||0)-(a.valor_mensal||0)).map(c=>`<tr style="${c.ativo===false?'opacity:.45':''}">
+    <td><b>${esc(c.nome)}</b></td><td class="r num">${money(c.valor_mensal||0)}</td>
+    <td class="r"><button class="btn sm" onclick="modalCustoFixo('${c.id}')">Editar</button></td></tr>`).join('')
+    ||`<tr><td colspan="3"><div class="empty"><b>Nenhum custo fixo cadastrado</b>Água, luz, internet, aluguel, telefone… tudo que você paga todo mês, mesmo sem vender nada.</div></td></tr>`;
+  return header('Custos fixos','var(--m-financeiro)','Rateados por unidade equivalente e somados ao CMV nas telas de Produtos e Margens.',
+    `<button class="btn primary" onclick="modalCustoFixo()">+ Custo fixo</button>`)+
+  `<div class="grid g3">
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-financeiro)"></span>Total mensal</div><div class="k-value num">${money(total)}</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-producao)"></span>Produção estimada/mês</div><div class="k-value num">${producao?producao.toLocaleString('pt-BR'):'—'}</div><div class="k-foot">${cfg.producao_estimada>0?'definida manualmente':(sugestao?'sugestão automática (média 3 meses)':'sem dados suficientes ainda')}</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--primary)"></span>Custo fixo por unidade</div><div class="k-value num">${producao?money(rate):'—'}</div><div class="k-foot">somado ao custo de cada produto conforme suas unidades equivalentes</div></div>
+  </div>
+  <div class="card section-gap"><div class="card-h"><h3>Produção mensal estimada</h3></div><div class="card-b">
+    <p class="subtle" style="margin-bottom:10px">Em unidades equivalentes (uma marmita = 1; um combo de 5 = 5). Deixe em branco para o sistema usar a média dos últimos 3 meses de pedidos entregues${sugestao?' (hoje sugere '+sugestao.toLocaleString('pt-BR')+')':''}.</p>
+    <div class="frow c2"><div class="field"><label>Produção manual (opcional)</label><input id="cf-producao" type="number" min="0" step="1" value="${cfg.producao_estimada>0?cfg.producao_estimada:''}" placeholder="${sugestao||'ex.: 2000'}"></div></div>
+    <button class="btn primary" onclick="salvarProducaoEstimada()">Salvar</button>
+  </div></div>
+  <div class="card section-gap"><table><thead><tr><th>Custo fixo</th><th class="r">Valor mensal</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+};
+function modalCustoFixo(id){
+  const c=id?(S.custos_fixos||[]).find(x=>x.id===id):null;
+  openModal(`<div class="m-h"><h3>${c?'Editar custo fixo':'Novo custo fixo'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b"><div class="frow c2">
+    <div class="field"><label>Nome *</label><input id="cf-nome" value="${c?esc(c.nome):''}" placeholder="ex.: Água, Luz, Internet, Aluguel"></div>
+    <div class="field"><label>Valor mensal (R$) *</label><input id="cf-valor" type="number" step="0.01" min="0" value="${c&&c.valor_mensal?c.valor_mensal:''}"></div>
+  </div></div>
+  <div class="m-f">${c?`<button class="btn ghost" onclick="toggleCustoFixo('${id}')">${c.ativo===false?'Reativar':'Inativar'}</button>`:''}
+    <button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarCustoFixo('${id||''}')">Salvar</button></div>`);
+}
+function salvarCustoFixo(id){
+  const nome=$('#cf-nome').value.trim(); if(!nome)return toast('Informe o nome.',true);
+  const valor=parseFloat($('#cf-valor').value)||0;
+  if(!S.custos_fixos)S.custos_fixos=[];
+  if(id){ Object.assign(S.custos_fixos.find(x=>x.id===id),{nome,valor_mensal:valor}); }
+  else{ S.custos_fixos.push({id:uid('CFX'),nome,valor_mensal:valor,ativo:true,criado_em:new Date().toISOString()}); }
+  closeModal(); scheduleSave(); render(); toast('Custo fixo salvo.');
+}
+function toggleCustoFixo(id){ const c=(S.custos_fixos||[]).find(x=>x.id===id); if(!c)return; c.ativo=c.ativo===false;
+  closeModal(); scheduleSave(); render(); }
+function salvarProducaoEstimada(){
+  const v=parseFloat($('#cf-producao').value)||0;
+  if(!S.config)S.config=[];
+  S.config=S.config.filter(x=>x.id!=='custosfixos');
+  S.config.push({id:'custosfixos',producao_estimada:v});
+  scheduleSave(); render(); toast('Produção estimada salva.');
+}
 
 /* ================= EVENTOS ================= */
 VIEWS.eventos=function(){
@@ -1977,7 +2140,7 @@ function importarJSON(){
 }
 async function zerarTudo(){
   if(!confirm('Apagar TODOS os dados? Esta ação não pode ser desfeita.'))return;
-  S=Object.assign(S,{itens:[],composicoes:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
+  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
   await persist(); render(); toast('Sistema zerado.');
 }
 
@@ -1985,7 +2148,8 @@ async function zerarTudo(){
 function carregarExemplo(){
   if(S.itens.length&&!confirm('Isto substitui os dados atuais pelo exemplo. Continuar?'))return;
   const _cfg=S.config||[];
-  S={empresa:{nome:'Marmitaria Exemplo'},itens:[],composicoes:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],config:_cfg,seq:{}};
+  S={empresa:{nome:'Marmitaria Exemplo'},itens:[],categorias:[],composicoes:[],custos_fixos:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],config:_cfg,seq:{}};
+  ['Insumo','Pré-preparo','Embalagem','Produto','Serviço'].forEach(n=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,criado_em:new Date().toISOString()}));
   garantirFormasPadrao();
   S.fornecedores.push({id:uid('FOR'),nome:'Atacadão Central',telefone:'(48) 3333-0000',cnpj:'',endereco:'Av. Principal, 500',
     prazo_pagamento_dias:28,prazo_entrega_dias:2,condicoes:'Boleto 28dd · pedido mín. R$ 300',
@@ -2037,7 +2201,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','composicoes','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
@@ -2170,7 +2334,8 @@ async function entrarNoSistema(){
         TABLES.forEach(t=>{ S[t]=p[t]||[]; }); await cloudPersist(); }
     }catch(e){} }
   }
-  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[];
+  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[];
+  garantirCategoriasPadrao();
   aplicarIdentidade();
   if(!S.formas.length){ garantirFormasPadrao(); cloudPersist(); }
   subscribeRealtime();

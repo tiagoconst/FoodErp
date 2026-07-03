@@ -1916,11 +1916,28 @@ document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>
    snapshot sincronizado e envia apenas inserções/alterações/remoções.
    Realtime aplica mudanças de outros usuários/dispositivos ao vivo. */
 const CFG_KEY='food-erp-cloud-cfg';
+const DEFAULT_SUPABASE = {
+  url: 'https://jaytdbwaoduefrbragsw.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
+};
 const TABLES=['itens','composicoes','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
-function cloudCfg(){ try{const c=JSON.parse(localStorage.getItem(CFG_KEY)); return (c&&c.url&&c.key)?c:null;}catch(e){return null;} }
+function cloudCfg(){
+  try{
+    const c = JSON.parse(localStorage.getItem(CFG_KEY));
+
+    if(c && c.url && c.key){
+      return c;
+    }
+
+    return DEFAULT_SUPABASE;
+
+  }catch(e){
+    return DEFAULT_SUPABASE;
+  }
+}
 function conectarNuvem(){
   const url=$('#cl-url').value.trim(), key=$('#cl-key').value.trim();
   if(!/^https:\/\/.+supabase\.co\/?$/.test(url))return toast('URL inválida — formato: https://xxxx.supabase.co',true);

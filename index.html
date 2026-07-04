@@ -11,7 +11,7 @@
 :root{
   --bg:#F6F4EE; --panel:#FFFFFF; --ink:#22271F; --muted:#6F7568; --line:#E4E1D6; --soft:#EFEDE4;
   --primary:#2E6E4E; --primary-dark:#20523A; --accent:#E0A63C; --danger:#B3372C; --ok:#2E6E4E;
-  --m-dashboard:#5B3A8C; --m-itens:#1F4E79; --m-composicao:#0F6E6E; --m-produtos:#9C4221; --m-compras:#7A4A12;
+  --m-dashboard:#5B3A8C; --m-itens:#1F4E79; --m-composicao:#0F6E6E; --m-produtos:#9C4221; --m-compras:#7A4A12; --m-relatorios:#3E5F8A;
   --m-estoque:#5F6B1B; --m-producao:#C05E10; --m-pedidos:#1F6FB2; --m-financeiro:#9E2B25; --m-eventos:#8C1D3F; --m-clientes:#7A3E6B; --m-margens:#A87718; --m-planejamento:#2F6B7A; --m-fornecedores:#8A6642; --m-integracoes:#4A5FA5; --m-funcionarios:#3D7A6E;
   --radius:10px; --shadow:0 1px 2px rgba(30,35,25,.06),0 4px 14px rgba(30,35,25,.05);
   font-size:15px;
@@ -234,6 +234,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <button class="nav-btn" data-view="financeiro"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Financeiro</button>
     <button class="nav-btn" data-view="custosfixos"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Custos Fixos</button>
     <button class="nav-btn" data-view="margens"><span class="nav-dot" style="background:var(--m-margens)"></span>Margens</button>
+    <button class="nav-btn" data-view="relatorios"><span class="nav-dot" style="background:var(--m-relatorios)"></span>Relatórios</button>
     <button class="nav-btn" data-view="integracoes"><span class="nav-dot" style="background:var(--m-integracoes)"></span>Integrações</button>
     <button class="nav-btn" data-view="dados"><span class="nav-dot" style="background:#6E7468"></span>Dados &amp; Backup</button>
     <div id="cloud-bar" style="display:none">
@@ -387,7 +388,7 @@ function sugestaoCompras(alvoDias){ alvoDias=alvoDias||7;
 const MODS=[['dashboard','Dashboard','#5B3A8C'],['itens','Itens','#1F4E79'],['composicao','Composições','#0F6E6E'],['produtos','Produtos','#9C4221'],
   ['clientes','Clientes','#7A3E6B'],['compras','Compras','#7A4A12'],['estoque','Estoque','#5F6B1B'],
   ['producao','Produção','#C05E10'],['pedidos','Pedidos','#1F6FB2'],['financeiro','Financeiro','#9E2B25'],
-  ['margens','Margens','#A87718'],['eventos','Eventos','#8C1D3F'],['planejamento','Planejamento','#2F6B7A'],['fornecedores','Fornecedores','#8A6642'],['integracoes','Integrações','#4A5FA5'],['funcionarios','Funcionários','#3D7A6E']];
+  ['margens','Margens','#A87718'],['relatorios','Relatórios','#3E5F8A'],['eventos','Eventos','#8C1D3F'],['planejamento','Planejamento','#2F6B7A'],['fornecedores','Fornecedores','#8A6642'],['integracoes','Integrações','#4A5FA5'],['funcionarios','Funcionários','#3D7A6E']];
 const IDENT_PADRAO=Object.assign({nome:'Food ERP',subtitulo:'Dirigido por itens · Eventos',logo_emoji:'🍲',logo_img:null,
   cor_primaria:'#2E6E4E',cor_acento:'#E0A63C',cor_sidebar:'#20261F',cor_fundo:'#F6F4EE',
   cor_painel:'#FFFFFF',cor_texto:'#22271F',cor_perigo:'#B3372C'},
@@ -1985,7 +1986,94 @@ VIEWS.margens=function(){
     <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Vendidos 30 d</th><th class="r">Receita 30 d</th><th class="r">Margem 30 d</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 
-/* ================= CUSTOS FIXOS ================= */
+/* ================= RELATÓRIOS ================= */
+let relPeriodo='30d', relDataIni='', relDataFim='';
+function relIntervalo(){
+  const hj=hoje();
+  const d=(n)=>{ const x=new Date(); x.setDate(x.getDate()-n); return x.toISOString().slice(0,10); };
+  if(relPeriodo==='7d')return {ini:d(6),fim:hj,label:'últimos 7 dias'};
+  if(relPeriodo==='30d')return {ini:d(29),fim:hj,label:'últimos 30 dias'};
+  if(relPeriodo==='90d')return {ini:d(89),fim:hj,label:'últimos 90 dias'};
+  if(relPeriodo==='mes'){ const p=hj.slice(0,7); return {ini:p+'-01',fim:hj,label:'este mês'}; }
+  if(relPeriodo==='mespassado'){ const dt=new Date(); dt.setDate(1); dt.setMonth(dt.getMonth()-1);
+    const p=dt.toISOString().slice(0,7); const ult=new Date(dt.getFullYear(),dt.getMonth()+1,0).toISOString().slice(0,10);
+    return {ini:p+'-01',fim:ult,label:'mês passado'}; }
+  if(relPeriodo==='ano')return {ini:hj.slice(0,4)+'-01-01',fim:hj,label:'este ano'};
+  if(relPeriodo==='tudo')return {ini:'2000-01-01',fim:hj,label:'todo o período'};
+  return {ini:relDataIni||d(29),fim:relDataFim||hj,label:'período selecionado'};
+}
+VIEWS.relatorios=function(){
+  const {ini,fim,label}=relIntervalo();
+  const pedidos=S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim);
+  const receita=pedidos.reduce((a,p)=>a+(p.valor_total||0),0);
+  const nPedidos=pedidos.length;
+  const ticket=nPedidos?receita/nPedidos:0;
+  const clientesAtendidos=new Set(pedidos.map(p=>p.cliente_id||p.cliente)).size;
+
+  // custo por linha (usa cmv fotografado; se não tiver, calcula no custo atual)
+  const custoLinha=(l)=> (l.cmv_unitario!=null?l.cmv_unitario:custoItem(l.item_id))||0;
+  let custoTotal=0;
+  const porProduto={}; // item_id -> {nome,qtd,receita,custo}
+  const porCliente={}; // chave -> {nome,qtd,receita,ultima}
+  const porDiaSemana=[0,0,0,0,0,0,0];
+  pedidos.forEach(p=>{
+    const dow=(new Date(p.data_entrega+'T12:00:00').getDay()+6)%7; // 0=seg
+    porDiaSemana[dow]+=p.valor_total||0;
+    const chaveCli=p.cliente_id||p.cliente||'—';
+    const pc=porCliente[chaveCli]||(porCliente[chaveCli]={nome:p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso',qtd:0,receita:0,ultima:''});
+    pc.qtd++; pc.receita+=p.valor_total||0; if(p.data_entrega>pc.ultima)pc.ultima=p.data_entrega;
+    (p.itens||[]).forEach(l=>{
+      const cu=custoLinha(l); custoTotal+=cu*l.quantidade;
+      const pp=porProduto[l.item_id]||(porProduto[l.item_id]={nome:(itemById(l.item_id)||{}).nome||l.item_id,qtd:0,receita:0,custo:0});
+      pp.qtd+=l.quantidade; pp.receita+=l.quantidade*l.preco_unitario; pp.custo+=cu*l.quantidade;
+    });
+  });
+  const margemTotal=receita-custoTotal;
+
+  const produtosOrd=Object.values(porProduto).sort((a,b)=>b.receita-a.receita);
+  const produtosRows=produtosOrd.slice(0,15).map(p=>{
+    const m=p.receita-p.custo, mp=p.receita?m/p.receita*100:0;
+    return `<tr><td><b>${esc(p.nome)}</b></td><td class="r num">${p.qtd.toLocaleString('pt-BR')}</td><td class="r num">${money(p.receita)}</td>
+      <td class="r">${mp<30?'<span class="tag bad">':mp<55?'<span class="tag warn">':'<span class="tag f">'}${Math.round(mp)}%</span></td></tr>`;
+  }).join('')||'<tr><td colspan="4"><div class="empty"><b>Sem vendas no período</b></div></td></tr>';
+
+  const clientesOrd=Object.values(porCliente).sort((a,b)=>b.receita-a.receita);
+  const clientesRows=clientesOrd.slice(0,12).map(c=>{
+    const dias=c.ultima?Math.floor((Date.now()-new Date(c.ultima+'T12:00:00').getTime())/864e5):null;
+    return `<tr><td><b>${esc(c.nome)}</b></td><td class="r num">${c.qtd}</td><td class="r num">${money(c.receita)}</td>
+      <td class="r subtle">${dias==null?'—':dias===0?'hoje':dias+'d atrás'}</td></tr>`;
+  }).join('')||'<tr><td colspan="4"><div class="empty"><b>Sem vendas no período</b></div></td></tr>';
+
+  const inativos=clientesOrd.filter(c=>c.qtd===1);
+  const inativosValor=inativos.reduce((a,c)=>a+c.receita,0);
+
+  const maxDia=Math.max(...porDiaSemana,1);
+  const nomesDia=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+  const barrasDia=porDiaSemana.map((v,i)=>`<div class="bar" title="${nomesDia[i]}: ${money(v)}"><div class="b ${v?'':'zero'}" style="height:${Math.max(3,Math.round(v/maxDia*130))}px"></div><small>${nomesDia[i]}</small></div>`).join('');
+
+  const periodos=[['7d','7 dias'],['30d','30 dias'],['90d','90 dias'],['mes','Este mês'],['mespassado','Mês passado'],['ano','Este ano'],['tudo','Tudo']];
+  const chipsPeriodo=periodos.map(([v,l])=>`<button class="cat-chip ${relPeriodo===v?'active':''}" style="${relPeriodo===v?'background:var(--primary)':''}" onclick="relPeriodo='${v}';render()">${l}</button>`).join('')+
+    `<button class="cat-chip ${relPeriodo==='custom'?'active':''}" style="${relPeriodo==='custom'?'background:var(--primary)':''}" onclick="relPeriodo='custom';render()">Personalizado</button>`;
+  const customFields=relPeriodo==='custom'?`<div class="frow c2" style="margin-top:10px;max-width:420px">
+      <div class="field"><label>De</label><input type="date" value="${relDataIni}" onchange="relDataIni=this.value;render()"></div>
+      <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
+
+  return header('Relatórios','var(--m-relatorios)',`Vendas entregues no período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
+  `<div class="cat-chips">${chipsPeriodo}</div>${customFields}
+  <div class="grid g4 section-gap">
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-pedidos)"></span>Receita</div><div class="k-value num">${money(receita)}</div><div class="k-foot">${nPedidos} pedidos</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--primary)"></span>Ticket médio</div><div class="k-value num">${money(ticket)}</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-margens)"></span>Margem (CMV)</div><div class="k-value num">${money(margemTotal)}</div><div class="k-foot">${receita?Math.round(margemTotal/receita*100):0}% da receita</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Clientes atendidos</div><div class="k-value num">${clientesAtendidos}</div><div class="k-foot">${inativos.length} compraram só 1x (${money(inativosValor)})</div></div>
+  </div>
+  <div class="card section-gap"><div class="card-h"><h3>Vendas por dia da semana</h3></div><div class="card-b"><div class="bars">${barrasDia}</div></div></div>
+  <div class="grid g2 section-gap">
+    <div class="card"><div class="card-h"><h3>Produtos mais vendidos</h3><span class="subtle">top 15 por receita</span></div>
+      <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Produto</th><th class="r">Qtd</th><th class="r">Receita</th><th class="r">Margem</th></tr></thead><tbody>${produtosRows}</tbody></table></div></div>
+    <div class="card"><div class="card-h"><h3>Clientes que mais compram</h3><span class="subtle">top 12 por receita</span></div>
+      <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Cliente</th><th class="r">Pedidos</th><th class="r">Receita</th><th class="r">Última compra</th></tr></thead><tbody>${clientesRows}</tbody></table></div></div>
+  </div>`;
+};
 VIEWS.custosfixos=function(){
   const total=custoFixoMensalTotal();
   const cfg=getCustosFixosCfg();

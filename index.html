@@ -2002,7 +2002,49 @@ function relIntervalo(){
   if(relPeriodo==='tudo')return {ini:'2000-01-01',fim:hj,label:'todo o período'};
   return {ini:relDataIni||d(29),fim:relDataFim||hj,label:'período selecionado'};
 }
+/* ---------- Carteira de clientes: frequência pessoal + curva ABC (histórico completo, não depende do período do relatório) ---------- */
+function analisarCarteiraClientes(){
+  const porCli={};
+  S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega).forEach(p=>{
+    const chave=p.cliente_id||p.cliente||'—';
+    const c=porCli[chave]||(porCli[chave]={chave,nome:p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso',datas:[],receita:0});
+    c.datas.push(p.data_entrega); c.receita+=p.valor_total||0;
+  });
+  const lista=Object.values(porCli).map(c=>{
+    c.datas.sort();
+    c.n=c.datas.length;
+    c.primeira=c.datas[0]; c.ultima=c.datas[c.datas.length-1];
+    c.intervalo = c.n>=2 ? (new Date(c.ultima+'T12:00:00')-new Date(c.primeira+'T12:00:00'))/864e5/(c.n-1) : null;
+    c.diasSemComprar = Math.floor((Date.now()-new Date(c.ultima+'T12:00:00').getTime())/864e5);
+    c.ticketMedio = c.receita/c.n;
+    return c;
+  });
+  // intervalo típico do negócio, pra servir de referência a clientes com só 1 pedido
+  const comIntervalo=lista.filter(c=>c.intervalo!=null&&c.intervalo>0);
+  const intervaloGlobal = comIntervalo.length ? comIntervalo.reduce((a,c)=>a+c.intervalo,0)/comIntervalo.length : 30;
+  lista.forEach(c=>{
+    const intervaloUsado=Math.max(c.intervalo||intervaloGlobal,1);
+    const ratio=c.diasSemComprar/intervaloUsado;
+    c.status = ratio<=1?'ativo':ratio<=2?'atencao':ratio<=3?'risco':'inativo';
+  });
+  // curva ABC (80/95/100) por receita
+  lista.sort((a,b)=>b.receita-a.receita);
+  const totalReceita=lista.reduce((a,c)=>a+c.receita,0)||1;
+  let acumulado=0;
+  lista.forEach(c=>{ acumulado+=c.receita; const pct=acumulado/totalReceita;
+    c.classe = pct<=0.80?'A':pct<=0.95?'B':'C'; });
+  const contagem={ativo:0,atencao:0,risco:0,inativo:0};
+  lista.forEach(c=>contagem[c.status]++);
+  const inativos=lista.filter(c=>c.status==='inativo');
+  const potencialReativacao=inativos.reduce((a,c)=>a+c.ticketMedio,0);
+  const campeao=lista[0];
+  const maisFiel=[...lista].sort((a,b)=>b.n-a.n)[0];
+  const maisAntigo=[...lista].sort((a,b)=>a.primeira>b.primeira?1:-1)[0];
+  const maiorTicket=[...lista].filter(c=>c.n>=2).sort((a,b)=>b.ticketMedio-a.ticketMedio)[0];
+  return {lista,contagem,inativos,potencialReativacao,campeao,maisFiel,maisAntigo,maiorTicket,total:lista.length};
+}
 VIEWS.relatorios=function(){
+  const carteira=analisarCarteiraClientes();
   const {ini,fim,label}=relIntervalo();
   const pedidos=S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim);
   const receita=pedidos.reduce((a,p)=>a+(p.valor_total||0),0);
@@ -2046,7 +2088,6 @@ VIEWS.relatorios=function(){
 
   const inativos=clientesOrd.filter(c=>c.qtd===1);
   const inativosValor=inativos.reduce((a,c)=>a+c.receita,0);
-
   const maxDia=Math.max(...porDiaSemana,1);
   const nomesDia=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
   const barrasDia=porDiaSemana.map((v,i)=>`<div class="bar" title="${nomesDia[i]}: ${money(v)}"><div class="b ${v?'':'zero'}" style="height:${Math.max(3,Math.round(v/maxDia*130))}px"></div><small>${nomesDia[i]}</small></div>`).join('');
@@ -2072,8 +2113,50 @@ VIEWS.relatorios=function(){
       <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Produto</th><th class="r">Qtd</th><th class="r">Receita</th><th class="r">Margem</th></tr></thead><tbody>${produtosRows}</tbody></table></div></div>
     <div class="card"><div class="card-h"><h3>Clientes que mais compram</h3><span class="subtle">top 12 por receita</span></div>
       <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Cliente</th><th class="r">Pedidos</th><th class="r">Receita</th><th class="r">Última compra</th></tr></thead><tbody>${clientesRows}</tbody></table></div></div>
-  </div>`;
+  </div>
+  ${carteiraHtml(carteira)}`;
 };
+function carteiraHtml(c){
+  const STATUS_LABEL={ativo:'Ativo',atencao:'Atenção',risco:'Em risco',inativo:'Inativo'};
+  const STATUS_COR={ativo:'#2E6E4E',atencao:'#E0A63C',risco:'#C05E10',inativo:'#B3372C'};
+  const STATUS_TAG={ativo:'f',atencao:'warn',risco:'warn',inativo:'bad'};
+  const total=c.total||1;
+  const segHtml=['ativo','atencao','risco','inativo'].map(k=>{
+    const n=c.contagem[k], pct=n/total*100;
+    return pct?`<div style="width:${pct}%;background:${STATUS_COR[k]}" title="${STATUS_LABEL[k]}: ${n} (${Math.round(pct)}%)"></div>`:'';
+  }).join('');
+  const legendaHtml=['ativo','atencao','risco','inativo'].map(k=>
+    `<div style="display:flex;align-items:center;gap:6px;font-size:12.5px"><span style="width:9px;height:9px;border-radius:50%;background:${STATUS_COR[k]};display:inline-block"></span>${STATUS_LABEL[k]} <b class="num">${c.contagem[k]}</b> <span class="subtle">(${Math.round(c.contagem[k]/total*100)}%)</span></div>`).join('');
+  const destaque=(titulo,cli,valor,ic)=>cli?`<div class="card kpi"><div class="k-label">${ic} ${titulo}</div><div class="k-value" style="font-size:16px">${esc(cli.nome)}</div><div class="k-foot num">${valor}</div></div>`:'';
+  const tabela=c.lista.slice(0,15).map(cl=>`<tr><td><b>${esc(cl.nome)}</b></td>
+    <td class="r"><span class="tag ${cl.classe==='A'?'f':cl.classe==='B'?'info':'mut'}">${cl.classe}</span></td>
+    <td class="r num">${money(cl.receita)}</td><td class="r num">${cl.n}</td><td class="r num">${money(cl.ticketMedio)}</td>
+    <td class="r num">${cl.diasSemComprar}d</td><td class="r"><span class="tag ${STATUS_TAG[cl.status]}">${STATUS_LABEL[cl.status]}</span></td></tr>`).join('')
+    ||'<tr><td colspan="7"><div class="empty"><b>Sem clientes com histórico ainda</b></div></td></tr>';
+  return `<div class="section-gap"><h3 style="margin-bottom:4px">Carteira de clientes</h3><p class="subtle" style="margin-bottom:14px">Histórico completo (não muda com o período acima) — status calculado pelo ritmo de compra de cada cliente, não por um prazo fixo.</p>
+  <div class="grid g4">
+    ${destaque('Cliente campeão',c.campeao,money(c.campeao?c.campeao.receita:0)+' · '+(c.campeao?c.campeao.n:0)+' pedidos','🏆')}
+    ${destaque('Cliente mais fiel',c.maisFiel,(c.maisFiel?c.maisFiel.n:0)+' pedidos','👑')}
+    ${destaque('Cliente mais antigo',c.maisAntigo,c.maisAntigo?('desde '+dBR(c.maisAntigo.primeira)):'','📅')}
+    ${destaque('Maior ticket médio',c.maiorTicket,c.maiorTicket?money(c.maiorTicket.ticketMedio)+' · '+c.maiorTicket.n+' pedidos':'','💰')}
+  </div>
+  <div class="grid g2 section-gap">
+    <div class="card"><div class="card-h"><h3>Status dos clientes</h3></div><div class="card-b">
+      <div style="display:flex;height:14px;border-radius:8px;overflow:hidden;margin-bottom:14px">${segHtml}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${legendaHtml}</div></div></div>
+    <div class="card"><div class="card-h"><h3>Clientes inativos</h3></div><div class="card-b">
+      <div class="k-value num" style="font-size:28px;color:#B3372C">${c.inativos.length}</div>
+      <div class="subtle" style="margin-bottom:10px">clientes sem comprar bem além do ritmo normal deles</div>
+      <div style="border-top:1px solid var(--line);padding-top:10px">
+        <div class="k-label">Receita potencial de reativação</div>
+        <div class="k-value num" style="font-size:22px">${money(c.potencialReativacao)}</div>
+        <div class="subtle">soma do ticket médio de cada um, se voltarem a comprar 1x</div>
+      </div></div></div>
+  </div>
+  <div class="card section-gap"><div class="card-h"><h3>Detalhamento dos clientes</h3><span class="subtle">top 15 · classe ABC pela curva de receita (A=80%, B=15%, C=5%)</span></div>
+    <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Cliente</th><th class="r">Classe</th><th class="r">Total gasto</th><th class="r">Pedidos</th><th class="r">Ticket médio</th><th class="r">Dias sem comprar</th><th class="r">Status</th></tr></thead><tbody>${tabela}</tbody></table></div></div>
+  </div>`;
+}
 VIEWS.custosfixos=function(){
   const total=custoFixoMensalTotal();
   const cfg=getCustosFixosCfg();

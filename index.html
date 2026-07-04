@@ -1756,6 +1756,7 @@ function gerarCompraMRP(){
   if(!linhas.length)return toast('Nada a comprar no plano atual.',true);
   modalCompra(linhas);
 }
+let filtroCategoriaCompras='';
 VIEWS.planejamento=function(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   const abertos={};
@@ -1779,12 +1780,19 @@ VIEWS.planejamento=function(){
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
       <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')||
       '<tr><td colspan="5" class="empty">Nada a produzir — estoque cobre a demanda 👍</td></tr>';
-    const cmpRows=R.compras.map(c=>`<tr><td><b>${esc(c.item.nome)}</b></td>
+    const categoriasCompras=[...new Set(R.compras.map(c=>c.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
+    const comprasFiltradas=R.compras.filter(c=>!filtroCategoriaCompras||c.item.categoria===filtroCategoriaCompras);
+    const chipsCompras=categoriasCompras.length?`<div class="cat-chips" style="margin-top:12px;margin-bottom:6px">
+      <button class="cat-chip ${!filtroCategoriaCompras?'active':''}" style="${!filtroCategoriaCompras?'background:var(--primary)':''}" onclick="filtroCategoriaCompras='';render()">Todas (${R.compras.length})</button>
+      ${categoriasCompras.map(c=>{ const n=R.compras.filter(x=>x.item.categoria===c).length;
+        return `<button class="cat-chip ${filtroCategoriaCompras===c?'active':''}" style="${filtroCategoriaCompras===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaCompras=${JSON.stringify(c)};render()'>${esc(c)} (${n})</button>`; }).join('')}
+    </div>`:'';
+    const cmpRows=comprasFiltradas.map(c=>`<tr><td><b>${esc(c.item.nome)}</b>${c.item.categoria?`<div class="subtle" style="font-size:11px">${esc(c.item.categoria)}</div>`:''}</td>
       <td class="r num"><b>${qty(Math.ceil(c.qtd),c.item.unidade_base)}</b> <span class="subtle">(exato: ${qty(Math.round(c.qtd*100)/100,c.item.unidade_base)})</span></td>
       <td class="r num subtle">${c.preco!=null?money(c.preco)+'/'+c.item.unidade_base+(c.fornecedor?' · '+esc(c.fornecedor):''):'sem histórico'}</td>
       <td class="r num">${c.preco!=null?money(c.preco*Math.ceil(c.qtd)):'—'}</td></tr>`).join('')||
-      '<tr><td colspan="4" class="empty">Nada a comprar — estoque de insumos cobre a produção 👍</td></tr>';
-    const custoCompra=R.compras.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
+      `<tr><td colspan="4" class="empty">${R.compras.length?'Nada nessa categoria':'Nada a comprar — estoque de insumos cobre a produção 👍'}</td></tr>`;
+    const custoCompra=comprasFiltradas.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
     const alertHtml=R.alertas.length?`<div class="card section-gap"><div class="card-h"><h3>⚠️ Sem origem definida</h3></div>
       <table><tbody>${R.alertas.map(a=>`<tr><td>${esc(a.item.nome)}</td><td class="r num neg">falta ${qty(Math.round(a.qtd*100)/100,a.item.unidade_base)}</td><td class="subtle">não é comprável nem tem composição — marque a função ou defina a receita</td></tr>`).join('')}</tbody></table></div>`:'';
     resultado=`<div class="card section-gap"><div class="card-h"><h3>Plano de produção (ordem de execução)</h3>
@@ -1793,6 +1801,7 @@ VIEWS.planejamento=function(){
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>
         <div><span class="subtle num" style="margin-right:10px">estimado: ${money(custoCompra)}</span>
         <button class="btn sm primary" onclick="gerarCompraMRP()">Pré-preencher compra</button></div></div>
+      <div class="card-b" style="padding-bottom:0">${chipsCompras}</div>
       <table><thead><tr><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>${alertHtml}`;
   }
   return header('Planejamento','var(--m-planejamento)','Explosão multinível: pedidos em aberto → o que produzir em cada nível → o que comprar. O estoque existente é abatido em todos os níveis.',

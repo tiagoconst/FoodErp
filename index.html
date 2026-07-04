@@ -1097,9 +1097,11 @@ VIEWS.venda=function(){
       <div class="card-b">${carrinhoHtml()}</div></div>
     </div>`;
 };
+const COMBO_MIN_UN = 5, COMBO_DESCONTO_UN = 2;
+let descTipo = 'valor', descValor = 0;
 function vendaSair(){
   if(pedLinhas.length&&!confirm('Sair sem salvar? O pedido em andamento será perdido.'))return;
-  pedLinhas=[]; vendaCat='__todas__'; vendaBusca=''; nav('pedidos');
+  pedLinhas=[]; vendaCat='__todas__'; vendaBusca=''; descTipo='valor'; descValor=0; nav('pedidos');
 }
 function vendaAdd(itemId){
   const it=itemById(itemId); if(!it)return;
@@ -1114,21 +1116,49 @@ function vendaSub(itemId){
   if(l.qtd<=0)pedLinhas=pedLinhas.filter(x=>x.item!==itemId);
   render();
 }
-function carrinhoHtml(){
+function totaisCarrinho(){
   const linhas=pedLinhas.filter(l=>l.item);
+  const totalUnidades=linhas.reduce((a,l)=>a+(parseFloat(l.qtd)||0),0);
+  const comboAtivo=totalUnidades>=COMBO_MIN_UN;
+  const bruto=linhas.reduce((a,l)=>a+(parseFloat(l.qtd)||0)*(parseFloat(l.preco)||0),0);
+  const descCombo=comboAtivo?totalUnidades*COMBO_DESCONTO_UN:0;
+  const subApósCombo=Math.max(0,bruto-descCombo);
+  const descManual=descTipo==='percentual'?subApósCombo*((parseFloat(descValor)||0)/100):(parseFloat(descValor)||0);
+  const total=Math.max(0,subApósCombo-descManual);
+  return {linhas,totalUnidades,comboAtivo,bruto,descCombo,descManual,total};
+}
+function carrinhoHtml(){
+  const {linhas,totalUnidades,comboAtivo,bruto,descCombo,descManual,total}=totaisCarrinho();
   if(!linhas.length)return `<div class="cart-empty">Toque nos produtos ao lado para adicionar.</div>`;
+  const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
   const rows=linhas.map(l=>{
     const it=itemById(l.item); if(!it)return '';
-    const sub=(parseFloat(l.qtd)||0)*(parseFloat(l.preco)||0);
+    const pu=precoUn(parseFloat(l.preco)||0);
+    const sub=(parseFloat(l.qtd)||0)*pu;
     return `<div class="cart-line">
-      <div class="cl-info"><div class="cl-nome">${esc(it.nome)}</div><div class="cl-sub num">${money(l.preco)} un.</div></div>
+      <div class="cl-info"><div class="cl-nome">${esc(it.nome)}</div><div class="cl-sub num">${money(pu)} un.${comboAtivo?' <span style="text-decoration:line-through;opacity:.6">'+money(l.preco)+'</span>':''}</div></div>
       <div class="stepper"><button onclick="vendaSub('${it.id}')">−</button><span class="num" style="min-width:18px;text-align:center;display:inline-block">${l.qtd}</span><button onclick="vendaAdd('${it.id}')">+</button></div>
       <div class="num" style="width:64px;text-align:right;font-weight:700">${money(sub)}</div></div>`;
   }).join('');
-  const total=linhas.reduce((a,l)=>a+(parseFloat(l.qtd)||0)*(parseFloat(l.preco)||0),0);
   const cliOpts=S.clientes.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  const comboLinha=comboAtivo?`<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--primary);margin-top:8px"><span>Combo ${totalUnidades}+ un. (−${money(COMBO_DESCONTO_UN)}/un.)</span><span class="num">−${money(descCombo)}</span></div>`
+    :`<div class="subtle" style="font-size:11.5px;margin-top:8px">Faltam ${COMBO_MIN_UN-totalUnidades} un. pro desconto de combo (−${money(COMBO_DESCONTO_UN)}/un. a partir de ${COMBO_MIN_UN}).</div>`;
   return rows+
-    `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-weight:700;font-size:15px"><span>Total</span><span class="num">${money(total)}</span></div>
+    `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)"><span>Subtotal</span><span class="num">${money(bruto)}</span></div>
+      ${comboLinha}
+      <div class="frow" style="grid-template-columns:90px 1fr;gap:8px;margin-top:8px;align-items:end">
+        <div class="field" style="margin-bottom:0"><label>Desconto</label>
+          <select id="pd-desc-tipo" onchange="descTipo=this.value;render()">
+            <option value="valor" ${descTipo==='valor'?'selected':''}>R$</option>
+            <option value="percentual" ${descTipo==='percentual'?'selected':''}>%</option>
+          </select></div>
+        <div class="field" style="margin-bottom:0"><label>&nbsp;</label>
+          <input type="number" step="any" min="0" id="pd-desc-valor" value="${descValor||''}" placeholder="0" oninput="descValor=this.value;render();this.focus();this.setSelectionRange(99,99)"></div>
+      </div>
+      ${descManual>0?`<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--primary);margin-top:6px"><span>Desconto adicional</span><span class="num">−${money(descManual)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-top:10px"><span>Total</span><span class="num">${money(total)}</span></div>
+    </div>
     <div style="margin-top:14px">
       <div class="field"><label>Cliente cadastrado</label><select id="pd-cliid" onchange="$('#pd-cli').closest('.field').style.display=this.value?'none':'flex'"><option value="">— avulso —</option>${cliOpts}</select></div>
       <div class="field"><label>Nome (avulso)</label><input id="pd-cli" placeholder="ex.: Maria (balcão)"></div>
@@ -1139,17 +1169,19 @@ function carrinhoHtml(){
     <button class="btn primary" style="width:100%" onclick="salvarPedidoVenda()">Ir para pagamento</button>`;
 }
 function salvarPedidoVenda(){
-  const validas=pedLinhas.filter(l=>l.item&&parseFloat(l.qtd)>0);
+  const {linhas,comboAtivo,bruto,descCombo,descManual,total}=totaisCarrinho();
+  const validas=linhas.filter(l=>l.item&&parseFloat(l.qtd)>0);
   if(!validas.length)return toast('Adicione ao menos um item.',true);
   const id=uid('PED');
-  const itens=validas.map(l=>({item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:parseFloat(l.preco)||0}));
-  const total=itens.reduce((a,l)=>a+l.quantidade*l.preco_unitario,0);
+  const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
+  const itens=validas.map(l=>({item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)}));
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
   S.pedidos.push({id,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
-    status:'pedido',itens,valor_total:total,observacao:$('#pd-obs').value.trim(),recebido:false,faturamento:null,criado_em:new Date().toISOString()});
+    status:'pedido',itens,valor_bruto:bruto,desconto_combo:descCombo,desconto_manual:descManual,valor_total:total,
+    observacao:$('#pd-obs').value.trim(),recebido:false,faturamento:null,criado_em:new Date().toISOString()});
   registrarEvento('PEDIDO_CONFIRMADO',`Pedido de ${nome||'cliente'} · ${itens.length} itens · ${money(total)} registrado`,id);
-  pedLinhas=[]; vendaCat='__todas__'; vendaBusca='';
+  pedLinhas=[]; vendaCat='__todas__'; vendaBusca=''; descTipo='valor'; descValor=0;
   scheduleSave(); nav('pedidos'); toast('Pedido registrado. Confirme para reservar o estoque.');
 }
 function modalPedido(){

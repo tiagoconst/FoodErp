@@ -1126,7 +1126,7 @@ VIEWS.pedidos=function(){
       <td class="r num">${nItens} un.</td>
       <td class="r num"><b>${money(p.valor_total)}</b></td>
       <td><span class="tag ${st.tag}">${st.label}</span>${pedidoPago(p)?' 💰':''}</td>
-      <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button></td></tr>`;
+      <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button> <button class="btn sm ghost" title="Imprimir etiquetas" onclick="imprimirEtiquetas('${p.id}')">🏷️</button></td></tr>`;
   }).join('')||`<tr><td colspan="7"><div class="empty"><b>Nenhum pedido${filtroStatusPedido?' com esse status':''}</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
   const statusChips=`<button class="cat-chip ${!filtroStatusPedido?'active':''}" style="${!filtroStatusPedido?'background:var(--primary)':''}" onclick="filtroStatusPedido='';render()">Todos (${S.pedidos.length})</button>`+
     statusDisponiveis().map(s=>{
@@ -1188,7 +1188,7 @@ VIEWS['pedido-detalhe']=function(){
   const opcoesStatus=statusDisponiveis().map(s=>`<option value="${s.id}" ${p.status===s.id?'selected':''}>${esc(s.nome)}</option>`).join('');
   const jaPago=pedidoPago(p);
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Pedido ${p.id}</h1></div>
-    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button></div></div>
+    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button><button class="btn" onclick="imprimirEtiquetas('${p.id}')">🏷️ Etiquetas</button></div></div>
     <div class="grid g2" style="align-items:start">
       <div>
         <div class="card"><div class="card-h"><h3>Cliente</h3></div><div class="card-b">
@@ -1562,6 +1562,37 @@ function cancelarPedido(id){
   p.status='cancelado';
   registrarEvento('DEVOLUCAO_CANCELAMENTO',`Pedido ${p.cliente||id} cancelado — movimentos revertidos/ajustados`,id);
   scheduleSave(); render(); toast('Pedido cancelado.');
+}
+function imprimirEtiquetas(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  if(!(p.itens||[]).length)return toast('Esse pedido não tem itens.',true);
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const hoje_=new Date(); const fmt=d=>d.toLocaleDateString('pt-BR');
+  const validade=new Date(hoje_); validade.setDate(validade.getDate()+30);
+  const etiquetas=[];
+  p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
+    for(let k=0;k<n;k++)etiquetas.push(nomeLinha(l)); });
+  const blocos=etiquetas.map(nome=>`<div class="et">
+    <div class="et-topo">${idn.logo_img?`<img src="${idn.logo_img}">`:`<b>${esc(nomeEmp)}</b>`}</div>
+    <div class="et-sabor">${esc(nome)}</div>
+    <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
+  </div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
+    @page{ size:54mm 35mm; margin:0; }
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0;padding:0}
+    .et{width:54mm;height:35mm;padding:2.5mm 3mm;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;page-break-after:always;overflow:hidden}
+    .et:last-child{page-break-after:auto}
+    .et-topo{margin-bottom:2mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-sabor{font-size:15px;font-weight:bold;line-height:1.15;margin-bottom:2.5mm}
+    .et-datas{display:flex;gap:5mm;font-size:10px;font-weight:bold}
+  </style></head><body>
+    ${blocos}
+    <script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w=window.open('','_blank','width=320,height=500');
+  if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
+  w.document.write(html); w.document.close();
 }
 function modalRecibo(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;

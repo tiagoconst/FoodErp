@@ -111,6 +111,10 @@ td.r,th.r{text-align:right}
 .ped-card-bot{display:flex;justify-content:space-between;align-items:center;font-size:12.5px}
 .ped-card-bot .mono-id{font-size:10.5px}
 .frow{display:grid;gap:12px}
+.pln-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.pln-card-top{display:flex;align-items:center;gap:8px;justify-content:space-between;margin-bottom:6px}
+.pln-card-tit{font-weight:700;font-size:14px;margin-bottom:6px}
+.pln-card-stats{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
 .frow.c2{grid-template-columns:1fr 1fr}.frow.c3{grid-template-columns:1fr 1fr 1fr}
 @media(max-width:560px){.frow.c2,.frow.c3{grid-template-columns:1fr}}
 
@@ -1778,6 +1782,13 @@ VIEWS.planejamento=function(){
     <td class="r num subtle">${temFuncao(i,'estocavel')?qty(Math.max(0,saldo(i.id)),i.unidade_base):'—'}</td>
     <td class="r"><input type="number" step="any" min="0" style="width:110px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg,#FDFCF9)"
       value="${mrpExtras[i.id]||''}" placeholder="extra" oninput="mrpExtras['${i.id}']=this.value"></td></tr>`).join('');
+  const demCards=vendaveis.map(i=>`<div class="pln-card">
+    <div class="pln-card-tit">${esc(i.nome)}</div>
+    <div class="pln-card-stats"><span>Pedidos em aberto <b>${abertos[i.id]?qty(abertos[i.id],i.unidade_base):'—'}</b></span>
+      <span>Em estoque <b>${temFuncao(i,'estocavel')?qty(Math.max(0,saldo(i.id)),i.unidade_base):'—'}</b></span></div>
+    <input type="number" step="any" min="0" style="width:100%;margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--input-bg,#FDFCF9)"
+      value="${mrpExtras[i.id]||''}" placeholder="planejar quantidade extra" oninput="mrpExtras['${i.id}']=this.value"></div>`).join('')
+    ||'<div class="empty"><b>Nenhum produto vendável</b></div>';
 
   let resultado='';
   if(mrpResultado){
@@ -1791,6 +1802,13 @@ VIEWS.planejamento=function(){
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
       <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')||
       '<tr><td colspan="5" class="empty">Nada a produzir — estoque cobre a demanda 👍</td></tr>';
+    const prodCards=prodOrd.map(p=>`<div class="pln-card">
+      <div class="pln-card-top"><span class="tag ${p.nivel===maxN?'f':'info'}">${p.nivel===maxN?'produzir primeiro':'nível '+(maxN-p.nivel+1)}</span></div>
+      <div class="pln-card-tit">${esc(p.item.nome)}</div>
+      <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
+        <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
+      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')
+      ||'<div class="empty"><b>Nada a produzir</b>Estoque cobre a demanda 👍</div>';
     const categoriasCompras=[...new Set(R.compras.map(c=>c.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
     const comprasFiltradas=R.compras.filter(c=>!filtroCategoriaCompras||c.item.categoria===filtroCategoriaCompras);
     const chipsCompras=categoriasCompras.length?`<div class="cat-chips" style="margin-top:12px;margin-bottom:6px">
@@ -1803,24 +1821,33 @@ VIEWS.planejamento=function(){
       <td class="r num subtle">${c.preco!=null?money(c.preco)+'/'+c.item.unidade_base+(c.fornecedor?' · '+esc(c.fornecedor):''):'sem histórico'}</td>
       <td class="r num">${c.preco!=null?money(c.preco*Math.ceil(c.qtd)):'—'}</td></tr>`).join('')||
       `<tr><td colspan="4" class="empty">${R.compras.length?'Nada nessa categoria':'Nada a comprar — estoque de insumos cobre a produção 👍'}</td></tr>`;
+    const cmpCards=comprasFiltradas.map(c=>`<div class="pln-card">
+      <div class="pln-card-top"><b class="pln-card-tit" style="margin:0">${esc(c.item.nome)}</b>${c.item.categoria?`<span class="tag mut">${esc(c.item.categoria)}</span>`:''}</div>
+      <div class="pln-card-stats"><span>Comprar <b class="num">${qty(Math.ceil(c.qtd),c.item.unidade_base)}</b></span>
+        <span>Custo est. <b class="num">${c.preco!=null?money(c.preco*Math.ceil(c.qtd)):'—'}</b></span></div>
+      <div class="subtle" style="font-size:11.5px;margin-top:6px">exato: ${qty(Math.round(c.qtd*100)/100,c.item.unidade_base)} · ${c.preco!=null?money(c.preco)+'/'+c.item.unidade_base+(c.fornecedor?' · '+esc(c.fornecedor):''):'sem histórico de preço'}</div></div>`).join('')
+      ||`<div class="empty"><b>${R.compras.length?'Nada nessa categoria':'Nada a comprar'}</b>${R.compras.length?'':'Estoque de insumos cobre a produção 👍'}</div>`;
     const custoCompra=comprasFiltradas.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
     const alertHtml=R.alertas.length?`<div class="card section-gap"><div class="card-h"><h3>⚠️ Sem origem definida</h3></div>
       <table><tbody>${R.alertas.map(a=>`<tr><td>${esc(a.item.nome)}</td><td class="r num neg">falta ${qty(Math.round(a.qtd*100)/100,a.item.unidade_base)}</td><td class="subtle">não é comprável nem tem composição — marque a função ou defina a receita</td></tr>`).join('')}</tbody></table></div>`:'';
     resultado=`<div class="card section-gap"><div class="card-h"><h3>Plano de produção (ordem de execução)</h3>
         <span class="subtle">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span></div>
-      <table><thead><tr><th>Ordem</th><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prodRows}</tbody></table></div>
+      <div class="only-desktop"><table><thead><tr><th>Ordem</th><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prodRows}</tbody></table></div>
+      <div class="only-mobile card-b">${prodCards}</div></div>
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>
         <div><span class="subtle num" style="margin-right:10px">estimado: ${money(custoCompra)}</span>
         <button class="btn sm primary" onclick="gerarCompraMRP()">Pré-preencher compra</button></div></div>
       <div class="card-b" style="padding-bottom:0">${chipsCompras}</div>
-      <table><thead><tr><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>${alertHtml}`;
+      <div class="only-desktop"><table><thead><tr><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>
+      <div class="only-mobile card-b" style="padding-top:6px">${cmpCards}</div></div>${alertHtml}`;
   }
   return header('Planejamento','var(--m-planejamento)',controlaEstoque()
       ?'Explosão multinível: pedidos em aberto → o que produzir em cada nível → o que comprar. O estoque existente é abatido em todos os níveis.'
       :'Explosão multinível: pedidos em aberto → o que produzir → o que comprar. <b>Modo sob demanda ativo</b> (Dados & Backup) — a lista sempre mostra a quantidade cheia, sem abater estoque.',
     `<button class="btn primary" onclick="calcularMRP()">⚙ Calcular plano</button>`)+
   `<div class="card"><div class="card-h"><h3>Demanda</h3><span class="subtle">pedidos em aberto + quantidades extras que você quiser planejar</span></div>
-    <table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>`+resultado;
+    <div class="only-desktop"><table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>
+    <div class="only-mobile card-b">${demCards}</div></div>`+resultado;
 };
 
 /* ================= CLIENTES ================= */

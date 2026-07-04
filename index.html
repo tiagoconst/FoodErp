@@ -390,6 +390,7 @@ const MODS=[['dashboard','Dashboard','#5B3A8C'],['itens','Itens','#1F4E79'],['co
   ['producao','Produção','#C05E10'],['pedidos','Pedidos','#1F6FB2'],['financeiro','Financeiro','#9E2B25'],
   ['margens','Margens','#A87718'],['relatorios','Relatórios','#3E5F8A'],['eventos','Eventos','#8C1D3F'],['planejamento','Planejamento','#2F6B7A'],['fornecedores','Fornecedores','#8A6642'],['integracoes','Integrações','#4A5FA5'],['funcionarios','Funcionários','#3D7A6E']];
 const IDENT_PADRAO=Object.assign({nome:'Food ERP',subtitulo:'Dirigido por itens · Eventos',logo_emoji:'🍲',logo_img:null,
+  endereco:'',telefone:'',documento:'',
   cor_primaria:'#2E6E4E',cor_acento:'#E0A63C',cor_sidebar:'#20261F',cor_fundo:'#F6F4EE',
   cor_painel:'#FFFFFF',cor_texto:'#22271F',cor_perigo:'#B3372C'},
   Object.fromEntries(MODS.map(m=>['mod_'+m[0],m[2]])));
@@ -1075,10 +1076,12 @@ function removerStatusPersonalizado(id){
   scheduleSave(); const el=$('#status-crud-list'); if(el)el.innerHTML=renderStatusCrud();
 }
 let pedidoDetalheId=null;
+let filtroStatusPedido='';
 VIEWS.pedidos=function(){
   garantirFormasPadrao();
   const abertos=S.pedidos.filter(p=>!['entregue','cancelado'].includes(p.status)).length;
-  const rows=S.pedidos.slice().reverse().map(p=>{
+  const pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
+  const rows=pedidosFiltrados.slice().reverse().map(p=>{
     const st=statusInfo(p.status);
     const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id):null;
     const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
@@ -1090,11 +1093,17 @@ VIEWS.pedidos=function(){
       <td class="r num"><b>${money(p.valor_total)}</b></td>
       <td><span class="tag ${st.tag}">${st.label}</span></td>
       <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button></td></tr>`;
-  }).join('')||`<tr><td colspan="7"><div class="empty"><b>Nenhum pedido</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
+  }).join('')||`<tr><td colspan="7"><div class="empty"><b>Nenhum pedido${filtroStatusPedido?' com esse status':''}</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
+  const statusChips=`<button class="cat-chip ${!filtroStatusPedido?'active':''}" style="${!filtroStatusPedido?'background:var(--primary)':''}" onclick="filtroStatusPedido='';render()">Todos (${S.pedidos.length})</button>`+
+    statusDisponiveis().map(s=>{
+      const n=S.pedidos.filter(p=>p.status===s.id).length;
+      return `<button class="cat-chip ${filtroStatusPedido===s.id?'active':''}" style="${filtroStatusPedido===s.id?'background:var(--primary)':''}" onclick='filtroStatusPedido=${JSON.stringify(s.id)};render()'>${esc(s.nome)} (${n})</button>`;
+    }).join('');
   return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido → Confirmado → Em produção → Disponível → Entregue. Reserva de estoque a partir da confirmação. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
     `<button class="btn" onclick="modalStatusPersonalizados()">⚙️ Status</button>
      <button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
-  `<div class="card"><table><thead><tr><th>Código</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  `<div class="cat-chips">${statusChips}</div>
+  <div class="card"><table><thead><tr><th>Código</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 
 VIEWS['pedido-detalhe']=function(){
@@ -1440,42 +1449,56 @@ function modalRecibo(id){
     <div style="text-align:center;margin-bottom:14px">
       ${idn.logo_img?`<img src="${idn.logo_img}" style="max-height:46px;margin-bottom:6px">`:''}
       <div style="font-weight:700">${esc(idn.nome||'Food ERP')}</div>
-      <div class="subtle" style="font-size:12px">${esc(idn.endereco||'')}</div>
+      <div class="subtle" style="font-size:12px">${esc(idn.endereco||'')}${idn.telefone?' · '+esc(idn.telefone):''}</div>
     </div>
-    <p style="margin-bottom:8px"><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?' · '+esc(cli.telefone):''}<br>
+    <p style="margin-bottom:8px"><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?' · '+esc(cli.telefone):''}${cli&&cli.endereco?'<br><span class="subtle">'+esc(cli.endereco)+'</span>':''}<br>
     <span class="subtle">Pedido ${p.id} · ${dBR(p.data_pedido)}${p.data_entrega?' → entrega '+dBR(p.data_entrega):''}</span></p>
-    <div class="subtle" style="margin-bottom:6px">${nItens} itens</div>
+    <div class="subtle" style="margin-bottom:6px">${(p.itens||[]).length} itens (qtd. ${nItens})</div>
     <table style="width:100%">${linhas}<tr style="font-weight:700;border-top:1px solid var(--line)"><td style="padding-top:8px">TOTAL</td><td class="r num" style="padding-top:8px">${money(p.valor_total)}</td></tr></table>
     ${p.observacao?`<div class="field" style="margin-top:12px"><label>Observação</label><div class="subtle" style="border:1px dashed var(--line);padding:8px;border-radius:8px">${esc(p.observacao)}</div></div>`:''}
   </div>
-  <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="imprimirPedido('${id}')">🖨 Imprimir</button></div>`);
+  <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="imprimirPedido('${id}')">🖨 Imprimir (bobina 54mm)</button></div>`);
 }
 function imprimirPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   const cli=p.cliente_id?clienteById(p.cliente_id):null;
-  const st=statusInfo(p.status);
-  const forma=p.forma_id&&formaById(p.forma_id)?formaById(p.forma_id).nome:(p.faturamento==='conta'?'Conta do cliente':(p.faturamento==='areceber'?'A receber':'—'));
-  const linhas=p.itens.map(l=>`<tr><td>${l.quantidade}× ${esc(nomeLinha(l))}</td><td class="r">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pedido ${p.id}</title><style>
-    body{font-family:'Courier New',monospace;font-size:12.5px;color:#000;max-width:300px;margin:0 auto;padding:14px 8px}
-    h1{font-size:15px;text-align:center;margin:0 0 2px} .c{text-align:center;margin:0 0 10px;font-size:11px}
-    hr{border:none;border-top:1px dashed #000;margin:8px 0}
-    table{width:100%;border-collapse:collapse} td{padding:3px 0;vertical-align:top} .r{text-align:right;white-space:nowrap}
-    .tot td{font-weight:bold;font-size:14px;border-top:1px solid #000;padding-top:6px}
-    .obs{border:1px dashed #000;padding:6px;margin-top:8px;font-size:12px}
-    @media print{body{max-width:none}}</style></head><body>
-    ${(function(){const i=getIdent();return (i.logo_img?'<div style="text-align:center;margin-bottom:4px"><img src="'+i.logo_img+'" style="max-height:54px"></div>':'')+'<h1>'+esc(i.nome||'Food ERP')+'</h1>';})()}
-    <div class="c">COMPROVANTE DE PEDIDO</div>
-    <div>Pedido: <b>${p.id}</b><br>Data: ${dBR(p.data_pedido)}${p.data_entrega?' · Entrega: '+dBR(p.data_entrega):''}<br>Status: ${st.label}</div>
+  const idn=getIdent();
+  const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+  const linhas=p.itens.map(l=>`<tr><td>${l.quantidade}x ${esc(nomeLinha(l))}</td><td class="r">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
+  const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recibo ${p.id}</title><style>
+    @page{ size:54mm auto; margin:0; }
+    *{box-sizing:border-box}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;color:#000;width:50mm;margin:0 auto;padding:2mm 1.5mm}
+    .center{text-align:center}
+    .logo{max-height:12mm;margin-bottom:1mm}
+    h1{font-size:12px;margin:1mm 0}
+    hr{border:none;border-top:1px dashed #000;margin:2mm 0}
+    table{width:100%;border-collapse:collapse} td{padding:1mm 0;vertical-align:top;font-size:10px} .r{text-align:right;white-space:nowrap}
+    .tot td{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm}
+    .obs{border:1px dashed #000;padding:1.5mm;margin-top:2mm;font-size:9.5px}
+    .small{font-size:9px}
+    @media print{body{width:auto}}
+  </style></head><body>
+    <div class="center">
+      ${idn.logo_img?`<img src="${idn.logo_img}" class="logo">`:''}
+      <h1>${esc(idn.nome||'Food ERP')}</h1>
+    </div>
+    <div class="center small">RECIBO #${esc(p.id)}</div>
+    <hr>
+    <div class="small">${esc(idn.nome||'')}<br>${esc(idn.endereco||'')}${idn.telefone?' - '+esc(idn.telefone):''}</div>
     <hr>
     <div><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>Tel: '+esc(cli.telefone):''}${cli&&cli.endereco?'<br>End: '+esc(cli.endereco):''}</div>
     <hr>
-    <table>${linhas}<tr class="tot"><td>TOTAL</td><td class="r">${money(p.valor_total)}</td></tr></table>
-    <div style="margin-top:6px">Pagamento: ${esc(forma)}</div>
-    ${p.observacao?`<div class="obs">OBS: ${esc(p.observacao)}</div>`:''}
-    <hr><div class="c">Obrigado pela preferência!</div>
+    <div>${p.itens.length} itens (Qtd.: ${nItens})</div>
+    <table>${linhas}</table>
+    <hr>
+    <table><tr class="tot"><td>Total</td><td class="r">${money(p.valor_total)}</td></tr></table>
+    ${p.observacao?`<div class="obs"><b>OBS:</b> ${esc(p.observacao)}</div>`:''}
+    <hr>
+    <div class="center small">${esc(idn.nome||'')}${idn.documento?' - '+esc(idn.documento):''}<br>${dataHoraExtenso}</div>
     <script>window.onload=function(){window.print()}<\/script></body></html>`;
-  const w=window.open('','_blank','width=380,height=640');
+  const w=window.open('','_blank','width=320,height=640');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
 }
@@ -2366,6 +2389,12 @@ VIEWS.dados=function(){
         <div class="field"><label>Subtítulo</label><input id="id-sub" value="${esc(idn.subtitulo||'')}" oninput="previewIdent()"></div>
         <div class="field"><label>Emoji do logo</label><input id="id-emoji" value="${esc(idn.logo_emoji||'')}" maxlength="4" oninput="previewIdent()"><span class="hint">usado se não houver imagem</span></div>
       </div>
+      <div class="field"><label>Usados no recibo impresso</label>
+      <div class="frow c3">
+        <div class="field"><label>Endereço</label><input id="id-endereco" value="${esc(idn.endereco||'')}" placeholder="Rua, número - Bairro - Cidade, CEP"></div>
+        <div class="field"><label>Telefone</label><input id="id-telefone" value="${esc(idn.telefone||'')}" placeholder="+55 (42) 99999-9999"></div>
+        <div class="field"><label>CNPJ / documento</label><input id="id-documento" value="${esc(idn.documento||'')}" placeholder="00.000.000/0001-00"></div>
+      </div></div>
       <div class="field"><label>Logo (imagem — opcional)</label>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <input type="file" id="id-file" accept="image/*" onchange="carregarLogo(this)">
@@ -2415,6 +2444,7 @@ function identDosInputs(){
   const salvo=getIdent();
   const o={nome:$('#id-nome').value.trim()||'Food ERP',subtitulo:$('#id-sub').value.trim(),
     logo_emoji:$('#id-emoji').value.trim()||'🍲',
+    endereco:$('#id-endereco').value.trim(),telefone:$('#id-telefone').value.trim(),documento:$('#id-documento').value.trim(),
     logo_img:_logoTmp===undefined?salvo.logo_img:_logoTmp,
     cor_primaria:$('#id-c1').value,cor_acento:$('#id-c2').value,cor_sidebar:$('#id-c3').value,cor_fundo:$('#id-c4').value,
     cor_painel:$('#id-c5').value,cor_texto:$('#id-c6').value,cor_perigo:$('#id-c7').value};

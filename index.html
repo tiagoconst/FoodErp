@@ -95,6 +95,21 @@ td.r,th.r{text-align:right}
 .field input,.field select,.field textarea{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--input-bg,#FDFCF9);font-size:13.5px;width:100%}
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid rgba(46,110,78,.35);border-color:var(--primary)}
 .field .hint{font-size:11.5px;color:var(--muted)}
+.only-mobile{display:none}
+.only-desktop{display:block}
+.status-pill-select{width:100%;padding:10px 14px;border-radius:99px;border:1px solid var(--line);background:var(--panel);
+  font-size:13.5px;font-weight:600;color:var(--ink);appearance:none}
+.ped-total-bar{display:flex;justify-content:space-between;align-items:center;background:var(--sidebar,#20261F);
+  color:#fff;border-radius:12px;padding:12px 16px;margin:16px 0;font-size:13.5px}
+.ped-day{margin-bottom:18px}
+.ped-day-h{font-size:15px;font-weight:700;margin-bottom:2px}
+.ped-day-sub{font-size:12px;margin-bottom:8px}
+.ped-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer}
+.ped-card-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ped-card-top b{margin-left:auto}
+.ped-card-mid{font-size:12.5px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ped-card-bot{display:flex;justify-content:space-between;align-items:center;font-size:12.5px}
+.ped-card-bot .mono-id{font-size:10.5px}
 .frow{display:grid;gap:12px}
 .frow.c2{grid-template-columns:1fr 1fr}.frow.c3{grid-template-columns:1fr 1fr 1fr}
 @media(max-width:560px){.frow.c2,.frow.c3{grid-template-columns:1fr}}
@@ -209,6 +224,8 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
   .cat-chips{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px;
     margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px;scrollbar-width:thin}
   .cat-chip{flex:none}
+  .only-mobile{display:block}
+  .only-desktop{display:none}
 }
 
 #auth{position:fixed;inset:0;background:var(--bg);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
@@ -1064,10 +1081,19 @@ function removerStatusPersonalizado(id){
 }
 let pedidoDetalheId=null;
 let filtroStatusPedido='';
+let filtroBuscaPedido='';
 VIEWS.pedidos=function(){
   garantirFormasPadrao();
   const abertos=S.pedidos.filter(p=>!['finalizado','cancelado'].includes(p.status)).length;
-  const pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
+  let pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
+  if(filtroBuscaPedido){
+    const q=filtroBuscaPedido.toLowerCase();
+    pedidosFiltrados=pedidosFiltrados.filter(p=>{
+      const cli=(p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:p.cliente)||'';
+      const itensTxt=(p.itens||[]).map(l=>nomeLinha(l)).join(' ');
+      return p.id.toLowerCase().includes(q)||cli.toLowerCase().includes(q)||itensTxt.toLowerCase().includes(q);
+    });
+  }
   const ORDEM_STATUS=Object.keys(STATUS_PED); // pedido→...→finalizado→cancelado, na ordem certa do fluxo
   const rankStatus=st=>{ const i=ORDEM_STATUS.indexOf(st); return i===-1?ORDEM_STATUS.length:i; };
   const lista=filtroStatusPedido
@@ -1094,11 +1120,45 @@ VIEWS.pedidos=function(){
       const n=S.pedidos.filter(p=>p.status===s.id).length;
       return `<button class="cat-chip ${filtroStatusPedido===s.id?'active':''}" style="${filtroStatusPedido===s.id?'background:var(--primary)':''}" onclick='filtroStatusPedido=${JSON.stringify(s.id)};render()'>${esc(s.nome)} (${n})</button>`;
     }).join('');
+
+  // ---------- versão mobile: lista agrupada por dia, tipo Kyte ----------
+  const listaMobile=pedidosFiltrados.slice().sort((a,b)=>(b.criado_em||b.data_pedido||'').localeCompare(a.criado_em||a.data_pedido||''));
+  const grupos=[];
+  listaMobile.forEach(p=>{ let g=grupos.find(x=>x.data===p.data_pedido); if(!g){ g={data:p.data_pedido,itens:[]}; grupos.push(g); } g.itens.push(p); });
+  const totalGeral=pedidosFiltrados.reduce((a,p)=>a+(p.valor_total||0),0);
+  const mobileHtml=grupos.map(g=>{
+    const totalDia=g.itens.reduce((a,p)=>a+(p.valor_total||0),0);
+    const cards=g.itens.map(p=>{
+      const st=statusInfo(p.status);
+      const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id):null;
+      const nomeCli=cli?cli.nome:(p.cliente||'Cliente avulso');
+      const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+      const resumoItens=(p.itens||[]).slice(0,3).map(l=>l.quantidade+'x '+nomeLinha(l)).join(', ');
+      const hora=p.criado_em?new Date(p.criado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
+      return `<div class="ped-card" onclick="pedidoDetalheId='${p.id}';nav('pedido-detalhe','pedidos')">
+        <div class="ped-card-top"><span class="tag ${st.tag}">${st.label}</span><b class="num">${money(p.valor_total)}</b>${hora?`<span class="subtle">${hora}</span>`:''}</div>
+        <div class="ped-card-mid subtle">${nItens} itens: ${esc(resumoItens)}${(p.itens||[]).length>3?'…':''}</div>
+        <div class="ped-card-bot"><b>${esc(nomeCli)}</b><span class="mono-id">${p.id}</span>${pedidoPago(p)?' 💰':''}</div>
+      </div>`;
+    }).join('');
+    return `<div class="ped-day"><div class="ped-day-h">${dBR(g.data)}</div><div class="ped-day-sub subtle">${g.itens.length} pedido(s) · ${money(totalDia)}</div>${cards}</div>`;
+  }).join('')||`<div class="card"><div class="empty"><b>Nenhum pedido${filtroStatusPedido||filtroBuscaPedido?' com esse filtro':''}</b></div></div>`;
+  const statusSelectMobile=`<select class="status-pill-select" onchange="filtroStatusPedido=this.value;render()">
+    <option value="" ${!filtroStatusPedido?'selected':''}>Todos os status (${S.pedidos.length})</option>
+    ${statusDisponiveis().map(s=>{ const n=S.pedidos.filter(p=>p.status===s.id).length;
+      return `<option value="${s.id}" ${filtroStatusPedido===s.id?'selected':''}>${esc(s.nome)} (${n})</option>`; }).join('')}
+    </select>`;
+
   return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido → Confirmado → Em produção → Disponível → Entrega (Parcial ou Ag. Pagamento) → Finalizado. "Pago" é independente do status — pode marcar em qualquer etapa. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
     `<button class="btn" onclick="modalStatusPersonalizados()">⚙️ Status</button>
      <button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
-  `<div class="cat-chips">${statusChips}</div>
-  <div class="card"><table><thead><tr><th>Código</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  `<input class="search" style="width:100%;margin-top:16px" placeholder="Item, cliente ou código" value="${esc(filtroBuscaPedido)}" oninput="filtroBuscaPedido=this.value;render();this.focus();this.setSelectionRange(99,99)">
+  <div class="only-mobile" style="margin-top:12px">${statusSelectMobile}</div>
+  <div class="only-desktop"><div class="cat-chips">${statusChips}</div>
+    <div class="card"><table><thead><tr><th>Código</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>
+  </div>
+  <div class="only-mobile ped-total-bar"><b>Total em pedidos</b><span class="num">${money(totalGeral)} em ${pedidosFiltrados.length} pedido(s)</span></div>
+  <div class="only-mobile">${mobileHtml}</div>`;
 };
 
 VIEWS['pedido-detalhe']=function(){

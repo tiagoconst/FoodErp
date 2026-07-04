@@ -257,7 +257,6 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <button class="nav-btn" data-view="financeiro"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Financeiro</button>
     <button class="nav-btn" data-view="custosfixos"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Custos Fixos</button>
     <button class="nav-btn" data-view="margens"><span class="nav-dot" style="background:var(--m-margens)"></span>Margens</button>
-    <button class="nav-btn" data-view="relatorios"><span class="nav-dot" style="background:var(--m-relatorios)"></span>Relatórios</button>
     <button class="nav-btn" data-view="integracoes"><span class="nav-dot" style="background:var(--m-integracoes)"></span>Integrações</button>
     <button class="nav-btn" data-view="dados"><span class="nav-dot" style="background:#6E7468"></span>Dados &amp; Backup</button>
     <div id="cloud-bar" style="display:none">
@@ -487,7 +486,7 @@ const categoriaById=id=>S.categorias.find(c=>c.id===id);
 function custoFixoMensalTotal(){ return (S.custos_fixos||[]).filter(c=>c.ativo!==false).reduce((a,c)=>a+(c.valor_mensal||0),0); }
 function producaoEstimadaSugerida(){
   const porMes={};
-  S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega).forEach(p=>{
+  S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega).forEach(p=>{
     const mes=p.data_entrega.slice(0,7);
     const un=p.itens.reduce((a,l)=>{ const it=itemById(l.item_id); return a+l.quantidade*((it&&it.unidades_equivalentes)||1); },0);
     porMes[mes]=(porMes[mes]||0)+un;
@@ -550,66 +549,6 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
 </script>
 <script>
 'use strict';
-/* ================= DASHBOARD ================= */
-VIEWS.dashboard=function(){
-  const mesIni=hoje().slice(0,7);
-  const pedEnt=S.pedidos.filter(p=>p.status==='entregue');
-  const vendasMes=pedEnt.filter(p=>(p.data_entrega||'').slice(0,7)===mesIni).reduce((a,p)=>a+p.valor_total,0);
-  const despMes=S.lancamentos.filter(l=>l.tipo==='despesa'&&(l.data||'').slice(0,7)===mesIni).reduce((a,l)=>a+l.valor,0);
-  const caixa=S.lancamentos.filter(l=>l.status==='liquidado').reduce((a,l)=>a+(l.tipo==='receita'?l.valor:-l.valor),0);
-  const aReceber=S.lancamentos.filter(l=>l.tipo==='receita'&&l.status==='aberto').reduce((a,l)=>a+l.valor,0);
-  const aPagar=S.lancamentos.filter(l=>l.tipo==='despesa'&&l.status==='aberto').reduce((a,l)=>a+l.valor,0);
-  const estocaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'estocavel'));
-  const baixos=estocaveis.filter(i=>i.estoque_minimo>0&&disponivel(i.id)<i.estoque_minimo);
-  const valorEstoque=estocaveis.reduce((a,i)=>{const s=saldo(i.id),c=custoItem(i.id);return a+(s>0&&c!=null?s*c:0);},0);
-
-  // vendas últimos 14 dias
-  const dias=[];
-  for(let k=13;k>=0;k--){ const d=new Date(); d.setDate(d.getDate()-k); const iso=d.toISOString().slice(0,10);
-    dias.push({iso,label:d.getDate()+'/'+(d.getMonth()+1),v:pedEnt.filter(p=>p.data_entrega===iso).reduce((a,p)=>a+p.valor_total,0)});}
-  const maxV=Math.max(...dias.map(d=>d.v),1);
-  const barras=dias.map(d=>`<div class="bar" title="${d.label}: ${money(d.v)}"><div class="b ${d.v?'':'zero'}" style="height:${Math.max(3,Math.round(d.v/maxV*130))}px"></div><small>${d.label}</small></div>`).join('');
-
-  const evHtml=S.eventos.slice(0,8).map(e=>`<div class="ev"><span class="ev-dot" style="background:${EVENTO_CORES[e.tipo]||'#999'}"></span>
-    <div><b>${e.tipo.replaceAll('_',' ')}</b> — ${esc(e.descricao)}<div class="ev-t">${dtBR(e.data)}</div></div></div>`).join('')||'<div class="empty">Nenhum evento ainda. Cada ação do sistema gera um evento aqui.</div>';
-
-  const vencendo=[];
-  estocaveis.forEach(i=>lotesDe(i.id).forEach(l=>{ if(l.saldo>0.0001&&l.validade){
-    const dd=Math.ceil((new Date(l.validade+'T12:00:00').getTime()-Date.now())/864e5);
-    if(dd<=7)vencendo.push({i,l,dd}); } }));
-  vencendo.sort((a,b)=>a.dd-b.dd);
-  const vencHtml=vencendo.length?vencendo.slice(0,8).map(v=>`<tr><td>${esc(v.i.nome)}${v.l.lote?' <span class="mono-id">'+esc(v.l.lote)+'</span>':''}</td>
-    <td class="r num">${qty(v.l.saldo,v.i.unidade_base)}</td><td class="r">${statusValidade(v.l.validade)}</td></tr>`).join(''):
-    '<tr><td colspan="3" class="empty">Nenhum lote vencido ou vencendo em 7 dias 👍</td></tr>';
-  const baixosHtml=baixos.length?baixos.map(i=>`<tr><td>${esc(i.nome)}</td><td class="r num neg">${qty(saldo(i.id),i.unidade_base)}</td><td class="r num subtle">mín. ${qty(i.estoque_minimo,i.unidade_base)}</td></tr>`).join(''):`<tr><td colspan="3" class="empty">Nenhum item abaixo do mínimo 👍</td></tr>`;
-
-  return header('Dashboard','var(--m-dashboard)','Dados consistentes · histórico preservado · visão por item, período e cliente')+
-  `<div class="grid g4">
-    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-pedidos)"></span>Vendas no mês</div><div class="k-value num">${money(vendasMes)}</div><div class="k-foot">${pedEnt.filter(p=>(p.data_entrega||'').slice(0,7)===mesIni).length} pedidos entregues</div></div>
-    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-financeiro)"></span>Despesas no mês</div><div class="k-value num">${money(despMes)}</div><div class="k-foot">margem bruta ${vendasMes?Math.round((vendasMes-despMes)/vendasMes*100)+'%':'—'}</div></div>
-    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--ok)"></span>Caixa</div><div class="k-value num">${money(caixa)}</div><div class="k-foot num">a receber ${money(aReceber)} · a pagar ${money(aPagar)}</div></div>
-    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-estoque)"></span>Valor em estoque</div><div class="k-value num">${money(valorEstoque)}</div><div class="k-foot">${estocaveis.length} itens estocáveis · ${baixos.length} abaixo do mínimo</div></div>
-  </div>
-  <div class="grid g2 section-gap">
-    <div class="card"><div class="card-h"><h3>Vendas por dia (14 dias)</h3></div><div class="card-b"><div class="bars">${barras}</div></div></div>
-    <div class="card"><div class="card-h"><h3>Estoque abaixo do mínimo</h3><a class="link" onclick="nav('estoque')">ver estoque</a></div>
-      <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Item</th><th class="r">Saldo</th><th class="r">Mínimo</th></tr></thead><tbody>${baixosHtml}</tbody></table></div></div>
-  </div>
-  <div class="grid g2 section-gap">
-    <div class="card"><div class="card-h"><h3>Validades próximas (7 dias)</h3><a class="link" onclick="nav('estoque')">ver lotes</a></div>
-      <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Item / Lote</th><th class="r">Saldo</th><th class="r">Validade</th></tr></thead><tbody>${vencHtml}</tbody></table></div></div>
-    <div class="card"><div class="card-h"><h3>Últimos eventos</h3><a class="link" onclick="nav('eventos')">ver todos</a></div><div class="card-b">${evHtml}</div></div>
-  </div>
-  <div class="section-gap flow-strip">
-    <div class="flow-step"><b>1 · Compra</b>Item entra no estoque</div>
-    <div class="flow-step"><b>2 · Produção</b>Itens consumidos, novos gerados</div>
-    <div class="flow-step"><b>3 · Estoque</b>Movimentações atualizam saldos</div>
-    <div class="flow-step"><b>4 · Pedido</b>Reserva / confirmação</div>
-    <div class="flow-step"><b>5 · Entrega</b>Baixa estoque e gera receita</div>
-    <div class="flow-step"><b>6 · Financeiro</b>Caixa e contas</div>
-  </div>`;
-};
-
 /* ================= ITENS ================= */
 let filtroItens='';
 let filtroCategoriaItens='';
@@ -1063,7 +1002,7 @@ function salvarProducao(){
 const STATUS_PED={
   pedido:{label:'Pedido',tag:'mut'}, confirmado:{label:'Confirmado',tag:'warn'},
   em_producao:{label:'Em produção',tag:'warn'}, disponivel:{label:'Disponível p/ entrega',tag:'info'},
-  entregue:{label:'Entregue',tag:'f'}, cancelado:{label:'Cancelado',tag:'bad'}
+  entregue:{label:'Entregue',tag:'info'}, finalizado:{label:'Finalizado',tag:'f'}, cancelado:{label:'Cancelado',tag:'bad'}
 };
 const STATUS_SISTEMA=Object.keys(STATUS_PED); // esses têm efeito real (estoque/financeiro) e não podem ser removidos
 function statusInfo(key){
@@ -1106,7 +1045,7 @@ let pedidoDetalheId=null;
 let filtroStatusPedido='';
 VIEWS.pedidos=function(){
   garantirFormasPadrao();
-  const abertos=S.pedidos.filter(p=>!['entregue','cancelado'].includes(p.status)).length;
+  const abertos=S.pedidos.filter(p=>!['finalizado','cancelado'].includes(p.status)).length;
   const pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
   const rows=pedidosFiltrados.slice().reverse().map(p=>{
     const st=statusInfo(p.status);
@@ -1165,9 +1104,10 @@ VIEWS['pedido-detalhe']=function(){
           ${descontoTotal?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--primary)"><span>Desconto</span><span class="num">−${money(descontoTotal)}</span></div>`:''}
           <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:1px solid var(--line);padding-top:8px"><span>Total</span><span class="num">${money(p.valor_total)}</span></div>
         </div></div>
-        ${p.status==='entregue'?`<div class="card section-gap"><div class="card-h"><h3>Pagamento</h3></div><div class="card-b">
+        ${['entregue','finalizado'].includes(p.status)?`<div class="card section-gap"><div class="card-h"><h3>Pagamento</h3></div><div class="card-b">
           <p class="subtle">${p.faturamento==='canal'?'Repasse de canal':p.faturamento==='conta'?'Na conta do cliente':p.faturamento==='areceber'?'A receber':'À vista'}${p.forma_id&&formaById(p.forma_id)?' · '+esc(formaById(p.forma_id).nome):''}</p>
-          <p class="${p.recebido?'':'subtle'}">${p.recebido?'✅ Recebido':'⏳ Aguardando recebimento'}</p></div></div>`:''}
+          <p class="${p.recebido?'':'subtle'}">${p.recebido?'✅ Recebido':'⏳ Aguardando recebimento'}</p>
+          ${!p.recebido?`<button class="btn primary" style="width:100%;margin-top:8px" onclick="receberPedido('${p.id}')">Registrar recebimento e finalizar</button>`:''}</div></div>`:''}
       </div>
     </div>`;
 };
@@ -1177,8 +1117,10 @@ function mudarStatusPedido(id,novo){
   if(novo===p.status)return;
   if(novo==='entregue'){ modalEntrega(id); return; }
   if(novo==='cancelado'){ cancelarPedido(id); return; }
-  if(p.status==='entregue'){
-    if(!confirm('Esse pedido já estava "Entregue". Mudar o status agora devolve o estoque baixado e remove os lançamentos financeiros dessa entrega. Confirmar?'))return;
+  if(novo==='finalizado'&&p.status==='entregue'){ receberPedido(id); return; }
+  if(novo==='finalizado'&&p.status!=='entregue'){ modalEntrega(id); return; } // ainda não passou por entrega — coleta forma de pagamento primeiro
+  if(['entregue','finalizado'].includes(p.status)){
+    if(!confirm(`Esse pedido já estava "${statusInfo(p.status).label}". Mudar o status agora devolve o estoque baixado e remove os lançamentos financeiros dessa entrega. Confirmar?`))return;
     p.itens.forEach(l=>{ if(temFuncao(itemById(l.item_id),'estocavel'))
         registrarMovimento(l.item_id,l.quantidade,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno por mudança de status');
       delete l.cmv_unitario; });
@@ -1413,7 +1355,7 @@ function executarEntrega(id,modo,formaId){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   const faltam=p.itens.filter(l=>temFuncao(itemById(l.item_id),'estocavel')&&saldo(l.item_id)<l.quantidade);
   if(faltam.length&&!confirm('Estoque insuficiente para: '+faltam.map(l=>nomeItem(l.item_id)).join(', ')+'. Entregar mesmo assim? O saldo ficará negativo.'))return;
-  p.status='entregue'; p.data_entrega=hoje(); p.faturamento=modo; p.forma_id=formaId||null;
+  p.status=(modo==='pago')?'finalizado':'entregue'; p.data_entrega=hoje(); p.faturamento=modo; p.forma_id=formaId||null;
   p.itens.forEach(l=>{
     l.cmv_unitario=custoItem(l.item_id); // fotografia do custo no momento da entrega
     if(temFuncao(itemById(l.item_id),'estocavel'))
@@ -1443,19 +1385,19 @@ function executarEntrega(id,modo,formaId){
       categoria:'Vendas',forma_id:formaId,data:p.data_entrega,status:'liquidado',data_liquidacao:p.data_entrega,origem:id});
     registrarEvento('PEDIDO_ENTREGUE',`${p.cliente||id} · ${money(p.valor_total)} — pago (${formaById(formaId)?formaById(formaId).nome:''}), caixa atualizado`,id);
   }
-  scheduleSave(); render(); toast('Pedido entregue.');
+  scheduleSave(); render(); toast(modo==='pago'?'Pedido entregue e finalizado.':'Pedido entregue.');
 }
 function receberPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
-  p.recebido=true;
+  p.recebido=true; p.status='finalizado';
   S.lancamentos.filter(l=>l.origem===id&&l.status==='aberto').forEach(l=>{ l.status='liquidado'; l.data_liquidacao=hoje(); });
-  registrarEvento(p.faturamento==='canal'?'REPASSE_CANAL':'RECEBIMENTO_REALIZADO',`${p.cliente||id} · ${money(p.valor_total)} — ${p.faturamento==='canal'?'repasse do canal liquidado (receita e comissão)':'baixa contas a receber, atualiza caixa'}`,id);
-  scheduleSave(); render(); toast('Recebimento registrado no caixa.');
+  registrarEvento(p.faturamento==='canal'?'REPASSE_CANAL':'RECEBIMENTO_REALIZADO',`${p.cliente||id} · ${money(p.valor_total)} — ${p.faturamento==='canal'?'repasse do canal liquidado (receita e comissão)':'baixa contas a receber, atualiza caixa'} · pedido finalizado`,id);
+  scheduleSave(); render(); toast('Recebimento registrado e pedido finalizado.');
 }
 function cancelarPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
-  if(!confirm('Cancelar o pedido '+id+'?'+(p.status==='entregue'?' Movimentações serão revertidas.':'')))return;
-  if(p.status==='entregue'){
+  if(!confirm('Cancelar o pedido '+id+'?'+(['entregue','finalizado'].includes(p.status)?' Movimentações serão revertidas.':'')))return;
+  if(['entregue','finalizado'].includes(p.status)){
     p.itens.forEach(l=>{ if(temFuncao(itemById(l.item_id),'estocavel'))
       registrarMovimento(l.item_id,l.quantidade,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno pedido'); });
     S.lancamentos=S.lancamentos.filter(l=>l.origem!==id);
@@ -1961,7 +1903,7 @@ VIEWS.integracoes=function(){
   const cfg=cloudCfg();
   const rows=S.canais.map(c=>{
     const pedidos=S.pedidos.filter(p=>p.canal_id===c.id);
-    const tot=pedidos.filter(p=>p.status==='entregue').reduce((a,p)=>a+p.valor_total,0);
+    const tot=pedidos.filter(p=>['entregue','finalizado'].includes(p.status)).reduce((a,p)=>a+p.valor_total,0);
     return `<tr style="${c.ativo===false?'opacity:.45':''}">
       <td><b>${esc(c.nome)}</b> <span class="tag info">${TIPOS_CANAL[c.tipo]||c.tipo}</span>
         <div class="mono-id">${c.id}${c.codigo_loja?' · loja '+esc(c.codigo_loja):''}</div></td>
@@ -2130,7 +2072,7 @@ VIEWS.margens=function(){
     const margem=(pv!=null&&custoTotal!=null)?pv-custoTotal:null;
     const mp=(margem!=null&&pv)?margem/pv*100:null;
     let q30=0, rec30=0, cmv30=0, temCmv=false;
-    S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega&&new Date(p.data_entrega+'T12:00:00').getTime()>=ini)
+    S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&new Date(p.data_entrega+'T12:00:00').getTime()>=ini)
       .forEach(p=>p.itens.filter(l=>l.item_id===i.id).forEach(l=>{
         q30+=l.quantidade; rec30+=l.quantidade*l.preco_unitario;
         const cu=(l.cmv_unitario!=null)?l.cmv_unitario:cmv;
@@ -2172,7 +2114,7 @@ function relIntervalo(){
 /* ---------- Carteira de clientes: frequência pessoal + curva ABC (histórico completo, não depende do período do relatório) ---------- */
 function analisarCarteiraClientes(){
   const porCli={};
-  S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega).forEach(p=>{
+  S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega).forEach(p=>{
     const chave=p.cliente_id||p.cliente||'—';
     const c=porCli[chave]||(porCli[chave]={chave,nome:p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso',datas:[],receita:0});
     c.datas.push(p.data_entrega); c.receita+=p.valor_total||0;
@@ -2213,7 +2155,7 @@ function analisarCarteiraClientes(){
 VIEWS.relatorios=function(){
   const carteira=analisarCarteiraClientes();
   const {ini,fim,label}=relIntervalo();
-  const pedidos=S.pedidos.filter(p=>p.status==='entregue'&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim);
+  const pedidos=S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim);
   const receita=pedidos.reduce((a,p)=>a+(p.valor_total||0),0);
   const nPedidos=pedidos.length;
   const ticket=nPedidos?receita/nPedidos:0;
@@ -2266,7 +2208,19 @@ VIEWS.relatorios=function(){
       <div class="field"><label>De</label><input type="date" value="${relDataIni}" onchange="relDataIni=this.value;render()"></div>
       <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
 
-  return header('Relatórios','var(--m-relatorios)',`Vendas entregues no período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
+  const pedidosAbertos=S.pedidos.filter(p=>!['finalizado','cancelado'].includes(p.status));
+  const abertosPorStatus={};
+  pedidosAbertos.forEach(p=>{ abertosPorStatus[p.status]=(abertosPorStatus[p.status]||0)+1; });
+  const abertosLista=Object.entries(abertosPorStatus).sort((a,b)=>b[1]-a[1]).map(([st,n])=>{
+    const info=statusInfo(st);
+    return `<button class="cat-chip" style="cursor:pointer" onclick="filtroStatusPedido='${st}';nav('pedidos')"><span class="tag ${info.tag}">${info.label}</span> <b>${n}</b></button>`;
+  }).join('')||'<span class="subtle">Nenhum pedido em aberto 👍</span>';
+  const abertosCard=`<div class="card section-gap"><div class="card-h"><h3>📬 Pedidos em aberto</h3><a class="link" onclick="nav('pedidos')">ver todos</a></div>
+    <div class="card-b"><div class="k-value num" style="font-size:30px;margin-bottom:10px">${pedidosAbertos.length}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">${abertosLista}</div></div></div>`;
+
+  return header('Dashboard','var(--m-dashboard)',`Vendas entregues no período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
+  abertosCard+
   `<div class="cat-chips">${chipsPeriodo}</div>${customFields}
   <div class="grid g4 section-gap">
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-pedidos)"></span>Receita</div><div class="k-value num">${money(receita)}</div><div class="k-foot">${nPedidos} pedidos</div></div>
@@ -2283,6 +2237,7 @@ VIEWS.relatorios=function(){
   </div>
   ${carteiraHtml(carteira)}`;
 };
+VIEWS.dashboard=VIEWS.relatorios; // Dashboard = página inicial, é o antigo Relatórios
 function carteiraHtml(c){
   const STATUS_LABEL={ativo:'Ativo',atencao:'Atenção',risco:'Em risco',inativo:'Inativo'};
   const STATUS_COR={ativo:'#2E6E4E',atencao:'#E0A63C',risco:'#C05E10',inativo:'#B3372C'};

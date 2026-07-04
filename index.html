@@ -290,7 +290,7 @@ const EVENTO_CORES = {
 
 var S = {
   empresa:{nome:'Meu Restaurante'},
-  itens:[], categorias:[], composicoes:[], custos_fixos:[], movimentos:[], compras:[], producoes:[],
+  itens:[], categorias:[], composicoes:[], custos_fixos:[], status_personalizados:[], movimentos:[], compras:[], producoes:[],
   pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], seq:{}
 };
 let currentView='dashboard';
@@ -1037,31 +1037,128 @@ const STATUS_PED={
   em_producao:{label:'Em produção',tag:'warn'}, disponivel:{label:'Disponível p/ entrega',tag:'info'},
   entregue:{label:'Entregue',tag:'f'}, cancelado:{label:'Cancelado',tag:'bad'}
 };
+const STATUS_SISTEMA=Object.keys(STATUS_PED); // esses têm efeito real (estoque/financeiro) e não podem ser removidos
+function statusInfo(key){
+  if(STATUS_PED[key])return STATUS_PED[key];
+  const c=(S.status_personalizados||[]).find(s=>s.id===key);
+  return c?{label:c.nome,tag:'info'}:{label:key,tag:'mut'};
+}
+function statusDisponiveis(){
+  return [...Object.entries(STATUS_PED).map(([id,v])=>({id,nome:v.label,sistema:true})),
+          ...(S.status_personalizados||[]).filter(s=>s.ativo!==false).map(s=>({id:s.id,nome:s.nome,sistema:false}))];
+}
+function modalStatusPersonalizados(){
+  openModal(`<div class="m-h"><h3>Status de pedido personalizados</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <p class="subtle" style="margin-bottom:12px">Os 6 status do sistema (Pedido, Confirmado, Em produção, Disponível, Entregue, Cancelado) já controlam estoque e financeiro e não podem ser removidos. Aqui você pode adicionar status extras só pra organização do seu fluxo (ex.: "Em expedição", "Aguardando retirada") — eles não mexem em estoque nem caixa.</p>
+    <div id="status-crud-list">${renderStatusCrud()}</div>
+    <button class="btn sm" style="margin-top:8px" onclick="S.status_personalizados.push({id:uid('STC'),nome:'',ativo:true,criado_em:new Date().toISOString()});$('#status-crud-list').innerHTML=renderStatusCrud();setTimeout(()=>{const ins=document.querySelectorAll('#status-crud-list input');if(ins.length)ins[ins.length-1].focus()},30)">+ Novo status</button>
+  </div>
+  <div class="m-f"><button class="btn primary" onclick="closeModal();render()">Concluído</button></div>`,true);
+}
+function renderStatusCrud(){
+  return (S.status_personalizados||[]).map(s=>`<div class="line" style="grid-template-columns:1fr 34px;opacity:${s.ativo===false?.5:1}">
+      <input value="${esc(s.nome)}" placeholder="ex.: Em expedição" onchange="renomearStatusPersonalizado('${s.id}',this.value)">
+      <button class="rm" title="Remover" onclick="removerStatusPersonalizado('${s.id}')">✕</button></div>`).join('')
+    ||'<p class="subtle">Nenhum status extra ainda — clique em "+ Novo status".</p>';
+}
+function renomearStatusPersonalizado(id,valor){
+  const s=(S.status_personalizados||[]).find(x=>x.id===id); if(!s)return;
+  const nome=valor.trim();
+  if(!nome){ removerStatusPersonalizado(id); return; }
+  s.nome=nome; scheduleSave(); const el=$('#status-crud-list'); if(el)el.innerHTML=renderStatusCrud();
+}
+function removerStatusPersonalizado(id){
+  const emUso=S.pedidos.some(p=>p.status===id);
+  if(emUso&&!confirm('Esse status está em uso em algum pedido. Remover mesmo assim? Os pedidos ficam com o status antigo salvo, mas ele some da lista de opções.'))return;
+  S.status_personalizados=(S.status_personalizados||[]).filter(x=>x.id!==id);
+  scheduleSave(); const el=$('#status-crud-list'); if(el)el.innerHTML=renderStatusCrud();
+}
+let pedidoDetalheId=null;
 VIEWS.pedidos=function(){
   garantirFormasPadrao();
   const abertos=S.pedidos.filter(p=>!['entregue','cancelado'].includes(p.status)).length;
   const rows=S.pedidos.slice().reverse().map(p=>{
-    const st=STATUS_PED[p.status]||{label:p.status,tag:'mut'};
-    let stHtml=`<span class="tag ${st.tag}">${st.label}</span>`;
-    if(p.canal_id&&canalById(p.canal_id))stHtml=`<span class="tag" style="background:#E7EBF5;color:#3A4C86">${esc(canalById(p.canal_id).nome)}</span> `+stHtml;
-    if(p.status==='entregue'&&p.faturamento==='conta')stHtml+=' <span class="tag info">na conta do cliente</span>';
-    else if(p.status==='entregue'&&!p.recebido)stHtml+=' <span class="tag warn">aguard. pagamento</span>';
-    else if(p.status==='entregue'&&p.recebido)stHtml+=' <span class="tag f">pago 💰</span>';
-    const itens=p.itens.map(l=>`${l.quantidade}× ${esc(nomeLinha(l))} <span class="subtle num">(${money(l.preco_unitario)})</span>`).join('<br>');
-    let acoes=`<button class="btn sm ghost" title="Imprimir comprovante" onclick="imprimirPedido('${p.id}')">🖨</button> `;
-    if(p.status==='pedido')acoes+=`<button class="btn sm primary" onclick="avancarPedido('${p.id}','confirmado')">Confirmar</button> <button class="btn sm danger" onclick="cancelarPedido('${p.id}')">✕</button>`;
-    else if(p.status==='confirmado')acoes+=`<button class="btn sm primary" onclick="avancarPedido('${p.id}','em_producao')">Iniciar produção</button> <button class="btn sm danger" onclick="cancelarPedido('${p.id}')">✕</button>`;
-    else if(p.status==='em_producao')acoes+=`<button class="btn sm primary" onclick="avancarPedido('${p.id}','disponivel')">Disponível</button> <button class="btn sm danger" onclick="cancelarPedido('${p.id}')">✕</button>`;
-    else if(p.status==='disponivel')acoes+=`<button class="btn sm primary" onclick="modalEntrega('${p.id}')">Entregar</button> <button class="btn sm danger" onclick="cancelarPedido('${p.id}')">✕</button>`;
-    else if(p.status==='entregue'&&!p.recebido&&(p.faturamento==='areceber'||p.faturamento==='canal'))acoes+=`<button class="btn sm" onclick="receberPedido('${p.id}')">${p.faturamento==='canal'?'Registrar repasse':'Registrar recebimento'}</button>`;
+    const st=statusInfo(p.status);
     const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id):null;
-    return `<tr><td><b>${esc(cli?cli.nome:(p.cliente||'Cliente'))}</b><div class="mono-id">${p.id} · ${dBR(p.data_pedido)}${p.data_entrega?' → '+dBR(p.data_entrega):''}${cli&&cli.telefone?' · '+esc(cli.telefone):''}</div>${p.observacao?`<div class="subtle">📝 ${esc(p.observacao)}</div>`:''}</td>
-      <td>${itens}</td><td class="r num"><b>${money(p.valor_total)}</b></td><td>${stHtml}</td><td class="r" style="white-space:nowrap">${acoes}</td></tr>`;
-  }).join('')||`<tr><td colspan="5"><div class="empty"><b>Nenhum pedido</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
+    const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+    return `<tr style="cursor:pointer" onclick="pedidoDetalheId='${p.id}';nav('pedido-detalhe','pedidos')">
+      <td class="mono-id">${p.id}</td>
+      <td class="subtle">${dBR(p.data_pedido)}${p.data_entrega?' → '+dBR(p.data_entrega):''}</td>
+      <td><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b></td>
+      <td class="r num">${nItens} un.</td>
+      <td class="r num"><b>${money(p.valor_total)}</b></td>
+      <td><span class="tag ${st.tag}">${st.label}</span></td>
+      <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button></td></tr>`;
+  }).join('')||`<tr><td colspan="7"><div class="empty"><b>Nenhum pedido</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
   return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido → Confirmado → Em produção → Disponível → Entregue. Reserva de estoque a partir da confirmação. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
-    `<button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
-  `<div class="card"><table><thead><tr><th>Cliente</th><th>Itens</th><th class="r">Total</th><th>Status</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    `<button class="btn" onclick="modalStatusPersonalizados()">⚙️ Status</button>
+     <button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
+  `<div class="card"><table><thead><tr><th>Código</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
+
+VIEWS['pedido-detalhe']=function(){
+  const p=S.pedidos.find(x=>x.id===pedidoDetalheId);
+  if(!p)return header('Pedido','var(--m-pedidos)','')+`<div class="card"><div class="empty"><b>Pedido não encontrado</b><a class="link" onclick="nav('pedidos')">voltar</a></div></div>`;
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const linhas=(p.itens||[]).map(l=>`<tr><td>${l.quantidade}× ${esc(nomeLinha(l))}</td><td class="r num">${money(l.preco_unitario)}</td><td class="r num">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('')
+    ||'<tr><td colspan="3" class="empty">Sem itens</td></tr>';
+  const subtotal=p.valor_bruto!=null?p.valor_bruto:(p.itens||[]).reduce((a,l)=>a+l.quantidade*l.preco_unitario,0);
+  const descontoTotal=(p.desconto_combo||0)+(p.desconto_manual||0);
+  const historico=S.eventos.filter(e=>e.ref===p.id).sort((a,b)=>a.data<b.data?1:-1);
+  const historicoHtml=historico.map(e=>`<div class="ev"><span class="ev-dot" style="background:${EVENTO_CORES[e.tipo]||'#999'}"></span><div><b>${e.tipo.replaceAll('_',' ')}</b> — ${esc(e.descricao)}<div class="ev-t">${dtBR(e.data)}</div></div></div>`).join('')||'<div class="empty">Sem histórico ainda.</div>';
+  const opcoesStatus=statusDisponiveis().map(s=>`<option value="${s.id}" ${p.status===s.id?'selected':''}>${esc(s.nome)}</option>`).join('');
+  return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Pedido ${p.id}</h1></div>
+    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button></div></div>
+    <div class="grid g2" style="align-items:start">
+      <div>
+        <div class="card"><div class="card-h"><h3>Cliente</h3></div><div class="card-b">
+          <p><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>'+esc(cli.telefone):''}${cli&&cli.endereco?'<br>'+esc(cli.endereco):''}</p></div></div>
+        ${p.observacao?`<div class="card section-gap"><div class="card-h"><h3>Observação</h3></div><div class="card-b"><p>${esc(p.observacao)}</p></div></div>`:''}
+        <div class="card section-gap"><div class="card-h"><h3>Itens</h3></div><div class="card-b" style="padding:0 6px">
+          <table><thead><tr><th>Item</th><th class="r">Unitário</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table></div></div>
+        <div class="card section-gap"><div class="card-h"><h3>Histórico</h3></div><div class="card-b">${historicoHtml}</div></div>
+      </div>
+      <div>
+        <div class="card"><div class="card-h"><h3>Status</h3></div><div class="card-b">
+          <select id="pd-status-sel" style="width:100%;margin-bottom:10px">${opcoesStatus}</select>
+          <button class="btn primary" style="width:100%" onclick="aplicarNovoStatus('${p.id}')">Alterar status</button>
+        </div></div>
+        <div class="card section-gap"><div class="card-h"><h3>Resumo</h3></div><div class="card-b">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="subtle">Subtotal</span><span class="num">${money(subtotal)}</span></div>
+          ${descontoTotal?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--primary)"><span>Desconto</span><span class="num">−${money(descontoTotal)}</span></div>`:''}
+          <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:1px solid var(--line);padding-top:8px"><span>Total</span><span class="num">${money(p.valor_total)}</span></div>
+        </div></div>
+        ${p.status==='entregue'?`<div class="card section-gap"><div class="card-h"><h3>Pagamento</h3></div><div class="card-b">
+          <p class="subtle">${p.faturamento==='canal'?'Repasse de canal':p.faturamento==='conta'?'Na conta do cliente':p.faturamento==='areceber'?'A receber':'À vista'}${p.forma_id&&formaById(p.forma_id)?' · '+esc(formaById(p.forma_id).nome):''}</p>
+          <p class="${p.recebido?'':'subtle'}">${p.recebido?'✅ Recebido':'⏳ Aguardando recebimento'}</p></div></div>`:''}
+      </div>
+    </div>`;
+};
+function aplicarNovoStatus(id){ const sel=$('#pd-status-sel'); if(sel)mudarStatusPedido(id,sel.value); }
+function mudarStatusPedido(id,novo){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  if(novo===p.status)return;
+  if(novo==='entregue'){ modalEntrega(id); return; }
+  if(novo==='cancelado'){ cancelarPedido(id); return; }
+  if(p.status==='entregue'){
+    if(!confirm('Esse pedido já estava "Entregue". Mudar o status agora devolve o estoque baixado e remove os lançamentos financeiros dessa entrega. Confirmar?'))return;
+    p.itens.forEach(l=>{ if(temFuncao(itemById(l.item_id),'estocavel'))
+        registrarMovimento(l.item_id,l.quantidade,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno por mudança de status');
+      delete l.cmv_unitario; });
+    S.lancamentos=S.lancamentos.filter(l=>l.origem!==id);
+    S.clientes_mov=S.clientes_mov.filter(m=>m.origem!==id);
+    p.recebido=false; p.faturamento=null; p.data_entrega=null;
+  }
+  if(novo==='confirmado'){
+    const falta=p.itens.filter(l=>temFuncao(itemById(l.item_id),'estocavel')&&disponivel(l.item_id)<l.quantidade);
+    if(falta.length&&!confirm('Disponível insuficiente (saldo − reservas) para: '+falta.map(l=>nomeItem(l.item_id)).join(', ')+'. Confirmar mesmo assim?'))return;
+  }
+  const antigo=statusInfo(p.status).label;
+  p.status=novo;
+  registrarEvento('PEDIDO_STATUS_ALTERADO',`${p.cliente||id}: status "${antigo}" → "${statusInfo(novo).label}"`,id);
+  scheduleSave(); render(); toast('Status atualizado.');
+}
 
 let pedLinhas=[];
 const CAT_PALETTE=['#1F6FB2','#C05E10','#5F6B1B','#8C1D3F','#7A3E6B','#A87718','#2F6B7A','#8A6642','#4A5FA5','#3D7A6E','#9E2B25','#1F4E79'];
@@ -1332,10 +1429,31 @@ function cancelarPedido(id){
   registrarEvento('DEVOLUCAO_CANCELAMENTO',`Pedido ${p.cliente||id} cancelado — movimentos revertidos/ajustados`,id);
   scheduleSave(); render(); toast('Pedido cancelado.');
 }
+function modalRecibo(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+  const linhas=(p.itens||[]).map(l=>`<tr><td>${l.quantidade}× ${esc(nomeLinha(l))}</td><td class="r num">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
+  const idn=getIdent();
+  openModal(`<div class="m-h"><h3>Recibo ${p.id}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <div style="text-align:center;margin-bottom:14px">
+      ${idn.logo_img?`<img src="${idn.logo_img}" style="max-height:46px;margin-bottom:6px">`:''}
+      <div style="font-weight:700">${esc(idn.nome||'Food ERP')}</div>
+      <div class="subtle" style="font-size:12px">${esc(idn.endereco||'')}</div>
+    </div>
+    <p style="margin-bottom:8px"><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?' · '+esc(cli.telefone):''}<br>
+    <span class="subtle">Pedido ${p.id} · ${dBR(p.data_pedido)}${p.data_entrega?' → entrega '+dBR(p.data_entrega):''}</span></p>
+    <div class="subtle" style="margin-bottom:6px">${nItens} itens</div>
+    <table style="width:100%">${linhas}<tr style="font-weight:700;border-top:1px solid var(--line)"><td style="padding-top:8px">TOTAL</td><td class="r num" style="padding-top:8px">${money(p.valor_total)}</td></tr></table>
+    ${p.observacao?`<div class="field" style="margin-top:12px"><label>Observação</label><div class="subtle" style="border:1px dashed var(--line);padding:8px;border-radius:8px">${esc(p.observacao)}</div></div>`:''}
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="imprimirPedido('${id}')">🖨 Imprimir</button></div>`);
+}
 function imprimirPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   const cli=p.cliente_id?clienteById(p.cliente_id):null;
-  const st=STATUS_PED[p.status]||{label:p.status};
+  const st=statusInfo(p.status);
   const forma=p.forma_id&&formaById(p.forma_id)?formaById(p.forma_id).nome:(p.faturamento==='conta'?'Conta do cliente':(p.faturamento==='areceber'?'A receber':'—'));
   const linhas=p.itens.map(l=>`<tr><td>${l.quantidade}× ${esc(nomeLinha(l))}</td><td class="r">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pedido ${p.id}</title><style>
@@ -2354,7 +2472,7 @@ function importarJSON(){
 }
 async function zerarTudo(){
   if(!confirm('Apagar TODOS os dados? Esta ação não pode ser desfeita.'))return;
-  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
+  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
   await persist(); render(); toast('Sistema zerado.');
 }
 
@@ -2362,7 +2480,7 @@ async function zerarTudo(){
 function carregarExemplo(){
   if(S.itens.length&&!confirm('Isto substitui os dados atuais pelo exemplo. Continuar?'))return;
   const _cfg=S.config||[];
-  S={empresa:{nome:'Marmitaria Exemplo'},itens:[],categorias:[],composicoes:[],custos_fixos:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],config:_cfg,seq:{}};
+  S={empresa:{nome:'Marmitaria Exemplo'},itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],config:_cfg,seq:{}};
   ['Insumo','Pré-preparo','Embalagem','Produto','Serviço'].forEach(n=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,criado_em:new Date().toISOString()}));
   garantirFormasPadrao();
   S.fornecedores.push({id:uid('FOR'),nome:'Atacadão Central',telefone:'(48) 3333-0000',cnpj:'',endereco:'Av. Principal, 500',
@@ -2415,7 +2533,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','categorias','composicoes','custos_fixos','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
@@ -2548,7 +2666,7 @@ async function entrarNoSistema(){
         TABLES.forEach(t=>{ S[t]=p[t]||[]; }); await cloudPersist(); }
     }catch(e){} }
   }
-  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[];
+  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[];
   garantirCategoriasPadrao();
   aplicarIdentidade();
   if(!S.formas.length){ garantirFormasPadrao(); cloudPersist(); }

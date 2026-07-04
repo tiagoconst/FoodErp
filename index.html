@@ -454,6 +454,15 @@ function shade(hex,p){ try{ const n=parseInt(hex.slice(1),16),r=(n>>16)&255,g=(n
 const EMPRESA_PADRAO={nome_loja:'',razao_social:'',documento:'',telefone:'',whatsapp:'',email:'',instagram:'',endereco:'',complemento:'',sobre:''};
 function getEmpresaInfo(){ if(!S.config)S.config=[];
   return Object.assign({},EMPRESA_PADRAO,S.config.find(x=>x.id==='empresa')||{}); }
+function controlaEstoque(){ if(!S.config)return true;
+  const c=S.config.find(x=>x.id==='operacao'); return c?c.controla_estoque!==false:true; }
+function salvarModoOperacao(controla){
+  if(!S.config)S.config=[];
+  S.config=S.config.filter(c=>c.id!=='operacao');
+  S.config.push({id:'operacao',controla_estoque:controla});
+  registrarEvento('ITEM_ATUALIZADO',`Modo de operação alterado: ${controla?'controle de estoque ativo':'compra sob demanda (sem controle de estoque)'}`);
+  scheduleSave(); render(); toast('Modo de operação salvo.');
+}
 function getIdent(){ if(!S.config)S.config=[];
   return Object.assign({},IDENT_PADRAO,S.config.find(x=>x.id==='identidade')||{}); }
 function aplicarIdentidade(i){
@@ -1720,9 +1729,11 @@ function calcularMRP(){
     componentesDe(id).forEach(c=>visit(c.item_filho_id,l+1,ns)); };
   Object.keys(demanda).forEach(id=>visit(id,0,new Set()));
   const maxL=Object.values(lvl).length?Math.max(...Object.values(lvl)):0;
-  // 3) explosão nível a nível, abatendo o estoque físico disponível
+  // 3) explosão nível a nível, abatendo o estoque físico disponível (só se o modo de operação usar controle de estoque)
+  const modoSobDemanda=!controlaEstoque();
   const estoqueV={};
-  const evq=id=>{ if(estoqueV[id]==null){ const it=itemById(id);
+  const evq=id=>{ if(modoSobDemanda)return 0;
+    if(estoqueV[id]==null){ const it=itemById(id);
     estoqueV[id]=(it&&temFuncao(it,'estocavel'))?Math.max(0,saldo(id)):0; } return estoqueV[id]; };
   const gross=Object.assign({},demanda);
   const producoes=[],compras=[],alertas=[];
@@ -1746,7 +1757,7 @@ function calcularMRP(){
       }
     });
   }
-  mrpResultado={producoes,compras,alertas,pedidos:S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status)).length,quando:new Date().toISOString()};
+  mrpResultado={producoes,compras,alertas,pedidos:S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status)).length,quando:new Date().toISOString(),modoSobDemanda};
   render();
 }
 function gerarCompraMRP(){
@@ -1804,7 +1815,9 @@ VIEWS.planejamento=function(){
       <div class="card-b" style="padding-bottom:0">${chipsCompras}</div>
       <table><thead><tr><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>${alertHtml}`;
   }
-  return header('Planejamento','var(--m-planejamento)','Explosão multinível: pedidos em aberto → o que produzir em cada nível → o que comprar. O estoque existente é abatido em todos os níveis.',
+  return header('Planejamento','var(--m-planejamento)',controlaEstoque()
+      ?'Explosão multinível: pedidos em aberto → o que produzir em cada nível → o que comprar. O estoque existente é abatido em todos os níveis.'
+      :'Explosão multinível: pedidos em aberto → o que produzir → o que comprar. <b>Modo sob demanda ativo</b> (Dados & Backup) — a lista sempre mostra a quantidade cheia, sem abater estoque.',
     `<button class="btn primary" onclick="calcularMRP()">⚙ Calcular plano</button>`)+
   `<div class="card"><div class="card-h"><h3>Demanda</h3><span class="subtle">pedidos em aberto + quantidades extras que você quiser planejar</span></div>
     <table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>`+resultado;
@@ -2544,6 +2557,21 @@ VIEWS.dados=function(){
       </div>
       <button class="btn primary" onclick="salvarDadosEmpresa()">Salvar dados da empresa</button>
     </div></div>`;
+  const modoAtual=controlaEstoque();
+  const operacaoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>📦 Modo de operação</h3></div>
+    <div class="card-b">
+      <p class="subtle" style="margin-bottom:14px">Escolha o que faz mais sentido pro seu negócio — não afeta o cálculo de custo (CMV), só como o Planejamento sugere compras.</p>
+      <div class="frow c2">
+        <label class="check ${modoAtual?'on':''}" style="cursor:pointer" onclick="salvarModoOperacao(true)">
+          <input type="radio" name="modo-op" ${modoAtual?'checked':''} style="margin-top:3px">
+          <span><b>Controlo estoque físico</b><small>Compro com antecedência e guardo insumos. O Planejamento abate o que já está em estoque antes de sugerir compra.</small></span>
+        </label>
+        <label class="check ${!modoAtual?'on':''}" style="cursor:pointer" onclick="salvarModoOperacao(false)">
+          <input type="radio" name="modo-op" ${!modoAtual?'checked':''} style="margin-top:3px">
+          <span><b>Compro sob demanda</b><small>Compro os insumos pra cada pedido/lote, sem estoque parado. O Planejamento sempre sugere comprar a quantidade cheia necessária.</small></span>
+        </label>
+      </div>
+    </div></div>`;
   const identCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🎨 Identidade visual</h3>
       <span class="tag mut">${cfg?'sincroniza para todos os dispositivos da empresa':'salva neste navegador'}</span></div>
     <div class="card-b">
@@ -2581,7 +2609,7 @@ VIEWS.dados=function(){
       <p class="subtle" style="margin-top:10px">A prévia é aplicada enquanto você edita — mas só vale de forma permanente após salvar.</p>
     </div></div>`;
   return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
-  `<div class="grid g2">${cloudCard}${empresaCard}${identCard}
+  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}
     <div class="card"><div class="card-h"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
       <button class="btn primary" onclick="exportarJSON()">⬇ Exportar backup (JSON)</button></div></div>

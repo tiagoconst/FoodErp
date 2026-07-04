@@ -603,8 +603,11 @@ VIEWS.itens=function(){
       <td class="r"><button class="btn sm" onclick="modalItem('${i.id}')">Editar</button>
         <button class="btn sm ghost" onclick="toggleItem('${i.id}')">${i.ativo===false?'Reativar':'Inativar'}</button></td></tr>`;
   }).join('')||`<tr><td colspan="6"><div class="empty"><b>Nenhum item cadastrado</b>Item representa qualquer coisa que exista no sistema: insumo, preparo, produto, embalagem, serviço ou equipamento.</div></td></tr>`;
-  const catChips=`<button class="cat-chip ${!filtroCategoriaItens?'active':''}" style="${!filtroCategoriaItens?'background:var(--primary)':''}" onclick="filtroCategoriaItens='';render()">Todas</button>`+
-    S.categorias.filter(c=>c.ativo!==false).map(c=>`<button class="cat-chip ${filtroCategoriaItens===c.nome?'active':''}" style="${filtroCategoriaItens===c.nome?'background:'+corCategoria(c.nome):''}" onclick="filtroCategoriaItens=${JSON.stringify(c.nome)};render()">${esc(c.nome)}</button>`).join('');
+  // só mostra categorias usadas por itens que NÃO são produto final vendável — categoria de cardápio fica na tela Produtos
+  const catNomesItens=new Set(S.itens.filter(i=>!temFuncao(i,'vendavel')&&i.categoria).map(i=>i.categoria));
+  const catsItens=S.categorias.filter(c=>c.ativo!==false&&catNomesItens.has(c.nome));
+  const catChips=`<button class="cat-chip ${!filtroCategoriaItens?'active':''}" style="${!filtroCategoriaItens?'background:var(--primary)':''}" onclick='filtroCategoriaItens="";render()'>Todas</button>`+
+    catsItens.map(c=>`<button class="cat-chip ${filtroCategoriaItens===c.nome?'active':''}" style="${filtroCategoriaItens===c.nome?'background:'+corCategoria(c.nome):''}" onclick='filtroCategoriaItens=${JSON.stringify(c.nome)};render()'>${esc(c.nome)}</button>`).join('');
 
   return header('Itens','var(--m-itens)','Um item nunca muda de identidade — apenas ganha funções.',
     `<input class="search" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();this.focus();this.setSelectionRange(99,99)">
@@ -723,14 +726,22 @@ VIEWS.composicoes=function(){
   return header('Composições','var(--m-composicao)','Fichas técnicas de pré-preparos e itens intermediários — não são vendidos diretamente.',
     `<button class="btn primary" onclick="modalComposicao(null,'preparo')">+ Definir composição</button>`)+blocos;
 };
+let filtroCategoriaProdutos='';
 VIEWS.produtos=function(){
   const pais=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&temFuncao(it,'vendavel'); });
+  const paisFiltrados=pais.filter(pid=>!filtroCategoriaProdutos||(itemById(pid)||{}).categoria===filtroCategoriaProdutos);
   const semComposicao=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&!componentesDe(i.id).length);
-  const blocos=pais.map(pid=>blocoComposicao(pid,true)).join('')||
+  const blocos=paisFiltrados.map(pid=>blocoComposicao(pid,true)).join('')||
     `<div class="card"><div class="empty"><b>Nenhum produto com ficha técnica</b>Marque um item como <b>Vendável</b> em Itens, depois defina aqui do que ele é composto (itens e/ou pré-preparos) e o preço de venda.</div></div>`;
   const aviso=semComposicao.length?`<div class="card section-gap"><div class="card-b"><p class="subtle"><b>${semComposicao.length} produto(s) vendável(is) sem ficha técnica:</b> ${semComposicao.map(i=>esc(i.nome)).join(', ')}. Sem composição definida o custo (CMV) não é calculado.</p></div></div>`:'';
+  // categoria de cardápio: só as usadas por produtos vendáveis (Tradicionais, Fit, Conforto...)
+  const catNomesProdutos=new Set(S.itens.filter(i=>temFuncao(i,'vendavel')&&i.categoria).map(i=>i.categoria));
+  const catsProdutos=S.categorias.filter(c=>c.ativo!==false&&catNomesProdutos.has(c.nome));
+  const chips=`<button class="cat-chip ${!filtroCategoriaProdutos?'active':''}" style="${!filtroCategoriaProdutos?'background:var(--primary)':''}" onclick='filtroCategoriaProdutos="";render()'>Todas</button>`+
+    catsProdutos.map(c=>`<button class="cat-chip ${filtroCategoriaProdutos===c.nome?'active':''}" style="${filtroCategoriaProdutos===c.nome?'background:'+corCategoria(c.nome):''}" onclick='filtroCategoriaProdutos=${JSON.stringify(c.nome)};render()'>${esc(c.nome)}</button>`).join('');
   return header('Produtos','var(--m-produtos)','O que você vende — composto por itens e/ou pré-preparos, com preço de venda definido aqui.',
-    `<button class="btn primary" onclick="modalComposicao(null,'produto')">+ Definir produto</button>`)+blocos+aviso;
+    `<button class="btn primary" onclick="modalComposicao(null,'produto')">+ Definir produto</button>`)+
+  `<div class="cat-chips">${chips}</div>`+blocos+aviso;
 };
 
 let compLinhas=[], compTipo='preparo';
@@ -1072,7 +1083,7 @@ VIEWS.venda=function(){
     return true;
   });
   const chips=`<button class="cat-chip ${vendaCat==='__todas__'?'active':''}" style="${vendaCat==='__todas__'?'background:var(--primary)':''}" onclick="vendaCat='__todas__';render()">Todas</button>`+
-    cats.map(c=>`<button class="cat-chip ${vendaCat===c?'active':''}" style="${vendaCat===c?'background:'+corCategoria(c):''}" onclick="vendaCat=${JSON.stringify(c)};render()">${esc(c)}</button>`).join('');
+    cats.map(c=>`<button class="cat-chip ${vendaCat===c?'active':''}" style="${vendaCat===c?'background:'+corCategoria(c):''}" onclick='vendaCat=${JSON.stringify(c)};render()'>${esc(c)}</button>`).join('');
   const cards=filtrados.map(i=>{
     const cat=(i.categoria||'').trim()||'Sem categoria';
     const cor=corCategoria(cat);

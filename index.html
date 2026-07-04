@@ -1065,7 +1065,15 @@ VIEWS.pedidos=function(){
   garantirFormasPadrao();
   const abertos=S.pedidos.filter(p=>!['finalizado','cancelado'].includes(p.status)).length;
   const pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
-  const rows=pedidosFiltrados.slice().reverse().map(p=>{
+  const ORDEM_STATUS=Object.keys(STATUS_PED); // pedido→...→finalizado→cancelado, na ordem certa do fluxo
+  const rankStatus=st=>{ const i=ORDEM_STATUS.indexOf(st); return i===-1?ORDEM_STATUS.length:i; };
+  const lista=filtroStatusPedido
+    ? pedidosFiltrados.slice().reverse()
+    : pedidosFiltrados.slice().sort((a,b)=>{
+        const r=rankStatus(a.status)-rankStatus(b.status); if(r!==0)return r;
+        return (b.criado_em||b.data_pedido||'').localeCompare(a.criado_em||a.data_pedido||'');
+      });
+  const rows=lista.map(p=>{
     const st=statusInfo(p.status);
     const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id):null;
     const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);

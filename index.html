@@ -1803,6 +1803,55 @@ function gerarCompraMRP(){
   if(!linhas.length)return toast('Nada a comprar no plano atual.',true);
   modalCompra(linhas);
 }
+function imprimirDemanda(){
+  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  const abertos={};
+  S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status))
+    .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
+  const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
+  if(!comDemanda.length)return toast('Nenhum produto com demanda no momento.',true);
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const porCategoria={};
+  comDemanda.forEach(i=>{ const cat=i.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(i); });
+  const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
+  const totalUn=comDemanda.reduce((a,i)=>a+(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0),0);
+  const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const blocos=categorias.map(cat=>{
+    const linhas=porCategoria[cat].map(i=>{
+      const qtdTotal=(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0);
+      return `<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(i.nome)}</div><b class="num">${qty(qtdTotal,i.unidade_base)}</b></div>`;
+    }).join('');
+    return `<div class="cat">${esc(cat)}</div>${linhas}`;
+  }).join('<hr>');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Demanda de produção</title><style>
+    @page{ margin:3mm; }
+    *{box-sizing:border-box}
+    html,body{width:100%}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
+    .center{text-align:center}
+    h1{font-size:12px;margin:1mm 0}
+    hr{border:none;border-top:1px dashed #000;margin:2.5mm 0}
+    .small{font-size:9px;color:#333}
+    .cat{font-weight:bold;font-size:10.5px;text-transform:uppercase;margin:2mm 0 1.5mm;letter-spacing:.03em}
+    .item{display:flex;align-items:flex-start;gap:2mm;margin-bottom:2mm}
+    .chk{font-size:12px;flex:none;line-height:1.3}
+    .item-txt{flex:1;min-width:0}
+    .item b{flex:none}
+    .tot{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm;margin-top:2mm;display:flex;justify-content:space-between}
+  </style></head><body>
+    <div class="center"><h1>${esc(nomeEmp)}</h1></div>
+    <div class="center small">DEMANDA DE PRODUÇÃO</div>
+    <hr>
+    <div class="small">Gerada ${dataHoraExtenso}<br>Pedidos em aberto + planejamento extra</div>
+    <hr>
+    ${blocos}
+    <div class="tot"><span>Total de unidades</span><span>${qty(totalUn,'un')}</span></div>
+    <script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w=window.open('','_blank','width=320,height=500');
+  if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
+  w.document.write(html); w.document.close();
+}
 function imprimirListaCompras(){
   if(!mrpResultado||!mrpResultado.compras.length)return toast('Nada a comprar no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
@@ -1921,7 +1970,9 @@ VIEWS.planejamento=function(){
       ?'Explosão multinível: pedidos em aberto → o que produzir em cada nível → o que comprar. O estoque existente é abatido em todos os níveis.'
       :'Explosão multinível: pedidos em aberto → o que produzir → o que comprar. <b>Modo sob demanda ativo</b> (Dados & Backup) — a lista sempre mostra a quantidade cheia, sem abater estoque.',
     `<button class="btn primary" onclick="calcularMRP()">⚙ Calcular plano</button>`)+
-  `<div class="card"><div class="card-h"><h3>Demanda</h3><span class="subtle">pedidos em aberto + quantidades extras que você quiser planejar</span></div>
+  `<div class="card"><div class="card-h"><h3>Demanda</h3>
+      <div><span class="subtle" style="margin-right:10px">pedidos em aberto + quantidades extras que você quiser planejar</span>
+      <button class="btn sm" onclick="imprimirDemanda()">🖨 Imprimir por categoria</button></div></div>
     <div class="only-desktop"><table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>
     <div class="only-mobile card-b">${demCards}</div></div>`+resultado;
 };

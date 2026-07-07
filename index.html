@@ -1563,9 +1563,37 @@ function cancelarPedido(id){
   registrarEvento('DEVOLUCAO_CANCELAMENTO',`Pedido ${p.cliente||id} cancelado — movimentos revertidos/ajustados`,id);
   scheduleSave(); render(); toast('Pedido cancelado.');
 }
+function prepararLogoImpressao(cb){
+  const idn=getIdent();
+  if(!idn.logo_img){ cb(null); return; }
+  const img=new Image();
+  img.onload=function(){
+    try{
+      const alvo=360; // aumenta a resolução antes de binarizar — deixa o traço mais nítido na impressão
+      const escala=alvo/Math.max(img.width,img.height);
+      const canvas=document.createElement('canvas');
+      canvas.width=Math.round(img.width*escala); canvas.height=Math.round(img.height*escala);
+      const ctx=canvas.getContext('2d');
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); // fundo branco sólido (cobre transparência)
+      ctx.drawImage(img,0,0,canvas.width,canvas.height);
+      const dados=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const px=dados.data;
+      for(let i=0;i<px.length;i+=4){
+        const luminancia=0.299*px[i]+0.587*px[i+1]+0.114*px[i+2];
+        const v=luminancia>195?255:0; // limiar: acima disso vira branco puro, abaixo vira preto puro
+        px[i]=px[i+1]=px[i+2]=v;
+      }
+      ctx.putImageData(dados,0,0);
+      cb(canvas.toDataURL('image/png'));
+    }catch(e){ cb(idn.logo_img); } // se der erro (ex: imagem de outra origem), usa a original mesmo
+  };
+  img.onerror=function(){ cb(idn.logo_img); };
+  img.src=idn.logo_img;
+}
 function imprimirEtiquetas(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   if(!(p.itens||[]).length)return toast('Esse pedido não tem itens.',true);
+  prepararLogoImpressao(function(logoPB){
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const hoje_=new Date(); const fmt=d=>d.toLocaleDateString('pt-BR');
@@ -1574,7 +1602,7 @@ function imprimirEtiquetas(id){
   p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
     for(let k=0;k<n;k++)etiquetas.push(nomeLinha(l)); });
   const blocos=etiquetas.map((nome,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
-    <div class="et-topo">${idn.logo_img?`<img src="${idn.logo_img}">`:`<b>${esc(nomeEmp)}</b>`}</div>
+    <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<b>${esc(nomeEmp)}</b>`}</div>
     <div class="et-sabor">${esc(nome)}</div>
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
   </div>`).join('');
@@ -1584,7 +1612,7 @@ function imprimirEtiquetas(id){
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .et{padding:3mm 0;text-align:center}
-    .et-topo{margin-bottom:2mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-topo{margin-bottom:2mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm;image-rendering:pixelated}
     .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:2.5mm}
     .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
@@ -1594,6 +1622,7 @@ function imprimirEtiquetas(id){
   const w=window.open('','_blank','width=320,height=500');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
+  });
 }
 function modalRecibo(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
@@ -1617,6 +1646,7 @@ function modalRecibo(id){
 }
 function imprimirPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  prepararLogoImpressao(function(logoPB){
   const cli=p.cliente_id?clienteById(p.cliente_id):null;
   const idn=getIdent(); const emp=getEmpresaInfo();
   const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
@@ -1629,7 +1659,7 @@ function imprimirPedido(id){
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .center{text-align:center}
-    .logo{max-height:12mm;margin-bottom:1mm}
+    .logo{max-height:12mm;margin-bottom:1mm;image-rendering:pixelated}
     h1{font-size:12px;margin:1mm 0}
     hr{border:none;border-top:1px dashed #000;margin:2.5mm 0}
     table{width:100%;border-collapse:collapse} td{padding:1mm 0;vertical-align:top;font-size:10px} .r{text-align:right;white-space:nowrap}
@@ -1638,7 +1668,7 @@ function imprimirPedido(id){
     .small{font-size:9px}
   </style></head><body>
     <div class="center">
-      ${idn.logo_img?`<img src="${idn.logo_img}" class="logo">`:`<h1>${esc(nomeEmp)}</h1>`}
+      ${logoPB?`<img src="${logoPB}" class="logo">`:`<h1>${esc(nomeEmp)}</h1>`}
     </div>
     <div class="center small">RECIBO #${esc(p.id)}</div>
     <hr>
@@ -1657,6 +1687,7 @@ function imprimirPedido(id){
   const w=window.open('','_blank','width=320,height=640');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
+  });
 }
 </script>
 <script>

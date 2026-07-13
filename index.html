@@ -1991,13 +1991,15 @@ function enviarDemandaWhatsapp(){
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
   const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
-  if(!comDemanda.length)return toast('Nenhum produto com demanda no momento.',true);
+  const personalizadas=demandaPersonalizada();
+  if(!comDemanda.length&&!Object.keys(personalizadas).length)return toast('Nenhum produto com demanda no momento.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const porCategoria={};
   comDemanda.forEach(i=>{ const cat=i.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(i); });
   const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
-  const totalUn=comDemanda.reduce((a,i)=>a+(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0),0);
+  const totalUn=comDemanda.reduce((a,i)=>a+(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0),0)
+    +Object.values(personalizadas).reduce((a,q)=>a+q,0);
   let txt=`*${nomeEmp}*\n📋 *DEMANDA DE PRODUÇÃO*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
   categorias.forEach(cat=>{
     txt+=`\n*${cat.toUpperCase()}*\n`;
@@ -2006,6 +2008,10 @@ function enviarDemandaWhatsapp(){
       txt+=`☐ ${i.nome} - ${qty(q,i.unidade_base)}\n`;
     });
   });
+  if(Object.keys(personalizadas).length){
+    txt+=`\n*SOB MEDIDA*\n`;
+    Object.entries(personalizadas).forEach(([nome,q])=>{ txt+=`☐ 🛠️ ${nome} - ${qty(q,'un')}\n`; });
+  }
   txt+=`\n*Total: ${qty(totalUn,'un')}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
@@ -2015,13 +2021,15 @@ function imprimirDemanda(){
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
   const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
-  if(!comDemanda.length)return toast('Nenhum produto com demanda no momento.',true);
+  const personalizadas=demandaPersonalizada();
+  if(!comDemanda.length&&!Object.keys(personalizadas).length)return toast('Nenhum produto com demanda no momento.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const porCategoria={};
   comDemanda.forEach(i=>{ const cat=i.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(i); });
   const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
-  const totalUn=comDemanda.reduce((a,i)=>a+(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0),0);
+  const totalUn=comDemanda.reduce((a,i)=>a+(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0),0)
+    +Object.values(personalizadas).reduce((a,q)=>a+q,0);
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const blocos=categorias.map(cat=>{
     const linhas=porCategoria[cat].map(i=>{
@@ -2029,7 +2037,9 @@ function imprimirDemanda(){
       return `<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(i.nome)}</div><b class="num">${qty(qtdTotal,i.unidade_base)}</b></div>`;
     }).join('');
     return `<div class="cat">${esc(cat)}</div>${linhas}`;
-  }).join('<hr>');
+  }).join('<hr>')
+  + (Object.keys(personalizadas).length ? '<hr>' + `<div class="cat">Sob medida</div>` +
+    Object.entries(personalizadas).map(([nome,q])=>`<div class="item"><span class="chk">☐</span><div class="item-txt">🛠️ ${esc(nome)}</div><b class="num">${qty(q,'un')}</b></div>`).join('') : '');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Demanda de produção</title><style>
     @page{ margin:3mm; }
     *{box-sizing:border-box}
@@ -2124,6 +2134,16 @@ function imprimirListaCompras(){
   w.document.write(html); w.document.close();
 }
 let filtroCategoriaCompras='';
+function demandaPersonalizada(){
+  const grupos={};
+  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
+    .forEach(p=>p.itens.forEach(l=>{
+      if(!l.componentes||!l.componentes.length)return;
+      const key=l.nome_custom||'Marmita personalizada';
+      grupos[key]=(grupos[key]||0)+l.quantidade;
+    }));
+  return grupos;
+}
 VIEWS.planejamento=function(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
   const abertos={};
@@ -2133,13 +2153,18 @@ VIEWS.planejamento=function(){
     <td class="r num">${abertos[i.id]?qty(abertos[i.id],i.unidade_base):'—'}</td>
     <td class="r num subtle">${temFuncao(i,'estocavel')?qty(Math.max(0,saldo(i.id)),i.unidade_base):'—'}</td>
     <td class="r"><input type="number" step="any" min="0" style="width:110px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg,#FDFCF9)"
-      value="${mrpExtras[i.id]||''}" placeholder="extra" oninput="mrpExtras['${i.id}']=this.value"></td></tr>`).join('');
+      value="${mrpExtras[i.id]||''}" placeholder="extra" oninput="mrpExtras['${i.id}']=this.value"></td></tr>`).join('')
+    +Object.entries(demandaPersonalizada()).map(([nome,q])=>`<tr><td><b>🛠️ ${esc(nome)}</b><span class="tag mut" style="margin-left:6px">sob medida</span></td>
+      <td class="r num">${qty(q,'un')}</td><td class="r num subtle">—</td><td class="r subtle">consumo direto de insumo</td></tr>`).join('');
   const demCards=vendaveis.map(i=>`<div class="pln-card">
     <div class="pln-card-tit">${esc(i.nome)}</div>
     <div class="pln-card-stats"><span>Pedidos em aberto <b>${abertos[i.id]?qty(abertos[i.id],i.unidade_base):'—'}</b></span>
       <span>Em estoque <b>${temFuncao(i,'estocavel')?qty(Math.max(0,saldo(i.id)),i.unidade_base):'—'}</b></span></div>
     <input type="number" step="any" min="0" style="width:100%;margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--input-bg,#FDFCF9)"
       value="${mrpExtras[i.id]||''}" placeholder="planejar quantidade extra" oninput="mrpExtras['${i.id}']=this.value"></div>`).join('')
+    +Object.entries(demandaPersonalizada()).map(([nome,q])=>`<div class="pln-card">
+      <div class="pln-card-tit">🛠️ ${esc(nome)} <span class="tag mut">sob medida</span></div>
+      <div class="pln-card-stats"><span>Pedidos em aberto <b>${qty(q,'un')}</b></span></div></div>`).join('')
     ||'<div class="empty"><b>Nenhum produto vendável</b></div>';
 
   let resultado='';

@@ -336,7 +336,7 @@ const EVENTO_CORES = {
 
 var S = {
   empresa:{nome:'Meu Restaurante'},
-  itens:[], categorias:[], composicoes:[], custos_fixos:[], status_personalizados:[], movimentos:[], compras:[], producoes:[],
+  itens:[], categorias:[], composicoes:[], custos_fixos:[], status_personalizados:[], perfis_marmita:[], movimentos:[], compras:[], producoes:[],
   pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], seq:{}
 };
 let currentView='dashboard';
@@ -371,7 +371,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 function toast(msg,err){ const t=$('#toast'); t.textContent=msg; t.className=err?'show err':'show'; clearTimeout(t._h); t._h=setTimeout(()=>t.className='',2600); }
 const itemById=id=>S.itens.find(i=>i.id===id);
 const nomeItem=id=>{ const i=itemById(id); return i?i.nome:'(item removido)'; };
-const nomeLinha=l=>{ const i=itemById(l.item_id); return i?i.nome:(l.descricao||'(item não mapeado)'); };
+const nomeLinha=l=>{ if(l.nome_custom)return l.nome_custom; const i=itemById(l.item_id); return i?i.nome:(l.descricao||'(item não mapeado)'); };
 const temFuncao=(item,f)=>item&&item.funcoes&&item.funcoes.includes(f);
 
 /* ---------- Núcleo de eventos (tudo gira em torno disso) ---------- */
@@ -514,6 +514,12 @@ function garantirCategoriasPadrao(){
   const nomes=[...new Set(S.itens.map(i=>(i.categoria||'').trim()).filter(Boolean))];
   if(!nomes.length)return;
   nomes.forEach(n=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,criado_em:new Date().toISOString()}));
+}
+const ITEM_ID_SOB_MEDIDA='PRD-SOB-MEDIDA';
+function garantirMarmitaSobMedida(){
+  if(S.itens.find(i=>i.id===ITEM_ID_SOB_MEDIDA))return;
+  S.itens.push({id:ITEM_ID_SOB_MEDIDA,nome:'Marmita Sob Medida',categoria:'Personalizada',unidade_base:'un',
+    funcoes:['vendavel'],preco_venda:0,estoque_minimo:0,ativo:true,criado_em:new Date().toISOString()});
 }
 const categoriaById=id=>S.categorias.find(c=>c.id===id);
 function custoFixoMensalTotal(){ return (S.custos_fixos||[]).filter(c=>c.ativo!==false).reduce((a,c)=>a+(c.valor_mensal||0),0); }
@@ -1232,9 +1238,15 @@ function mudarStatusPedido(id,novo){
   if(['entregue','finalizado','entrega_parcial'].includes(p.status)){
     if(!confirm(`Esse pedido já estava "${statusInfo(p.status).label}". Mudar o status agora devolve o estoque do que foi entregue e remove os lançamentos financeiros dessa entrega. Confirmar?`))return;
     p.itens.forEach(l=>{ const q=l.quantidade_entregue||0; if(q<=0)return;
-      if(temFuncao(itemById(l.item_id),'estocavel'))
-        registrarMovimento(l.item_id,q,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno por mudança de status');
-      l.quantidade_entregue=0; delete l.cmv_unitario; });
+      if(l.componentes&&l.componentes.length){
+        l.componentes.forEach(c=>{ if(temFuncao(itemById(c.item_id),'estocavel'))
+          registrarMovimento(c.item_id,c.quantidade*q,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno por mudança de status'); });
+      } else {
+        if(temFuncao(itemById(l.item_id),'estocavel'))
+          registrarMovimento(l.item_id,q,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno por mudança de status');
+        delete l.cmv_unitario;
+      }
+      l.quantidade_entregue=0; });
     S.lancamentos=S.lancamentos.filter(l=>l.origem!==id);
     S.clientes_mov=S.clientes_mov.filter(m=>m.origem!==id);
     p.recebido=false; p.faturamento=null; p.data_entrega=null;
@@ -1257,6 +1269,7 @@ function corCategoria(cat){
 }
 let vendaCat='__todas__', vendaBusca='';
 VIEWS.venda=function(){
+  garantirMarmitaSobMedida();
   const vend=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   if(!vend.length)
     return header('Novo pedido','var(--m-pedidos)','',`<button class="btn" onclick="nav('pedidos')">← Voltar</button>`)+
@@ -1274,13 +1287,15 @@ VIEWS.venda=function(){
   const cards=filtrados.map(i=>{
     const cat=(i.categoria||'').trim()||'Sem categoria';
     const cor=corCategoria(cat);
-    const linha=pedLinhas.find(l=>l.item===i.id);
+    const sobMedida=i.id===ITEM_ID_SOB_MEDIDA;
+    const linha=pedLinhas.find(l=>l.item===i.id&&!l.custom);
+    const qtdCustom=sobMedida?pedLinhas.filter(l=>l.item===i.id&&l.custom).length:0;
     const qtd=linha?parseFloat(linha.qtd)||0:0;
-    return `<div class="prod-card" style="border-top:3px solid ${cor}" onclick="vendaAdd('${i.id}')">
-      ${qtd>0?`<span class="pc-badge">${qtd}</span>`:''}
+    return `<div class="prod-card" style="border-top:3px solid ${cor}${sobMedida?';background:var(--panel-alt,#F6F1E7)':''}" onclick="${sobMedida?'abrirConstrutorMarmita()':`vendaAdd('${i.id}')`}">
+      ${qtd>0?`<span class="pc-badge">${qtd}</span>`:''}${qtdCustom>0?`<span class="pc-badge">${qtdCustom}</span>`:''}
       <div class="pc-cat" style="color:${cor}">${esc(cat)}</div>
-      <div class="pc-nome">${esc(i.nome)}</div>
-      <div class="pc-preco num">${i.preco_venda!=null?money(i.preco_venda):'—'}</div>
+      <div class="pc-nome">${sobMedida?'🛠️ ':''}${esc(i.nome)}</div>
+      <div class="pc-preco num">${sobMedida?'montar…':(i.preco_venda!=null?money(i.preco_venda):'—')}</div>
     </div>`;
   }).join('')||`<div class="empty" style="grid-column:1/-1"><b>Nada encontrado</b>Tente outra busca ou categoria.</div>`;
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Novo pedido</h1></div>
@@ -1300,6 +1315,100 @@ let descTipo = 'valor', descValor = 0;
 function vendaSair(){
   if(pedLinhas.length&&!confirm('Sair sem salvar? O pedido em andamento será perdido.'))return;
   pedLinhas=[]; vendaCat='__todas__'; vendaBusca=''; descTipo='valor'; descValor=0; nav('pedidos');
+}
+let construtorComponentes=[], construtorEditandoIdx=null;
+let margemAlvoPadrao=60;
+function componentesDisponiveis(){
+  return S.itens.filter(i=>i.ativo!==false&&!temFuncao(i,'vendavel')&&(temFuncao(i,'compravel')||temFuncao(i,'composto')))
+    .sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+}
+function abrirConstrutorMarmita(idxEdicao){
+  construtorEditandoIdx = idxEdicao!=null ? idxEdicao : null;
+  if(construtorEditandoIdx!=null){
+    const l = pedLinhas[construtorEditandoIdx];
+    construtorComponentes = l.componentes.map(c=>({...c}));
+  } else {
+    construtorComponentes = [];
+  }
+  const disp=componentesDisponiveis();
+  const perfis=S.perfis_marmita||[];
+  const opcoesPerfil=perfis.map(p=>{ const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:'—';
+    return `<option value="${p.id}">${esc(cli)} · ${esc(p.nome)}</option>`; }).join('');
+  const cliOpts=S.clientes.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  openModal(`<div class="m-h"><h3>🛠️ Marmita Sob Medida</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    ${perfis.length?`<div class="field"><label>Carregar perfil salvo</label>
+      <select id="cm-perfil" onchange="carregarPerfilMarmita(this.value)"><option value="">— montar do zero —</option>${opcoesPerfil}</select></div>`:''}
+    <div class="field"><label>Nome do prato (aparece no pedido e na etiqueta)</label><input id="cm-nome" placeholder="ex.: Marmita Fit - Frango 180g"></div>
+    <div class="field"><label>Componentes</label><div id="cm-componentes"></div>
+      <button class="btn sm" onclick="cmAddComponente()">+ Adicionar componente</button></div>
+    <div class="frow c2" style="margin-top:14px">
+      <div class="field"><label>Margem alvo (%)</label><input id="cm-margem" type="number" min="0" max="95" value="${margemAlvoPadrao}" oninput="margemAlvoPadrao=parseFloat(this.value)||0;cmRecalcular()"></div>
+      <div class="field"><label>Preço final (editável)</label><input id="cm-preco" type="number" step="0.01" min="0"></div>
+    </div>
+    <div class="subtle num" id="cm-cmv" style="margin-top:6px"></div>
+    <div class="field" style="margin-top:14px"><label><input type="checkbox" id="cm-salvar-perfil" onchange="$('#cm-perfil-campos').style.display=this.checked?'grid':'none'"> Salvar como perfil pra reutilizar depois</label></div>
+    <div class="frow c2" id="cm-perfil-campos" style="display:none">
+      <div class="field"><label>Cliente</label><select id="cm-cli">${cliOpts}</select></div>
+      <div class="field"><label>Nome do perfil</label><input id="cm-perfil-nome" placeholder="ex.: dieta padrão"></div>
+    </div>
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="confirmarMarmitaSobMedida()">Adicionar ao pedido</button></div>`,true);
+  cmDesenharComponentes();
+  if(construtorEditandoIdx!=null){ $('#cm-nome').value=pedLinhas[construtorEditandoIdx].nomeCustom||''; $('#cm-preco').value=pedLinhas[construtorEditandoIdx].preco||''; }
+}
+function cmAddComponente(){ construtorComponentes.push({item_id:'',quantidade:100}); cmDesenharComponentes(); }
+function cmDesenharComponentes(){
+  const disp=componentesDisponiveis();
+  const opts=disp.map(i=>`<option value="${i.id}">${esc(i.nome)} (${money(custoItem(i.id)||0)}/${i.unidade_base})</option>`).join('');
+  $('#cm-componentes').innerHTML=construtorComponentes.map((c,k)=>`<div class="line" style="grid-template-columns:1fr 90px 30px">
+    <select onchange="construtorComponentes[${k}].item_id=this.value;cmRecalcular()"><option value="">Escolha…</option>${opts}</select>
+    <input type="number" min="0" step="any" placeholder="qtd" value="${c.quantidade}" oninput="construtorComponentes[${k}].quantidade=parseFloat(this.value)||0;cmRecalcular()">
+    <button class="rm" onclick="construtorComponentes.splice(${k},1);cmDesenharComponentes()">✕</button></div>`).join('')
+    ||'<p class="subtle">Nenhum componente ainda — clique em "+ Adicionar componente".</p>';
+  construtorComponentes.forEach((c,k)=>{ const sel=$('#cm-componentes').children[k]?.querySelector('select'); if(sel&&c.item_id)sel.value=c.item_id; });
+  cmRecalcular();
+}
+function cmRecalcular(){
+  const cmv=construtorComponentes.reduce((a,c)=>a+(c.item_id?(custoItem(c.item_id)||0)*c.quantidade:0),0);
+  const margem=parseFloat($('#cm-margem')?.value)||0;
+  const sugerido=margem<95?cmv/(1-margem/100):cmv;
+  const elPreco=$('#cm-preco');
+  if(elPreco&&!elPreco.dataset.editado)elPreco.value=Math.round(sugerido*100)/100;
+  if(elPreco)elPreco.oninput=function(){ this.dataset.editado='1'; };
+  const el=$('#cm-cmv'); if(el)el.textContent=`CMV calculado: ${money(cmv)} · preço sugerido (margem ${margem}%): ${money(sugerido)}`;
+}
+function carregarPerfilMarmita(perfilId){
+  const p=(S.perfis_marmita||[]).find(x=>x.id===perfilId); if(!p)return;
+  construtorComponentes=p.componentes.map(c=>({...c}));
+  $('#cm-nome').value=p.nome||'';
+  cmDesenharComponentes();
+}
+function confirmarMarmitaSobMedida(){
+  const nome=$('#cm-nome').value.trim();
+  const validos=construtorComponentes.filter(c=>c.item_id&&c.quantidade>0);
+  if(!nome)return toast('Dá um nome pro prato.',true);
+  if(!validos.length)return toast('Adicione pelo menos 1 componente.',true);
+  const preco=parseFloat($('#cm-preco').value)||0;
+  const cmv=validos.reduce((a,c)=>a+(custoItem(c.item_id)||0)*c.quantidade,0);
+  if($('#cm-salvar-perfil').checked){
+    const cliId=$('#cm-cli').value||null;
+    const nomePerfil=$('#cm-perfil-nome').value.trim()||nome;
+    S.perfis_marmita.push({id:uid('PFM'),cliente_id:cliId,nome:nomePerfil,componentes:validos.map(c=>({...c})),criado_em:new Date().toISOString()});
+  }
+  if(construtorEditandoIdx!=null){
+    const l=pedLinhas[construtorEditandoIdx];
+    l.nomeCustom=nome; l.preco=preco; l.componentes=validos.map(c=>({...c})); l.cmv=cmv;
+  } else {
+    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,qtd:1,preco,componentes:validos.map(c=>({...c})),cmv});
+  }
+  closeModal(); scheduleSave(); render(); toast('Marmita personalizada adicionada.');
+}
+function cmAjustarQtd(idx,delta){
+  const l=pedLinhas[idx]; if(!l)return;
+  l.qtd=(parseFloat(l.qtd)||0)+delta;
+  if(l.qtd<=0)pedLinhas.splice(idx,1);
+  render();
 }
 function vendaAdd(itemId){
   const it=itemById(itemId); if(!it)return;
@@ -1330,11 +1439,22 @@ function carrinhoHtml(){
   if(!linhas.length)return `<div class="cart-empty">Toque nos produtos ao lado para adicionar.</div>`;
   const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
   const rows=linhas.map(l=>{
+    const idx=pedLinhas.indexOf(l);
+    if(l.custom){
+      const pu=precoUn(parseFloat(l.preco)||0);
+      const sub=(parseFloat(l.qtd)||0)*pu;
+      return `<div class="cart-line">
+        <div class="cl-info"><div class="cl-nome">🛠️ ${esc(l.nomeCustom||'Marmita personalizada')}</div>
+          <div class="cl-sub num">${money(pu)} un.${comboAtivo?' <span style="color:var(--primary)">c/ combo</span>':''} · <a class="link" style="font-size:11px" onclick="abrirConstrutorMarmita(${idx})">editar</a></div></div>
+        <div class="stepper"><button onclick="cmAjustarQtd(${idx},-1)">−</button><span class="num" style="min-width:18px;text-align:center;display:inline-block">${l.qtd}</span><button onclick="cmAjustarQtd(${idx},1)">+</button></div>
+        <div class="num" style="width:64px;text-align:right;font-weight:700">${money(sub)}</div></div>`;
+    }
     const it=itemById(l.item); if(!it)return '';
     const pu=precoUn(parseFloat(l.preco)||0);
     const sub=(parseFloat(l.qtd)||0)*pu;
     return `<div class="cart-line">
-      <div class="cl-info"><div class="cl-nome">${esc(it.nome)}</div><div class="cl-sub num">${money(pu)} un.${comboAtivo?' <span style="text-decoration:line-through;opacity:.6">'+money(l.preco)+'</span>':''}</div></div>
+      <div class="cl-info"><div class="cl-nome">${esc(it.nome)}</div>
+        <div class="cl-sub num" style="display:flex;align-items:center;gap:5px">R$ <input type="number" step="0.01" min="0" value="${l.preco}" style="width:62px;padding:2px 4px;border:1px solid var(--line);border-radius:5px;font-size:12px" onclick="event.stopPropagation()" oninput="event.stopPropagation();pedLinhas.find(x=>x.item==='${it.id}').preco=this.value;render();this.focus();this.setSelectionRange(99,99)"> un.${comboAtivo?' <span style="color:var(--primary)">→ '+money(pu)+' c/ combo</span>':''}</div></div>
       <div class="stepper"><button onclick="vendaSub('${it.id}')">−</button><span class="num" style="min-width:18px;text-align:center;display:inline-block">${l.qtd}</span><button onclick="vendaAdd('${it.id}')">+</button></div>
       <div class="num" style="width:64px;text-align:right;font-weight:700">${money(sub)}</div></div>`;
   }).join('');
@@ -1372,7 +1492,9 @@ function salvarPedidoVenda(){
   if(!validas.length)return toast('Adicione ao menos um item.',true);
   const id=uid('PED');
   const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
-  const itens=validas.map(l=>({item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)}));
+  const itens=validas.map(l=>l.custom
+    ? {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0),nome_custom:l.nomeCustom,componentes:l.componentes,cmv_unitario:l.cmv}
+    : {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)});
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
   S.pedidos.push({id,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
@@ -1490,6 +1612,13 @@ function executarEntrega(id,qtds,modo,formaId){
   p.itens.forEach((l,k)=>{
     const q=qtds[k]; if(q<=0)return;
     l.quantidade_entregue=(l.quantidade_entregue||0)+q;
+    if(l.componentes&&l.componentes.length){
+      l.componentes.forEach(c=>{
+        if(temFuncao(itemById(c.item_id),'estocavel'))
+          consumirFEFO(c.item_id,c.quantidade*q,'PEDIDO_ENTREGUE',id,'Pedido '+(p.cliente||id)+' · '+(l.nome_custom||'personalizado'));
+      });
+      return;
+    }
     if(l.cmv_unitario==null)l.cmv_unitario=custoItem(l.item_id); // fotografia do custo na primeira baixa
     if(temFuncao(itemById(l.item_id),'estocavel'))
       consumirFEFO(l.item_id,q,'PEDIDO_ENTREGUE',id,'Pedido '+(p.cliente||id));
@@ -1555,7 +1684,10 @@ function cancelarPedido(id){
   if(!confirm('Cancelar o pedido '+id+'?'+(teveEntregaParcialOuTotal?' Movimentações do que já foi entregue serão revertidas.':'')))return;
   if(teveEntregaParcialOuTotal){
     p.itens.forEach(l=>{ const q=l.quantidade_entregue||0; if(q<=0)return;
-      if(temFuncao(itemById(l.item_id),'estocavel'))
+      if(l.componentes&&l.componentes.length){
+        l.componentes.forEach(c=>{ if(temFuncao(itemById(c.item_id),'estocavel'))
+          registrarMovimento(c.item_id,c.quantidade*q,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno pedido'); });
+      } else if(temFuncao(itemById(l.item_id),'estocavel'))
         registrarMovimento(l.item_id,q,'DEVOLUCAO_CANCELAMENTO',id,null,'Estorno pedido');
       l.quantidade_entregue=0; });
     S.lancamentos=S.lancamentos.filter(l=>l.origem!==id);
@@ -1783,12 +1915,28 @@ function liquidar(id){
 }
 
 /* ================= PLANEJAMENTO (MRP multinível) ================= */
-var mrpExtras={}, mrpResultado=null;
+var mrpExtras={}, mrpResultado=null, compraExcluidos=new Set();
+function toggleCompraSelecao(itemId){
+  if(compraExcluidos.has(itemId))compraExcluidos.delete(itemId); else compraExcluidos.add(itemId);
+  render();
+}
+function comprasFiltradas_marcarTodos(marcar){
+  if(!mrpResultado)return;
+  const lista=mrpResultado.compras.filter(c=>!filtroCategoriaCompras||c.item.categoria===filtroCategoriaCompras);
+  lista.forEach(c=>{ if(marcar)compraExcluidos.delete(c.item.id); else compraExcluidos.add(c.item.id); });
+  render();
+}
 function calcularMRP(){
   // 1) demanda: pedidos ainda não produzidos + quantidades manuais
   const demanda={};
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
-    .forEach(p=>p.itens.forEach(l=>{ demanda[l.item_id]=(demanda[l.item_id]||0)+l.quantidade; }));
+    .forEach(p=>p.itens.forEach(l=>{
+      if(l.componentes&&l.componentes.length){
+        l.componentes.forEach(c=>{ demanda[c.item_id]=(demanda[c.item_id]||0)+c.quantidade*l.quantidade; });
+      } else {
+        demanda[l.item_id]=(demanda[l.item_id]||0)+l.quantidade;
+      }
+    }));
   Object.entries(mrpExtras).forEach(([id,v])=>{ const q=parseFloat(v)||0; if(q>0)demanda[id]=(demanda[id]||0)+q; });
   // 2) nível de cada item = caminho mais longo a partir da demanda (garante pais antes dos filhos)
   const lvl={};
@@ -1827,17 +1975,18 @@ function calcularMRP(){
     });
   }
   mrpResultado={producoes,compras,alertas,pedidos:S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status)).length,quando:new Date().toISOString(),modoSobDemanda};
+  compraExcluidos=new Set();
   render();
 }
 function gerarCompraMRP(){
   if(!mrpResultado)return;
-  const linhas=mrpResultado.compras.map(c=>{ const q=Math.ceil(c.qtd);
+  const linhas=mrpResultado.compras.filter(c=>!compraExcluidos.has(c.item.id)).map(c=>{ const q=Math.ceil(c.qtd);
     return {item:c.item.id,qtd:q,total:c.preco!=null?Math.round(c.preco*q*100)/100:'',lote:'',validade:''}; });
-  if(!linhas.length)return toast('Nada a comprar no plano atual.',true);
+  if(!linhas.length)return toast('Nada marcado pra comprar no plano atual.',true);
   modalCompra(linhas);
 }
 function enviarDemandaWhatsapp(){
-  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
   const abertos={};
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
@@ -1861,7 +2010,7 @@ function enviarDemandaWhatsapp(){
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
 function imprimirDemanda(){
-  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
   const abertos={};
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
@@ -1911,12 +2060,14 @@ function imprimirDemanda(){
 }
 function enviarListaComprasWhatsapp(){
   if(!mrpResultado||!mrpResultado.compras.length)return toast('Nada a comprar no plano atual.',true);
+  const compras=mrpResultado.compras.filter(c=>!compraExcluidos.has(c.item.id));
+  if(!compras.length)return toast('Nada marcado pra comprar no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const porCategoria={};
-  mrpResultado.compras.forEach(c=>{ const cat=c.item.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(c); });
+  compras.forEach(c=>{ const cat=c.item.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(c); });
   const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
-  const totalGeral=mrpResultado.compras.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
+  const totalGeral=compras.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
   let txt=`*${nomeEmp}*\n🛒 *LISTA DE COMPRAS*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
   categorias.forEach(cat=>{
     txt+=`\n*${cat.toUpperCase()}*\n`;
@@ -1929,12 +2080,14 @@ function enviarListaComprasWhatsapp(){
 }
 function imprimirListaCompras(){
   if(!mrpResultado||!mrpResultado.compras.length)return toast('Nada a comprar no plano atual.',true);
+  const compras=mrpResultado.compras.filter(c=>!compraExcluidos.has(c.item.id));
+  if(!compras.length)return toast('Nada marcado pra comprar no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const porCategoria={};
-  mrpResultado.compras.forEach(c=>{ const cat=c.item.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(c); });
+  compras.forEach(c=>{ const cat=c.item.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(c); });
   const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
-  const totalGeral=mrpResultado.compras.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
+  const totalGeral=compras.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const blocos=categorias.map(cat=>{
     const linhas=porCategoria[cat].map(c=>`<div class="item"><span class="chk">☐</span><div class="item-txt"><div>${esc(c.item.nome)}</div>
@@ -1972,7 +2125,7 @@ function imprimirListaCompras(){
 }
 let filtroCategoriaCompras='';
 VIEWS.planejamento=function(){
-  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
   const abertos={};
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
@@ -2015,18 +2168,27 @@ VIEWS.planejamento=function(){
       ${categoriasCompras.map(c=>{ const n=R.compras.filter(x=>x.item.categoria===c).length;
         return `<button class="cat-chip ${filtroCategoriaCompras===c?'active':''}" style="${filtroCategoriaCompras===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaCompras=${JSON.stringify(c)};render()'>${esc(c)} (${n})</button>`; }).join('')}
     </div>`:'';
-    const cmpRows=comprasFiltradas.map(c=>`<tr><td><b>${esc(c.item.nome)}</b>${c.item.categoria?`<div class="subtle" style="font-size:11px">${esc(c.item.categoria)}</div>`:''}</td>
+    const marcados=comprasFiltradas.filter(c=>!compraExcluidos.has(c.item.id)).length;
+    const selecaoBar=`<div class="card-b" style="padding-top:0;padding-bottom:6px;display:flex;align-items:center;gap:10px">
+      <span class="subtle">${marcados} de ${comprasFiltradas.length} marcados pra comprar</span>
+      <a class="link" style="font-size:12px" onclick="comprasFiltradas_marcarTodos(true)">marcar todos</a>
+      <a class="link" style="font-size:12px" onclick="comprasFiltradas_marcarTodos(false)">desmarcar todos</a>
+    </div>`;
+    const cmpRows=comprasFiltradas.map(c=>{ const marcado=!compraExcluidos.has(c.item.id);
+      return `<tr style="opacity:${marcado?1:.45}"><td style="width:28px"><input type="checkbox" ${marcado?'checked':''} onchange="toggleCompraSelecao('${c.item.id}')"></td>
+      <td><b>${esc(c.item.nome)}</b>${c.item.categoria?`<div class="subtle" style="font-size:11px">${esc(c.item.categoria)}</div>`:''}</td>
       <td class="r num"><b>${qty(Math.ceil(c.qtd),c.item.unidade_base)}</b> <span class="subtle">(exato: ${qty(Math.round(c.qtd*100)/100,c.item.unidade_base)})</span></td>
       <td class="r num subtle">${c.preco!=null?money(c.preco)+'/'+c.item.unidade_base+(c.fornecedor?' · '+esc(c.fornecedor):''):'sem histórico'}</td>
-      <td class="r num">${c.preco!=null?money(c.preco*Math.ceil(c.qtd)):'—'}</td></tr>`).join('')||
-      `<tr><td colspan="4" class="empty">${R.compras.length?'Nada nessa categoria':'Nada a comprar — estoque de insumos cobre a produção 👍'}</td></tr>`;
-    const cmpCards=comprasFiltradas.map(c=>`<div class="pln-card">
-      <div class="pln-card-top"><b class="pln-card-tit" style="margin:0">${esc(c.item.nome)}</b>${c.item.categoria?`<span class="tag mut">${esc(c.item.categoria)}</span>`:''}</div>
+      <td class="r num">${c.preco!=null?money(c.preco*Math.ceil(c.qtd)):'—'}</td></tr>`; }).join('')||
+      `<tr><td colspan="5" class="empty">${R.compras.length?'Nada nessa categoria':'Nada a comprar — estoque de insumos cobre a produção 👍'}</td></tr>`;
+    const cmpCards=comprasFiltradas.map(c=>{ const marcado=!compraExcluidos.has(c.item.id);
+      return `<div class="pln-card" style="opacity:${marcado?1:.45}">
+      <div class="pln-card-top"><label style="display:flex;align-items:center;gap:8px;flex:1"><input type="checkbox" ${marcado?'checked':''} onchange="toggleCompraSelecao('${c.item.id}')"><b class="pln-card-tit" style="margin:0">${esc(c.item.nome)}</b></label>${c.item.categoria?`<span class="tag mut">${esc(c.item.categoria)}</span>`:''}</div>
       <div class="pln-card-stats"><span>Comprar <b class="num">${qty(Math.ceil(c.qtd),c.item.unidade_base)}</b></span>
         <span>Custo est. <b class="num">${c.preco!=null?money(c.preco*Math.ceil(c.qtd)):'—'}</b></span></div>
-      <div class="subtle" style="font-size:11.5px;margin-top:6px">exato: ${qty(Math.round(c.qtd*100)/100,c.item.unidade_base)} · ${c.preco!=null?money(c.preco)+'/'+c.item.unidade_base+(c.fornecedor?' · '+esc(c.fornecedor):''):'sem histórico de preço'}</div></div>`).join('')
+      <div class="subtle" style="font-size:11.5px;margin-top:6px">exato: ${qty(Math.round(c.qtd*100)/100,c.item.unidade_base)} · ${c.preco!=null?money(c.preco)+'/'+c.item.unidade_base+(c.fornecedor?' · '+esc(c.fornecedor):''):'sem histórico de preço'}</div></div>`; }).join('')
       ||`<div class="empty"><b>${R.compras.length?'Nada nessa categoria':'Nada a comprar'}</b>${R.compras.length?'':'Estoque de insumos cobre a produção 👍'}</div>`;
-    const custoCompra=comprasFiltradas.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
+    const custoCompra=comprasFiltradas.filter(c=>!compraExcluidos.has(c.item.id)).reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
     const alertHtml=R.alertas.length?`<div class="card section-gap"><div class="card-h"><h3>⚠️ Sem origem definida</h3></div>
       <table><tbody>${R.alertas.map(a=>`<tr><td>${esc(a.item.nome)}</td><td class="r num neg">falta ${qty(Math.round(a.qtd*100)/100,a.item.unidade_base)}</td><td class="subtle">não é comprável nem tem composição — marque a função ou defina a receita</td></tr>`).join('')}</tbody></table></div>`:'';
     resultado=`<div class="card section-gap"><div class="card-h"><h3>Plano de produção (ordem de execução)</h3>
@@ -2039,7 +2201,8 @@ VIEWS.planejamento=function(){
         <button class="btn sm" onclick="enviarListaComprasWhatsapp()">💬 WhatsApp</button>
         <button class="btn sm primary" onclick="gerarCompraMRP()">Pré-preencher compra</button></div></div>
       <div class="card-b" style="padding-bottom:0">${chipsCompras}</div>
-      <div class="only-desktop"><table><thead><tr><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>
+      ${selecaoBar}
+      <div class="only-desktop"><table><thead><tr><th></th><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>
       <div class="only-mobile card-b" style="padding-top:6px">${cmpCards}</div></div>${alertHtml}`;
   }
   return header('Planejamento','var(--m-planejamento)',controlaEstoque()
@@ -2927,7 +3090,7 @@ function importarJSON(){
 }
 async function zerarTudo(){
   if(!confirm('Apagar TODOS os dados? Esta ação não pode ser desfeita.'))return;
-  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
+  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],perfis_marmita:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
   await persist(); render(); toast('Sistema zerado.');
 }
 
@@ -2935,7 +3098,7 @@ async function zerarTudo(){
 function carregarExemplo(){
   if(S.itens.length&&!confirm('Isto substitui os dados atuais pelo exemplo. Continuar?'))return;
   const _cfg=S.config||[];
-  S={empresa:{nome:'Marmitaria Exemplo'},itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],config:_cfg,seq:{}};
+  S={empresa:{nome:'Marmitaria Exemplo'},itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],perfis_marmita:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],config:_cfg,seq:{}};
   ['Insumo','Pré-preparo','Embalagem','Produto','Serviço'].forEach(n=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,criado_em:new Date().toISOString()}));
   garantirFormasPadrao();
   S.fornecedores.push({id:uid('FOR'),nome:'Atacadão Central',telefone:'(48) 3333-0000',cnpj:'',endereco:'Av. Principal, 500',
@@ -2996,7 +3159,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
@@ -3129,7 +3292,7 @@ async function entrarNoSistema(){
         TABLES.forEach(t=>{ S[t]=p[t]||[]; }); await cloudPersist(); }
     }catch(e){} }
   }
-  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[];
+  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[];
   garantirCategoriasPadrao();
   aplicarIdentidade();
   if(!S.formas.length){ garantirFormasPadrao(); cloudPersist(); }

@@ -1727,6 +1727,8 @@ function prepararLogoImpressao(cb){
 function imprimirEtiquetas(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   if(!(p.itens||[]).length)return toast('Esse pedido não tem itens.',true);
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const nomeCli=cli?cli.nome:(p.cliente||'');
   prepararLogoImpressao(function(logoPB){
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
@@ -1737,6 +1739,7 @@ function imprimirEtiquetas(id){
     for(let k=0;k<n;k++)etiquetas.push(nomeLinha(l)); });
   const blocos=etiquetas.map((nome,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
     <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<b>${esc(nomeEmp)}</b>`}</div>
+    ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
     <div class="et-sabor">${esc(nome)}</div>
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
   </div>`).join('');
@@ -1746,7 +1749,8 @@ function imprimirEtiquetas(id){
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .et{padding:3mm 0;text-align:center}
-    .et-topo{margin-bottom:2mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
     .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:2.5mm}
     .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}

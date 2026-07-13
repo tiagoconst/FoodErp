@@ -414,7 +414,7 @@ function consumirFEFO(itemId,qtd,origemTipo,origemId,obs){ // PVPS: primeiro que
     registrarMovimento(itemId,-take,origemTipo,origemId,null,obs,l.lote,l.validade); }
   if(rest>0.000001) registrarMovimento(itemId,-rest,origemTipo,origemId,null,obs);
 }
-const STATUS_RESERVA=['confirmado','em_producao','disponivel'];
+const STATUS_RESERVA=['confirmado','em_producao'];
 function reservado(itemId){ return S.pedidos.filter(p=>STATUS_RESERVA.includes(p.status))
   .reduce((a,p)=>a+p.itens.filter(l=>l.item_id===itemId).reduce((x,l)=>x+l.quantidade,0),0); }
 function disponivel(itemId){ return saldo(itemId)-reservado(itemId); }
@@ -1053,8 +1053,9 @@ function totalEntregue(p){ return (p.itens||[]).every(l=>(l.quantidade_entregue|
 function qtdPendente(l){ return Math.max(0,l.quantidade-(l.quantidade_entregue||0)); }
 function togglePago(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  if(p.status==='pedido')return toast('Confirme o pedido antes de marcar pagamento.',true);
   p.pago=!p.pago;
-  if(p.pago&&totalEntregue(p)&&!['finalizado','cancelado'].includes(p.status)){
+  if(p.pago&&totalEntregue(p)&&!['pedido','finalizado','cancelado'].includes(p.status)){
     p.status='finalizado'; p.recebido=true;
     registrarEvento('PEDIDO_STATUS_ALTERADO',`${p.cliente||id}: marcado como pago — pedido já estava entregue, finalizado`,id);
   } else if(!p.pago&&p.status==='finalizado'){
@@ -1097,7 +1098,7 @@ let filtroStatusPedido='';
 let filtroBuscaPedido='';
 VIEWS.pedidos=function(){
   garantirFormasPadrao();
-  const abertos=S.pedidos.filter(p=>!['finalizado','cancelado'].includes(p.status)).length;
+  const abertos=S.pedidos.filter(p=>!['pedido','finalizado','cancelado'].includes(p.status)).length;
   let pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
   if(filtroBuscaPedido){
     const q=filtroBuscaPedido.toLowerCase();
@@ -1162,7 +1163,7 @@ VIEWS.pedidos=function(){
       return `<option value="${s.id}" ${filtroStatusPedido===s.id?'selected':''}>${esc(s.nome)} (${n})</option>`; }).join('')}
     </select>`;
 
-  return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido → Confirmado → Em produção → Disponível → Entrega (Parcial ou Ag. Pagamento) → Finalizado. "Pago" é independente do status — pode marcar em qualquer etapa. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
+  return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido (não conta produção/custo) → Confirmado → Em produção (contam produção + "em aberto") → Disponível → Entrega (Parcial ou Ag. Pagamento) → Finalizado. "Pago" pode ser marcado a partir de Confirmado, em qualquer etapa. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
     `<button class="btn" onclick="modalStatusPersonalizados()">⚙️ Status</button>
      <button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
   `<input class="search" style="width:100%;margin-top:16px" placeholder="Item, cliente ou código" value="${esc(filtroBuscaPedido)}" oninput="filtroBuscaPedido=this.value;render();this.focus();this.setSelectionRange(99,99)">
@@ -1204,8 +1205,9 @@ VIEWS['pedido-detalhe']=function(){
           <button class="btn primary" style="width:100%" onclick="aplicarNovoStatus('${p.id}')">Alterar status</button>
         </div></div>
         <div class="card section-gap"><div class="card-h"><h3>Pago</h3><span class="tag ${jaPago?'f':'mut'}">${jaPago?'Sim':'Não'}</span></div><div class="card-b">
+          ${p.status==='pedido'?`<p class="subtle">Só é possível marcar pagamento a partir de "Confirmado" — enquanto é só "Pedido", ainda não é um compromisso firme.</p>`:`
           <p class="subtle" style="margin-bottom:8px">Independente do status — se o cliente pagou adiantado, marca aqui. Quando a entrega estiver completa e isso estiver marcado, o pedido finaliza sozinho.</p>
-          <button class="btn ${jaPago?'':'primary'}" style="width:100%" onclick="togglePago('${p.id}')">${jaPago?'Desmarcar pagamento':'Marcar como pago'}</button>
+          <button class="btn ${jaPago?'':'primary'}" style="width:100%" onclick="togglePago('${p.id}')">${jaPago?'Desmarcar pagamento':'Marcar como pago'}</button>`}
         </div></div>
         <div class="card section-gap"><div class="card-h"><h3>Resumo</h3></div><div class="card-b">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="subtle">Subtotal</span><span class="num">${money(subtotal)}</span></div>
@@ -1785,7 +1787,7 @@ var mrpExtras={}, mrpResultado=null;
 function calcularMRP(){
   // 1) demanda: pedidos ainda não produzidos + quantidades manuais
   const demanda={};
-  S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status))
+  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ demanda[l.item_id]=(demanda[l.item_id]||0)+l.quantidade; }));
   Object.entries(mrpExtras).forEach(([id,v])=>{ const q=parseFloat(v)||0; if(q>0)demanda[id]=(demanda[id]||0)+q; });
   // 2) nível de cada item = caminho mais longo a partir da demanda (garante pais antes dos filhos)
@@ -1824,7 +1826,7 @@ function calcularMRP(){
       }
     });
   }
-  mrpResultado={producoes,compras,alertas,pedidos:S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status)).length,quando:new Date().toISOString(),modoSobDemanda};
+  mrpResultado={producoes,compras,alertas,pedidos:S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status)).length,quando:new Date().toISOString(),modoSobDemanda};
   render();
 }
 function gerarCompraMRP(){
@@ -1837,7 +1839,7 @@ function gerarCompraMRP(){
 function imprimirDemanda(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   const abertos={};
-  S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status))
+  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
   const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
   if(!comDemanda.length)return toast('Nenhum produto com demanda no momento.',true);
@@ -1930,7 +1932,7 @@ let filtroCategoriaCompras='';
 VIEWS.planejamento=function(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   const abertos={};
-  S.pedidos.filter(p=>['pedido','confirmado','em_producao'].includes(p.status))
+  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
   const demRows=vendaveis.map(i=>`<tr><td><b>${esc(i.nome)}</b></td>
     <td class="r num">${abertos[i.id]?qty(abertos[i.id],i.unidade_base):'—'}</td>
@@ -2558,7 +2560,7 @@ VIEWS.relatorios=function(){
       <div class="field"><label>De</label><input type="date" value="${relDataIni}" onchange="relDataIni=this.value;render()"></div>
       <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
 
-  const pedidosAbertos=S.pedidos.filter(p=>!['finalizado','cancelado'].includes(p.status));
+  const pedidosAbertos=S.pedidos.filter(p=>!['pedido','finalizado','cancelado'].includes(p.status));
   const abertosPorStatus={};
   pedidosAbertos.forEach(p=>{ abertosPorStatus[p.status]=(abertosPorStatus[p.status]||0)+1; });
   const abertosLista=Object.entries(abertosPorStatus).sort((a,b)=>b[1]-a[1]).map(([st,n])=>{

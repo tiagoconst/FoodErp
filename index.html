@@ -1836,6 +1836,30 @@ function gerarCompraMRP(){
   if(!linhas.length)return toast('Nada a comprar no plano atual.',true);
   modalCompra(linhas);
 }
+function enviarDemandaWhatsapp(){
+  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  const abertos={};
+  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
+    .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
+  const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
+  if(!comDemanda.length)return toast('Nenhum produto com demanda no momento.',true);
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const porCategoria={};
+  comDemanda.forEach(i=>{ const cat=i.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(i); });
+  const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
+  const totalUn=comDemanda.reduce((a,i)=>a+(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0),0);
+  let txt=`*${nomeEmp}*\n📋 *DEMANDA DE PRODUÇÃO*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
+  categorias.forEach(cat=>{
+    txt+=`\n*${cat.toUpperCase()}*\n`;
+    porCategoria[cat].forEach(i=>{
+      const q=(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0);
+      txt+=`☐ ${i.nome} - ${qty(q,i.unidade_base)}\n`;
+    });
+  });
+  txt+=`\n*Total: ${qty(totalUn,'un')}*`;
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+}
 function imprimirDemanda(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   const abertos={};
@@ -1884,6 +1908,24 @@ function imprimirDemanda(){
   const w=window.open('','_blank','width=320,height=500');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
+}
+function enviarListaComprasWhatsapp(){
+  if(!mrpResultado||!mrpResultado.compras.length)return toast('Nada a comprar no plano atual.',true);
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const porCategoria={};
+  mrpResultado.compras.forEach(c=>{ const cat=c.item.categoria||'Sem categoria'; (porCategoria[cat]=porCategoria[cat]||[]).push(c); });
+  const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
+  const totalGeral=mrpResultado.compras.reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
+  let txt=`*${nomeEmp}*\n🛒 *LISTA DE COMPRAS*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
+  categorias.forEach(cat=>{
+    txt+=`\n*${cat.toUpperCase()}*\n`;
+    porCategoria[cat].forEach(c=>{
+      txt+=`☐ ${c.item.nome} - ${qty(Math.ceil(c.qtd),c.item.unidade_base)}\n`;
+    });
+  });
+  txt+=`\n*Total est.: ${money(totalGeral)}*`;
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
 function imprimirListaCompras(){
   if(!mrpResultado||!mrpResultado.compras.length)return toast('Nada a comprar no plano atual.',true);
@@ -1994,6 +2036,7 @@ VIEWS.planejamento=function(){
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>
         <div><span class="subtle num" style="margin-right:10px">estimado: ${money(custoCompra)}</span>
         <button class="btn sm" onclick="imprimirListaCompras()">🖨 Imprimir</button>
+        <button class="btn sm" onclick="enviarListaComprasWhatsapp()">💬 WhatsApp</button>
         <button class="btn sm primary" onclick="gerarCompraMRP()">Pré-preencher compra</button></div></div>
       <div class="card-b" style="padding-bottom:0">${chipsCompras}</div>
       <div class="only-desktop"><table><thead><tr><th>Insumo</th><th class="r">Comprar</th><th class="r">Último preço · fornecedor</th><th class="r">Custo est.</th></tr></thead><tbody>${cmpRows}</tbody></table></div>
@@ -2005,7 +2048,8 @@ VIEWS.planejamento=function(){
     `<button class="btn primary" onclick="calcularMRP()">⚙ Calcular plano</button>`)+
   `<div class="card"><div class="card-h"><h3>Demanda</h3>
       <div><span class="subtle" style="margin-right:10px">pedidos em aberto + quantidades extras que você quiser planejar</span>
-      <button class="btn sm" onclick="imprimirDemanda()">🖨 Imprimir por categoria</button></div></div>
+      <button class="btn sm" onclick="imprimirDemanda()">🖨 Imprimir por categoria</button>
+      <button class="btn sm" onclick="enviarDemandaWhatsapp()">💬 WhatsApp</button></div></div>
     <div class="only-desktop"><table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>
     <div class="only-mobile card-b">${demCards}</div></div>`+resultado;
 };

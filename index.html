@@ -1213,7 +1213,7 @@ VIEWS['pedido-detalhe']=function(){
   const opcoesStatus=statusDisponiveis().map(s=>`<option value="${s.id}" ${p.status===s.id?'selected':''}>${esc(s.nome)}</option>`).join('');
   const jaPago=pedidoPago(p);
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Pedido ${p.id}</h1></div>
-    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button><button class="btn" onclick="imprimirEtiquetas('${p.id}')">🏷️ Etiquetas</button></div></div>
+    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button><button class="btn" onclick="imprimirEtiquetas('${p.id}')">🏷️ Etiquetas</button><button class="btn primary" onclick="modalCompartilharPedido('${p.id}')">📤 Compartilhar</button></div></div>
     <div class="grid g2" style="align-items:start">
       <div>
         <div class="card"><div class="card-h"><h3>Cliente</h3></div><div class="card-b">
@@ -1801,6 +1801,86 @@ function imprimirEtiquetas(id){
   const w=window.open('','_blank','width=320,height=500');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
+  });
+}
+function modalCompartilharPedido(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const temTelefone=cli&&cli.telefone;
+  openModal(`<div class="m-h"><h3>📤 Compartilhar com o cliente</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <p class="subtle" style="margin-bottom:16px">Escolha como quer mandar o resumo do pedido pro cliente.</p>
+    <button class="btn primary" style="width:100%;margin-bottom:10px" onclick="closeModal();compartilharPedidoTexto('${id}')">💬 Mensagem de texto ${temTelefone?'(já abre no WhatsApp de '+esc(cli.nome)+')':'(escolher contato no WhatsApp)'}</button>
+    <button class="btn" style="width:100%" onclick="closeModal();compartilharPedidoImagem('${id}')">🖼️ Gerar imagem do pedido</button>
+    <p class="subtle" style="margin-top:10px;font-size:11.5px">A imagem é melhor pra mandar como "print bonito"; o texto é mais rápido e já pode ir direto pro contato salvo do cliente.</p>
+  </div>`);
+}
+function compartilharPedidoTexto(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const st=statusInfo(p.status);
+  let txt=`Oi${cli?', '+cli.nome:''}! Aqui está o resumo do seu pedido na *${nomeEmp}* 🍱\n\n`;
+  (p.itens||[]).forEach(l=>{ txt+=`${l.quantidade}x ${nomeLinha(l)}\n`; });
+  txt+=`\n*Total: ${money(p.valor_total)}*\nStatus: ${st.label}`;
+  if(p.data_entrega)txt+=`\nEntrega: ${dBR(p.data_entrega)}`;
+  txt+=`\n\nQualquer coisa é só chamar 💚`;
+  const fone=cli&&cli.telefone?cli.telefone.replace(/\D/g,''):'';
+  const foneCompleto=fone?(fone.length<=11?'55'+fone:fone):'';
+  window.open(`https://wa.me/${foneCompleto}?text=`+encodeURIComponent(txt),'_blank');
+}
+let _html2canvasCarregando=null;
+function garantirHtml2Canvas(cb){
+  if(window.html2canvas)return cb();
+  if(_html2canvasCarregando){ _html2canvasCarregando.then(cb); return; }
+  _html2canvasCarregando=new Promise(resolve=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    s.onload=resolve; s.onerror=()=>{ toast('Não consegui carregar o gerador de imagem — confira sua internet.',true); resolve(); };
+    document.head.appendChild(s);
+  });
+  _html2canvasCarregando.then(cb);
+}
+function compartilharPedidoImagem(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  toast('Gerando imagem…');
+  garantirHtml2Canvas(function(){
+    if(!window.html2canvas)return;
+    const cli=p.cliente_id?clienteById(p.cliente_id):null;
+    const emp=getEmpresaInfo(); const idn=getIdent();
+    const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+    const st=statusInfo(p.status);
+    const linhas=(p.itens||[]).map(l=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #EEEAE0;font-size:15px">
+      <span>${l.quantidade}× ${esc(nomeLinha(l))}</span><b>${money(l.quantidade*l.preco_unitario)}</b></div>`).join('');
+    const box=document.createElement('div');
+    box.style.cssText='position:fixed;left:-9999px;top:0;width:480px;background:#fff;font-family:Arial,Helvetica,sans-serif;padding:28px;color:#1a1a1a';
+    box.innerHTML=`
+      <div style="text-align:center;margin-bottom:18px">
+        ${idn.logo_img?`<img src="${idn.logo_img}" style="max-height:60px;margin-bottom:8px">`:`<div style="font-size:22px;font-weight:700">${esc(nomeEmp)}</div>`}
+      </div>
+      <div style="background:${getComputedStyle(document.documentElement).getPropertyValue('--primary')||'#2E6E4E'};color:#fff;border-radius:12px;padding:14px 18px;margin-bottom:16px;text-align:center">
+        <div style="font-size:13px;opacity:.9">Pedido ${esc(p.id)}${cli?' · '+esc(cli.nome):''}</div>
+        <div style="font-size:18px;font-weight:700;margin-top:2px">${esc(st.label)}</div>
+      </div>
+      <div style="margin-bottom:10px">${linhas}</div>
+      <div style="display:flex;justify-content:space-between;font-size:19px;font-weight:700;padding-top:12px;border-top:2px solid #1a1a1a">
+        <span>Total</span><span>${money(p.valor_total)}</span></div>
+      ${p.data_entrega?`<div style="margin-top:10px;font-size:13px;color:#555;text-align:center">Entrega: ${dBR(p.data_entrega)}</div>`:''}
+      <div style="margin-top:18px;text-align:center;font-size:12px;color:#888">Obrigado pela preferência! 💚</div>`;
+    document.body.appendChild(box);
+    html2canvas(box,{scale:2,backgroundColor:'#ffffff'}).then(canvas=>{
+      document.body.removeChild(box);
+      canvas.toBlob(async blob=>{
+        const file=new File([blob],'pedido-'+p.id+'.png',{type:'image/png'});
+        if(navigator.canShare&&navigator.canShare({files:[file]})){
+          try{ await navigator.share({files:[file],title:'Pedido '+p.id,text:'Resumo do seu pedido'}); return; }catch(e){ /* usuário cancelou ou falhou, cai no fallback abaixo */ }
+        }
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='pedido-'+p.id+'.png'; a.click();
+        toast('Imagem baixada — agora é só anexar no WhatsApp.');
+      },'image/png');
+    }).catch(()=>{ document.body.removeChild(box); toast('Não consegui gerar a imagem.',true); });
   });
 }
 function modalRecibo(id){

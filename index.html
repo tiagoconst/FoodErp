@@ -2133,6 +2133,116 @@ function enviarListaComprasWhatsapp(){
   txt+=`\n*Total est.: ${money(totalGeral)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
+function imprimirPlanoProducao(){
+  if(!mrpResultado||!mrpResultado.producoes.length)return toast('Nada a produzir no plano atual.',true);
+  const prodOrd=mrpResultado.producoes.slice().sort((a,b)=>b.nivel-a.nivel);
+  const maxN=prodOrd[0].nivel;
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const grupos={};
+  prodOrd.forEach(p=>{ const rot=p.nivel===maxN?'Produzir primeiro':'Nível '+(maxN-p.nivel+1); (grupos[rot]=grupos[rot]||[]).push(p); });
+  const custoTotal=prodOrd.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
+  const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const blocos=Object.entries(grupos).map(([rot,lista])=>{
+    const linhas=lista.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('');
+    return `<div class="cat">${esc(rot)}</div>${linhas}`;
+  }).join('<hr>');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Plano de produção</title><style>
+    @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
+    .center{text-align:center} h1{font-size:12px;margin:1mm 0}
+    hr{border:none;border-top:1px dashed #000;margin:2.5mm 0} .small{font-size:9px;color:#333}
+    .cat{font-weight:bold;font-size:10.5px;text-transform:uppercase;margin:2mm 0 1.5mm;letter-spacing:.03em}
+    .item{display:flex;align-items:flex-start;gap:2mm;margin-bottom:2mm}
+    .chk{font-size:12px;flex:none;line-height:1.3} .item-txt{flex:1;min-width:0} .item b{flex:none}
+    .tot{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm;margin-top:2mm;display:flex;justify-content:space-between}
+  </style></head><body>
+    <div class="center"><h1>${esc(nomeEmp)}</h1></div>
+    <div class="center small">PLANO DE PRODUÇÃO</div><hr>
+    <div class="small">Gerada ${dataHoraExtenso}<br>${mrpResultado.pedidos} pedido(s) em aberto</div><hr>
+    ${blocos}
+    <div class="tot"><span>Custo est.</span><span>${money(custoTotal)}</span></div>
+    <script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w=window.open('','_blank','width=320,height=500');
+  if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
+  w.document.write(html); w.document.close();
+}
+function enviarPlanoProducaoWhatsapp(){
+  if(!mrpResultado||!mrpResultado.producoes.length)return toast('Nada a produzir no plano atual.',true);
+  const prodOrd=mrpResultado.producoes.slice().sort((a,b)=>b.nivel-a.nivel);
+  const maxN=prodOrd[0].nivel;
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const grupos={};
+  prodOrd.forEach(p=>{ const rot=p.nivel===maxN?'Produzir primeiro':'Nível '+(maxN-p.nivel+1); (grupos[rot]=grupos[rot]||[]).push(p); });
+  const custoTotal=prodOrd.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
+  let txt=`*${nomeEmp}*\n👨‍🍳 *PLANO DE PRODUÇÃO*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
+  Object.entries(grupos).forEach(([rot,lista])=>{
+    txt+=`\n*${rot.toUpperCase()}*\n`;
+    lista.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; });
+  });
+  txt+=`\n*Custo est.: ${money(custoTotal)}*`;
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+}
+function marmitasSobMedidaAtivas(){
+  const lista=[];
+  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
+    .forEach(p=>p.itens.forEach(l=>{
+      if(!l.componentes||!l.componentes.length)return;
+      const cli=p.cliente_id?clienteById(p.cliente_id):null;
+      lista.push({
+        cliente: cli?cli.nome:(p.cliente||'Cliente avulso'),
+        nome: l.nome_custom||'Marmita personalizada',
+        qtd: l.quantidade,
+        componentes: l.componentes.map(c=>{ const it=itemById(c.item_id);
+          return {nome:it?it.nome:c.item_id, quantidade:c.quantidade*l.quantidade, unidade:it?it.unidade_base:''}; })
+      });
+    }));
+  return lista;
+}
+function imprimirMarmitasSobMedida(){
+  const lista=marmitasSobMedidaAtivas();
+  if(!lista.length)return toast('Nenhuma marmita sob medida em pedidos confirmados/em produção agora.',true);
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const blocos=lista.map((m,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="ficha">
+    <div class="ficha-cli">${esc(m.cliente)}</div>
+    <div class="ficha-prato">🛠️ ${esc(m.nome)}${m.qtd>1?' ('+m.qtd+'un)':''}</div>
+    <div class="ficha-comp">${m.componentes.map(c=>`<div class="comp-linha"><span>${esc(c.nome.toUpperCase())}</span><b>${qty(Math.round(c.quantidade*100)/100,c.unidade)}</b></div>`).join('')}</div>
+  </div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Marmitas Sob Medida</title><style>
+    @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
+    body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
+    .center{text-align:center} h1{font-size:12px;margin:1mm 0}
+    hr{border:none;border-top:1px dashed #000;margin:2.5mm 0} .small{font-size:9px;color:#333}
+    .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
+    .ficha{padding:2mm 0}
+    .ficha-cli{font-size:10.5px;font-weight:bold;text-transform:uppercase}
+    .ficha-prato{font-size:12.5px;font-weight:bold;margin:1mm 0 2mm}
+    .comp-linha{display:flex;justify-content:space-between;font-size:10px;padding:0.8mm 0;border-bottom:1px dotted #999}
+  </style></head><body>
+    <div class="center"><h1>${esc(nomeEmp)}</h1></div>
+    <div class="center small">FICHAS · MARMITAS SOB MEDIDA</div><hr>
+    <div class="small">Gerada ${dataHoraExtenso} · ${lista.length} marmita(s)</div><hr>
+    ${blocos}
+    <script>window.onload=function(){window.print()}<\/script></body></html>`;
+  const w=window.open('','_blank','width=320,height=500');
+  if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
+  w.document.write(html); w.document.close();
+}
+function enviarMarmitasSobMedidaWhatsapp(){
+  const lista=marmitasSobMedidaAtivas();
+  if(!lista.length)return toast('Nenhuma marmita sob medida em pedidos confirmados/em produção agora.',true);
+  const emp=getEmpresaInfo(); const idn=getIdent();
+  const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  let txt=`*${nomeEmp}*\n🛠️ *FICHAS · MARMITAS SOB MEDIDA*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
+  lista.forEach(m=>{
+    txt+=`\n*${m.cliente}*\n${m.nome}${m.qtd>1?' ('+m.qtd+'un)':''}\n`;
+    m.componentes.forEach(c=>{ txt+=`  • ${c.nome}: ${qty(Math.round(c.quantidade*100)/100,c.unidade)}\n`; });
+  });
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+}
 function imprimirListaCompras(){
   if(!mrpResultado||!mrpResultado.compras.length)return toast('Nada a comprar no plano atual.',true);
   const compras=mrpResultado.compras.filter(c=>!compraExcluidos.has(c.item.id));
@@ -2262,7 +2372,9 @@ VIEWS.planejamento=function(){
     const alertHtml=R.alertas.length?`<div class="card section-gap"><div class="card-h"><h3>⚠️ Sem origem definida</h3></div>
       <table><tbody>${R.alertas.map(a=>`<tr><td>${esc(a.item.nome)}</td><td class="r num neg">falta ${qty(Math.round(a.qtd*100)/100,a.item.unidade_base)}</td><td class="subtle">não é comprável nem tem composição — marque a função ou defina a receita</td></tr>`).join('')}</tbody></table></div>`:'';
     resultado=`<div class="card section-gap"><div class="card-h"><h3>Plano de produção (ordem de execução)</h3>
-        <span class="subtle">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span></div>
+        <div><span class="subtle" style="margin-right:10px">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span>
+        <button class="btn sm" onclick="imprimirPlanoProducao()">🖨 Imprimir</button>
+        <button class="btn sm" onclick="enviarPlanoProducaoWhatsapp()">💬 WhatsApp</button></div></div>
       <div class="only-desktop"><table><thead><tr><th>Ordem</th><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prodRows}</tbody></table></div>
       <div class="only-mobile card-b">${prodCards}</div></div>
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>
@@ -2282,7 +2394,9 @@ VIEWS.planejamento=function(){
   `<div class="card"><div class="card-h"><h3>Demanda</h3>
       <div><span class="subtle" style="margin-right:10px">pedidos em aberto + quantidades extras que você quiser planejar</span>
       <button class="btn sm" onclick="imprimirDemanda()">🖨 Imprimir por categoria</button>
-      <button class="btn sm" onclick="enviarDemandaWhatsapp()">💬 WhatsApp</button></div></div>
+      <button class="btn sm" onclick="enviarDemandaWhatsapp()">💬 WhatsApp</button>
+      <button class="btn sm" onclick="imprimirMarmitasSobMedida()">🛠️ Fichas sob medida</button>
+      <button class="btn sm" onclick="enviarMarmitasSobMedidaWhatsapp()">💬 Sob medida</button></div></div>
     <div class="only-desktop"><table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>
     <div class="only-mobile card-b">${demCards}</div></div>`+resultado;
 };

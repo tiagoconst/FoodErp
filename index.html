@@ -130,6 +130,17 @@ td.r,th.r{text-align:right}
 .prod-card .pc-nome{font-size:13.5px;font-weight:700;line-height:1.3;margin-bottom:10px;min-height:34px}
 .prod-card .pc-preco{font-size:14.5px;font-weight:700;font-family:'Archivo'}
 .prod-card .pc-badge{position:absolute;top:8px;right:8px;background:var(--primary);color:#fff;border-radius:99px;min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;padding:0 5px}
+.prod-list{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.prod-row{display:flex;align-items:center;gap:11px;padding:13px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.prod-row:last-child{border-bottom:none}
+.prod-row:active{background:var(--bg)}
+.pr-dot{width:9px;height:9px;border-radius:50%;flex:none}
+.pr-info{flex:1;min-width:0}
+.pr-cat{font-size:10px;text-transform:uppercase;letter-spacing:.05em;font-weight:700;opacity:.8;margin-bottom:2px}
+.pr-nome{font-size:14px;font-weight:700;line-height:1.25}
+.pr-right{flex:none;text-align:right;position:relative;padding-right:4px}
+.pr-preco{font-size:13.5px;font-weight:700}
+.pr-badge{position:absolute;top:-8px;right:-6px;background:var(--primary);color:#fff;border-radius:99px;min-width:19px;height:19px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 4px}
 .cart-panel{position:sticky;top:16px}
 .cart-line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--soft)}
 .cart-line .cl-info{flex:1;min-width:0}
@@ -233,7 +244,6 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
   .only-mobile{display:block}
   .only-desktop{display:none}
   .cart-panel{position:static}
-  .prod-grid{grid-template-columns:1fr 1fr;gap:9px}
   .prod-card{padding:9px}
   .venda-floatbar{position:fixed;left:12px;right:12px;bottom:12px;z-index:240;background:var(--primary);color:#fff;
     border-radius:14px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;
@@ -1292,6 +1302,10 @@ VIEWS.venda=function(){
   });
   const chips=`<button class="cat-chip ${vendaCat==='__todas__'?'active':''}" style="${vendaCat==='__todas__'?'background:var(--primary)':''}" onclick="vendaCat='__todas__';render()">Todas</button>`+
     cats.map(c=>`<button class="cat-chip ${vendaCat===c?'active':''}" style="${vendaCat===c?'background:'+corCategoria(c):''}" onclick='vendaCat=${JSON.stringify(c)};render()'>${esc(c)}</button>`).join('');
+  const catSelect=`<select class="status-pill-select" onchange="vendaCat=this.value;render()">
+    <option value="__todas__" ${vendaCat==='__todas__'?'selected':''}>Todas as categorias</option>
+    ${cats.map(c=>`<option value="${esc(c)}" ${vendaCat===c?'selected':''}>${esc(c)}</option>`).join('')}
+  </select>`;
   const cards=filtrados.map(i=>{
     const cat=(i.categoria||'').trim()||'Sem categoria';
     const cor=corCategoria(cat);
@@ -1306,14 +1320,29 @@ VIEWS.venda=function(){
       <div class="pc-preco num">${sobMedida?'montar…':(i.preco_venda!=null?money(i.preco_venda):'—')}</div>
     </div>`;
   }).join('')||`<div class="empty" style="grid-column:1/-1"><b>Nada encontrado</b>Tente outra busca ou categoria.</div>`;
+  const listaMobile=filtrados.map(i=>{
+    const cat=(i.categoria||'').trim()||'Sem categoria';
+    const cor=corCategoria(cat);
+    const sobMedida=i.id===ITEM_ID_SOB_MEDIDA;
+    const linha=pedLinhas.find(l=>l.item===i.id&&!l.custom);
+    const qtdCustom=sobMedida?pedLinhas.filter(l=>l.item===i.id&&l.custom).length:0;
+    const qtd=linha?parseFloat(linha.qtd)||0:0;
+    return `<div class="prod-row" onclick="${sobMedida?'abrirConstrutorMarmita()':`vendaAdd('${i.id}')`}">
+      <div class="pr-dot" style="background:${cor}"></div>
+      <div class="pr-info"><div class="pr-cat" style="color:${cor}">${esc(cat)}</div>
+        <div class="pr-nome">${sobMedida?'🛠️ ':''}${esc(i.nome)}</div></div>
+      <div class="pr-right"><div class="pr-preco num">${sobMedida?'montar…':(i.preco_venda!=null?money(i.preco_venda):'—')}</div>
+        ${qtd>0?`<span class="pr-badge">${qtd}</span>`:''}${qtdCustom>0?`<span class="pr-badge">${qtdCustom}</span>`:''}</div>
+    </div>`;
+  }).join('')||`<div class="empty"><b>Nada encontrado</b>Tente outra busca ou categoria.</div>`;
   const {totalUnidades,total}=totaisCarrinho();
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Novo pedido</h1></div>
     <div class="top-actions"><button class="btn" onclick="vendaSair()">← Voltar</button></div></div>
     <div class="venda-wrap">
       <div>
         <input class="search" style="margin-bottom:12px;width:100%" placeholder="Buscar produto…" value="${esc(vendaBusca)}" oninput="vendaBusca=this.value;render();this.focus();this.setSelectionRange(99,99)">
-        <div class="cat-chips">${chips}</div>
-        <div class="prod-grid">${cards}</div>
+        <div class="only-desktop"><div class="cat-chips">${chips}</div><div class="prod-grid">${cards}</div></div>
+        <div class="only-mobile"><div style="margin-bottom:10px">${catSelect}</div><div class="prod-list">${listaMobile}</div></div>
       </div>
       <div class="card cart-panel" id="carrinho-painel"><div class="card-h"><h3>🛒 Pedido</h3>${pedLinhas.length?`<button class="btn sm ghost" onclick="if(confirm('Esvaziar carrinho?')){pedLinhas=[];render()}">Esvaziar</button>`:''}</div>
       <div class="card-b">${carrinhoHtml()}</div></div>

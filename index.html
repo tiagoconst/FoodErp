@@ -161,6 +161,8 @@ td.r,th.r{text-align:right}
 /* linhas de lançamento (compras / pedidos / composição) */
 .lines{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .line{display:grid;grid-template-columns:1fr 110px 130px 34px;gap:8px;align-items:center}
+.cm-line{display:grid;grid-template-columns:1fr 90px 34px;gap:8px;align-items:center;margin-bottom:8px}
+@media(max-width:560px){.cm-line{grid-template-columns:1fr 74px 30px;gap:6px}}
 .line select,.line input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--input-bg,#FDFCF9);font-size:13px;width:100%}
 .line .rm{border:none;background:var(--soft);border-radius:7px;height:32px;color:var(--muted)}
 .line .rm:hover{background:#F0DDD9;color:var(--danger)}
@@ -230,6 +232,12 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
   .cat-chip{flex:none}
   .only-mobile{display:block}
   .only-desktop{display:none}
+  .cart-panel{position:static}
+  .prod-grid{grid-template-columns:1fr 1fr;gap:9px}
+  .prod-card{padding:9px}
+  .venda-floatbar{position:fixed;left:12px;right:12px;bottom:12px;z-index:240;background:var(--primary);color:#fff;
+    border-radius:14px;padding:13px 16px;display:flex;justify-content:space-between;align-items:center;
+    box-shadow:0 6px 20px rgba(0,0,0,.25);font-size:13.5px;font-weight:700;cursor:pointer}
 }
 
 #auth{position:fixed;inset:0;background:var(--bg);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
@@ -1298,6 +1306,7 @@ VIEWS.venda=function(){
       <div class="pc-preco num">${sobMedida?'montar…':(i.preco_venda!=null?money(i.preco_venda):'—')}</div>
     </div>`;
   }).join('')||`<div class="empty" style="grid-column:1/-1"><b>Nada encontrado</b>Tente outra busca ou categoria.</div>`;
+  const {totalUnidades,total}=totaisCarrinho();
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Novo pedido</h1></div>
     <div class="top-actions"><button class="btn" onclick="vendaSair()">← Voltar</button></div></div>
     <div class="venda-wrap">
@@ -1306,9 +1315,12 @@ VIEWS.venda=function(){
         <div class="cat-chips">${chips}</div>
         <div class="prod-grid">${cards}</div>
       </div>
-      <div class="card cart-panel"><div class="card-h"><h3>🛒 Pedido</h3>${pedLinhas.length?`<button class="btn sm ghost" onclick="if(confirm('Esvaziar carrinho?')){pedLinhas=[];render()}">Esvaziar</button>`:''}</div>
+      <div class="card cart-panel" id="carrinho-painel"><div class="card-h"><h3>🛒 Pedido</h3>${pedLinhas.length?`<button class="btn sm ghost" onclick="if(confirm('Esvaziar carrinho?')){pedLinhas=[];render()}">Esvaziar</button>`:''}</div>
       <div class="card-b">${carrinhoHtml()}</div></div>
-    </div>`;
+    </div>
+    ${totalUnidades>0?`<div class="only-mobile venda-floatbar" onclick="document.getElementById('carrinho-painel').scrollIntoView({behavior:'smooth'})">
+      <span>🛒 ${totalUnidades} ${totalUnidades===1?'item':'itens'}</span><span class="num">${money(total)} · ver pedido ▲</span></div>
+    <div class="only-mobile" style="height:64px"></div>`:''}`;
 };
 const COMBO_MIN_UN = 5, COMBO_DESCONTO_UN = 2;
 let descTipo = 'valor', descValor = 0;
@@ -1361,7 +1373,7 @@ function cmAddComponente(){ construtorComponentes.push({item_id:'',quantidade:10
 function cmDesenharComponentes(){
   const disp=componentesDisponiveis();
   const opts=disp.map(i=>`<option value="${i.id}">${esc(i.nome)} (${money(custoItem(i.id)||0)}/${i.unidade_base})</option>`).join('');
-  $('#cm-componentes').innerHTML=construtorComponentes.map((c,k)=>`<div class="line" style="grid-template-columns:1fr 90px 30px">
+  $('#cm-componentes').innerHTML=construtorComponentes.map((c,k)=>`<div class="cm-line">
     <select onchange="construtorComponentes[${k}].item_id=this.value;cmRecalcular()"><option value="">Escolha…</option>${opts}</select>
     <input type="number" min="0" step="any" placeholder="qtd" value="${c.quantidade}" oninput="construtorComponentes[${k}].quantidade=parseFloat(this.value)||0;cmRecalcular()">
     <button class="rm" onclick="construtorComponentes.splice(${k},1);cmDesenharComponentes()">✕</button></div>`).join('')

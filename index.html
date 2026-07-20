@@ -2106,6 +2106,15 @@ function calcularMRP(){
   compraExcluidos=new Set();
   render();
 }
+function apagarComposicaoPlano(itemId){
+  const it=itemById(itemId); if(!it)return;
+  if(!confirm('Apagar a composição de "'+it.nome+'"? Ele deixa de ter ficha técnica (vira item solto) até você definir uma nova composição.'))return;
+  S.composicoes=S.composicoes.filter(c=>c.item_pai_id!==itemId);
+  registrarEvento('COMPOSICAO_DEFINIDA',`${it.nome}: composição apagada`,itemId);
+  scheduleSave();
+  if(mrpResultado)calcularMRP(); else render();
+  toast('Composição apagada.');
+}
 function gerarCompraMRP(){
   if(!mrpResultado)return;
   const linhas=mrpResultado.compras.filter(c=>!compraExcluidos.has(c.item.id)).map(c=>{ const q=Math.ceil(c.qtd);
@@ -2218,14 +2227,16 @@ function enviarListaComprasWhatsapp(){
 }
 function imprimirPlanoProducao(){
   if(!mrpResultado||!mrpResultado.producoes.length)return toast('Nada a produzir no plano atual.',true);
-  const prodOrd=mrpResultado.producoes.slice().sort((a,b)=>b.nivel-a.nivel);
-  const maxN=prodOrd[0].nivel;
+  const porNome=(a,b)=>a.item.nome.localeCompare(b.item.nome,'pt');
+  const prePreparos=mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort(porNome);
+  const pratos=mrpResultado.producoes.filter(p=>temFuncao(p.item,'vendavel')).slice().sort(porNome);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
-  const grupos={};
-  prodOrd.forEach(p=>{ const rot=p.nivel===maxN?'Produzir primeiro':'Nível '+(maxN-p.nivel+1); (grupos[rot]=grupos[rot]||[]).push(p); });
-  const custoTotal=prodOrd.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
+  const custoTotal=mrpResultado.producoes.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  const grupos={};
+  if(prePreparos.length)grupos['Pré-preparos']=prePreparos;
+  if(pratos.length)grupos['Pratos']=pratos;
   const blocos=Object.entries(grupos).map(([rot,lista])=>{
     const linhas=lista.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('');
     return `<div class="cat">${esc(rot)}</div>${linhas}`;
@@ -2252,13 +2263,15 @@ function imprimirPlanoProducao(){
 }
 function enviarPlanoProducaoWhatsapp(){
   if(!mrpResultado||!mrpResultado.producoes.length)return toast('Nada a produzir no plano atual.',true);
-  const prodOrd=mrpResultado.producoes.slice().sort((a,b)=>b.nivel-a.nivel);
-  const maxN=prodOrd[0].nivel;
+  const porNome=(a,b)=>a.item.nome.localeCompare(b.item.nome,'pt');
+  const prePreparos=mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort(porNome);
+  const pratos=mrpResultado.producoes.filter(p=>temFuncao(p.item,'vendavel')).slice().sort(porNome);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const custoTotal=mrpResultado.producoes.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   const grupos={};
-  prodOrd.forEach(p=>{ const rot=p.nivel===maxN?'Produzir primeiro':'Nível '+(maxN-p.nivel+1); (grupos[rot]=grupos[rot]||[]).push(p); });
-  const custoTotal=prodOrd.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
+  if(prePreparos.length)grupos['Pré-preparos']=prePreparos;
+  if(pratos.length)grupos['Pratos']=pratos;
   let txt=`*${nomeEmp}*\n👨‍🍳 *PLANO DE PRODUÇÃO*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
   Object.entries(grupos).forEach(([rot,lista])=>{
     txt+=`\n*${rot.toUpperCase()}*\n`;
@@ -2410,17 +2423,31 @@ VIEWS.planejamento=function(){
   let resultado='';
   if(mrpResultado){
     const R=mrpResultado;
-    const prodOrd=R.producoes.slice().sort((a,b)=>b.nivel-a.nivel);
-    const maxN=prodOrd.length?prodOrd[0].nivel:0;
-    const prodRows=prodOrd.map(p=>`<tr>
-      <td><span class="tag ${p.nivel===maxN?'f':'info'}">${p.nivel===maxN?'produzir primeiro':'nível '+(maxN-p.nivel+1)}</span></td>
+    const prePreparos=R.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
+    const pratos=R.producoes.filter(p=>temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
+    const prepRows=prePreparos.map(p=>`<tr>
+      <td><b>${esc(p.item.nome)}</b></td>
+      <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
+      <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
+      <td class="r" style="white-space:nowrap"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button>
+        <button class="btn sm" onclick="apagarComposicaoPlano('${p.item.id}')" title="Apagar a composição deste item">🗑 Apagar composição</button></td></tr>`).join('')||
+      '<tr><td colspan="4" class="empty">Nenhum pré-preparo a fazer — estoque cobre a demanda 👍</td></tr>';
+    const prepCards=prePreparos.map(p=>`<div class="pln-card">
+      <div class="pln-card-tit">${esc(p.item.nome)}</div>
+      <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
+        <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn primary" style="flex:1" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button>
+        <button class="btn" onclick="apagarComposicaoPlano('${p.item.id}')" title="Apagar a composição deste item">🗑</button>
+      </div></div>`).join('')
+      ||'<div class="empty"><b>Nenhum pré-preparo a fazer</b>Estoque cobre a demanda 👍</div>';
+    const pratosRows=pratos.map(p=>`<tr>
       <td><b>${esc(p.item.nome)}</b></td>
       <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
       <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')||
-      '<tr><td colspan="5" class="empty">Nada a produzir — estoque cobre a demanda 👍</td></tr>';
-    const prodCards=prodOrd.map(p=>`<div class="pln-card">
-      <div class="pln-card-top"><span class="tag ${p.nivel===maxN?'f':'info'}">${p.nivel===maxN?'produzir primeiro':'nível '+(maxN-p.nivel+1)}</span></div>
+      '<tr><td colspan="4" class="empty">Nada a produzir — estoque cobre a demanda 👍</td></tr>';
+    const pratosCards=pratos.map(p=>`<div class="pln-card">
       <div class="pln-card-tit">${esc(p.item.nome)}</div>
       <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
         <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
@@ -2456,12 +2483,16 @@ VIEWS.planejamento=function(){
     const custoCompra=comprasFiltradas.filter(c=>!compraExcluidos.has(c.item.id)).reduce((a,c)=>a+(c.preco!=null?c.preco*Math.ceil(c.qtd):0),0);
     const alertHtml=R.alertas.length?`<div class="card section-gap"><div class="card-h"><h3>⚠️ Sem origem definida</h3></div>
       <table><tbody>${R.alertas.map(a=>`<tr><td>${esc(a.item.nome)}</td><td class="r num neg">falta ${qty(Math.round(a.qtd*100)/100,a.item.unidade_base)}</td><td class="subtle">não é comprável nem tem composição — marque a função ou defina a receita</td></tr>`).join('')}</tbody></table></div>`:'';
-    resultado=`<div class="card section-gap"><div class="card-h"><h3>Plano de produção (ordem de execução)</h3>
+    resultado=`<div class="card section-gap"><div class="card-h"><h3>Pré-preparos a fazer</h3>
         <div><span class="subtle" style="margin-right:10px">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span>
         <button class="btn sm" onclick="imprimirPlanoProducao()">🖨 Imprimir</button>
         <button class="btn sm" onclick="enviarPlanoProducaoWhatsapp()">💬 WhatsApp</button></div></div>
-      <div class="only-desktop"><table><thead><tr><th>Ordem</th><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prodRows}</tbody></table></div>
-      <div class="only-mobile card-b">${prodCards}</div></div>
+      <div class="only-desktop"><table><thead><tr><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prepRows}</tbody></table></div>
+      <div class="only-mobile card-b">${prepCards}</div></div>
+    <div class="card section-gap"><div class="card-h"><h3>Pratos a produzir</h3>
+        <div><span class="subtle" style="margin-right:10px">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span></div></div>
+      <div class="only-desktop"><table><thead><tr><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${pratosRows}</tbody></table></div>
+      <div class="only-mobile card-b">${pratosCards}</div></div>
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>
         <div><span class="subtle num" style="margin-right:10px">estimado: ${money(custoCompra)}</span>
         <button class="btn sm" onclick="imprimirListaCompras()">🖨 Imprimir</button>

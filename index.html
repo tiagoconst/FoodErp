@@ -723,14 +723,23 @@ function toggleItem(id){ const i=itemById(id); i.ativo=i.ativo===false; // regis
   registrarEvento('ITEM_ATUALIZADO',`${i.nome} ${i.ativo?'reativado':'inativado'}`,id); scheduleSave(); render(); }
 
 /* ================= COMPOSIÇÕES (pré-preparos e itens intermediários) & PRODUTOS (vendáveis) ================= */
+function composicoesDeTodas(paiId){ return S.composicoes.filter(c=>c.item_pai_id===paiId); }
+function composicaoAtiva(paiId){ const todas=composicoesDeTodas(paiId); return !todas.length||todas.some(c=>c.ativo!==false); }
+function toggleComposicao(paiId){
+  const it=itemById(paiId); const ativa=composicaoAtiva(paiId);
+  composicoesDeTodas(paiId).forEach(c=>{ c.ativo=ativa?false:true; });
+  registrarEvento('COMPOSICAO_DEFINIDA',`${it?it.nome:paiId}: composição ${ativa?'inativada':'reativada'}`,paiId);
+  scheduleSave(); render(); toast(ativa?'Composição inativada.':'Composição reativada.');
+}
 function blocoComposicao(pid,mostrarPreco){
   const it=itemById(pid); if(!it)return'';
-  const comps=componentesDe(pid);
-  const custo=custoItem(pid);
+  const ativa=composicaoAtiva(pid);
+  const comps=composicoesDeTodas(pid);
+  const custo=ativa?custoItem(pid):null;
   const linhas=comps.map(c=>{
     const f=itemById(c.item_filho_id); const cu=custoItem(c.item_filho_id);
     const sub=f&&componentesDe(f.id).length?` <span class="tag info">também composto</span>`:'';
-    return `<tr><td>${esc(f?f.nome:'?')}${sub}</td><td class="r num">${qty(c.quantidade,c.unidade)}</td>
+    return `<tr style="${c.ativo===false?'opacity:.45':''}"><td>${esc(f?f.nome:'?')}${sub}</td><td class="r num">${qty(c.quantidade,c.unidade)}</td>
       <td class="r num">${c.perda_percentual?c.perda_percentual+'%':'—'}</td>
       <td class="r num">${cu!=null?money(cu*c.quantidade*(1+(c.perda_percentual||0)/100)):'—'}</td></tr>`;
   }).join('');
@@ -743,8 +752,8 @@ function blocoComposicao(pid,mostrarPreco){
     if(cf)extra+=` &nbsp;<span class="subtle">+ fixo ${money(cf)}</span>`;
     if(it.preco_venda&&custoTotal!=null)extra+=` &nbsp;<span class="subtle">margem ${(((it.preco_venda-custoTotal)/it.preco_venda)*100).toFixed(0)}%</span>`;
   }
-  return `<details class="comp-tree"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span></span>
-    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a></span></summary>
+  return `<details class="comp-tree" style="${ativa?'':'opacity:.55'}"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)}${ativa?'':' <span class="tag mut">inativa</span>'} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span></span>
+    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleComposicao('${pid}')">${ativa?'inativar':'reativar'}</a></span></summary>
     <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
 }
 VIEWS.composicoes=function(){
@@ -777,7 +786,7 @@ function modalComposicao(paiId,tipo){
   compTipo = tipo || (paiId ? (temFuncao(itemById(paiId),'vendavel')?'produto':'preparo') : 'preparo');
   const compostos=S.itens.filter(i=>i.ativo!==false&&(compTipo==='produto'?temFuncao(i,'vendavel'):!temFuncao(i,'vendavel')));
   const pai=paiId?itemById(paiId):null;
-  compLinhas=paiId?componentesDe(paiId).map(c=>({item:c.item_filho_id,qtd:c.quantidade,perda:c.perda_percentual||0})):[{item:'',qtd:'',perda:0}];
+  compLinhas=paiId?composicoesDeTodas(paiId).map(c=>({item:c.item_filho_id,qtd:c.quantidade,perda:c.perda_percentual||0})):[{item:'',qtd:'',perda:0}];
   const rotulo=compTipo==='produto'?'Produto (item vendável) *':'Item composto (pré-preparo) *';
   const dica=compTipo==='produto'?'Ex.: Marmita G = arroz branco + frango + feijão + embalagem + etiqueta':'Ex.: Frango grelhado (pré-preparo) = peito de frango cru + tempero';
   openModal(`<div class="m-h"><h3>${paiId?(compTipo==='produto'?'Editar produto':'Editar composição'):(compTipo==='produto'?'Novo produto':'Nova composição')}</h3><button class="x" onclick="closeModal()">✕</button></div>
@@ -2106,15 +2115,6 @@ function calcularMRP(){
   compraExcluidos=new Set();
   render();
 }
-function apagarComposicaoPlano(itemId){
-  const it=itemById(itemId); if(!it)return;
-  if(!confirm('Apagar a composição de "'+it.nome+'"? Ele deixa de ter ficha técnica (vira item solto) até você definir uma nova composição.'))return;
-  S.composicoes=S.composicoes.filter(c=>c.item_pai_id!==itemId);
-  registrarEvento('COMPOSICAO_DEFINIDA',`${it.nome}: composição apagada`,itemId);
-  scheduleSave();
-  if(mrpResultado)calcularMRP(); else render();
-  toast('Composição apagada.');
-}
 function gerarCompraMRP(){
   if(!mrpResultado)return;
   const linhas=mrpResultado.compras.filter(c=>!compraExcluidos.has(c.item.id)).map(c=>{ const q=Math.ceil(c.qtd);
@@ -2429,17 +2429,13 @@ VIEWS.planejamento=function(){
       <td><b>${esc(p.item.nome)}</b></td>
       <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
-      <td class="r" style="white-space:nowrap"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button>
-        <button class="btn sm" onclick="apagarComposicaoPlano('${p.item.id}')" title="Apagar a composição deste item">🗑 Apagar composição</button></td></tr>`).join('')||
+      <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')||
       '<tr><td colspan="4" class="empty">Nenhum pré-preparo a fazer — estoque cobre a demanda 👍</td></tr>';
     const prepCards=prePreparos.map(p=>`<div class="pln-card">
       <div class="pln-card-tit">${esc(p.item.nome)}</div>
       <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
         <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn primary" style="flex:1" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button>
-        <button class="btn" onclick="apagarComposicaoPlano('${p.item.id}')" title="Apagar a composição deste item">🗑</button>
-      </div></div>`).join('')
+      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')
       ||'<div class="empty"><b>Nenhum pré-preparo a fazer</b>Estoque cobre a demanda 👍</div>';
     const pratosRows=pratos.map(p=>`<tr>
       <td><b>${esc(p.item.nome)}</b></td>

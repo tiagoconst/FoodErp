@@ -2291,8 +2291,8 @@ function imprimirMarmitasSobMedida(){
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const blocos=lista.map((m,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="ficha">
     <div class="ficha-cli">${esc(m.cliente)}</div>
-    <div class="ficha-prato">🛠️ ${esc(m.nome)}${m.qtd>1?' ('+m.qtd+'un · medida abaixo é de 1un)':''}</div>
-    <div class="ficha-comp">${m.componentes.map(c=>`<div class="comp-linha"><span>${esc(c.nome.toUpperCase())}</span><b>${qty(Math.round(c.quantidade*100)/100,c.unidade)}</b></div>`).join('')}</div>
+    <div class="ficha-prato">🛠️ ${esc(m.nome)}${m.qtd>1?' ('+m.qtd+'un)':''}</div>
+    <div class="ficha-comp">${m.componentes.map(c=>`<div class="comp-linha"><span class="comp-nome">${esc(c.nome.toUpperCase())}</span><b class="comp-qtd">${qty(Math.round(c.quantidade*100)/100,c.unidade)}</b></div>`).join('')}</div>
   </div>`).join('');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Marmitas Sob Medida</title><style>
     @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
@@ -2303,7 +2303,9 @@ function imprimirMarmitasSobMedida(){
     .ficha{padding:2mm 0}
     .ficha-cli{font-size:10.5px;font-weight:bold;text-transform:uppercase}
     .ficha-prato{font-size:12.5px;font-weight:bold;margin:1mm 0 2mm}
-    .comp-linha{display:flex;justify-content:space-between;font-size:10px;padding:0.8mm 0;border-bottom:1px dotted #999}
+    .comp-linha{font-size:10px;padding:0.8mm 0;border-bottom:1px dotted #999}
+    .comp-nome{display:block}
+    .comp-qtd{display:block;text-align:right}
   </style></head><body>
     <div class="center"><h1>${esc(nomeEmp)}</h1></div>
     <div class="center small">FICHAS · MARMITAS SOB MEDIDA</div><hr>
@@ -2321,7 +2323,7 @@ function enviarMarmitasSobMedidaWhatsapp(){
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   let txt=`*${nomeEmp}*\n🛠️ *FICHAS · MARMITAS SOB MEDIDA*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
   lista.forEach(m=>{
-    txt+=`\n*${m.cliente}*\n${m.nome}${m.qtd>1?' ('+m.qtd+'un · medida abaixo é de 1un)':''}\n`;
+    txt+=`\n*${m.cliente}*\n${m.nome}${m.qtd>1?' ('+m.qtd+'un)':''}\n`;
     m.componentes.forEach(c=>{ txt+=`  • ${c.nome}: ${qty(Math.round(c.quantidade*100)/100,c.unidade)}\n`; });
   });
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');

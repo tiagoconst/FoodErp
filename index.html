@@ -2226,22 +2226,14 @@ function enviarListaComprasWhatsapp(){
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
 function imprimirPlanoProducao(){
-  if(!mrpResultado||!mrpResultado.producoes.length)return toast('Nada a produzir no plano atual.',true);
-  const porNome=(a,b)=>a.item.nome.localeCompare(b.item.nome,'pt');
-  const prePreparos=mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort(porNome);
-  const pratos=mrpResultado.producoes.filter(p=>temFuncao(p.item,'vendavel')).slice().sort(porNome);
+  const prePreparos=mrpResultado?mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt')):[];
+  if(!prePreparos.length)return toast('Nenhum pré-preparo a fazer no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
-  const custoTotal=mrpResultado.producoes.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
+  const custoTotal=prePreparos.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  const grupos={};
-  if(prePreparos.length)grupos['Pré-preparos']=prePreparos;
-  if(pratos.length)grupos['Pratos']=pratos;
-  const blocos=Object.entries(grupos).map(([rot,lista])=>{
-    const linhas=lista.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('');
-    return `<div class="cat">${esc(rot)}</div>${linhas}`;
-  }).join('<hr>');
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Plano de produção</title><style>
+  const blocos=prePreparos.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pré-preparos a fazer</title><style>
     @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .center{text-align:center} h1{font-size:12px;margin:1mm 0}
@@ -2252,7 +2244,7 @@ function imprimirPlanoProducao(){
     .tot{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm;margin-top:2mm;display:flex;justify-content:space-between}
   </style></head><body>
     <div class="center"><h1>${esc(nomeEmp)}</h1></div>
-    <div class="center small">PLANO DE PRODUÇÃO</div><hr>
+    <div class="center small">PRÉ-PREPAROS A FAZER</div><hr>
     <div class="small">Gerada ${dataHoraExtenso}<br>${mrpResultado.pedidos} pedido(s) em aberto</div><hr>
     ${blocos}
     <div class="tot"><span>Custo est.</span><span>${money(custoTotal)}</span></div>
@@ -2262,21 +2254,13 @@ function imprimirPlanoProducao(){
   w.document.write(html); w.document.close();
 }
 function enviarPlanoProducaoWhatsapp(){
-  if(!mrpResultado||!mrpResultado.producoes.length)return toast('Nada a produzir no plano atual.',true);
-  const porNome=(a,b)=>a.item.nome.localeCompare(b.item.nome,'pt');
-  const prePreparos=mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort(porNome);
-  const pratos=mrpResultado.producoes.filter(p=>temFuncao(p.item,'vendavel')).slice().sort(porNome);
+  const prePreparos=mrpResultado?mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt')):[];
+  if(!prePreparos.length)return toast('Nenhum pré-preparo a fazer no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
-  const custoTotal=mrpResultado.producoes.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
-  const grupos={};
-  if(prePreparos.length)grupos['Pré-preparos']=prePreparos;
-  if(pratos.length)grupos['Pratos']=pratos;
-  let txt=`*${nomeEmp}*\n👨‍🍳 *PLANO DE PRODUÇÃO*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
-  Object.entries(grupos).forEach(([rot,lista])=>{
-    txt+=`\n*${rot.toUpperCase()}*\n`;
-    lista.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; });
-  });
+  const custoTotal=prePreparos.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
+  let txt=`*${nomeEmp}*\n👨‍🍳 *PRÉ-PREPAROS A FAZER*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
+  prePreparos.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; });
   txt+=`\n*Custo est.: ${money(custoTotal)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
@@ -2424,7 +2408,6 @@ VIEWS.planejamento=function(){
   if(mrpResultado){
     const R=mrpResultado;
     const prePreparos=R.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
-    const pratos=R.producoes.filter(p=>temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
     const prepRows=prePreparos.map(p=>`<tr>
       <td><b>${esc(p.item.nome)}</b></td>
       <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
@@ -2437,18 +2420,6 @@ VIEWS.planejamento=function(){
         <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
       <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')
       ||'<div class="empty"><b>Nenhum pré-preparo a fazer</b>Estoque cobre a demanda 👍</div>';
-    const pratosRows=pratos.map(p=>`<tr>
-      <td><b>${esc(p.item.nome)}</b></td>
-      <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
-      <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
-      <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')||
-      '<tr><td colspan="4" class="empty">Nada a produzir — estoque cobre a demanda 👍</td></tr>';
-    const pratosCards=pratos.map(p=>`<div class="pln-card">
-      <div class="pln-card-tit">${esc(p.item.nome)}</div>
-      <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
-        <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
-      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')
-      ||'<div class="empty"><b>Nada a produzir</b>Estoque cobre a demanda 👍</div>';
     const categoriasCompras=[...new Set(R.compras.map(c=>c.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
     const comprasFiltradas=R.compras.filter(c=>!filtroCategoriaCompras||c.item.categoria===filtroCategoriaCompras);
     const chipsCompras=categoriasCompras.length?`<div class="cat-chips" style="margin-top:12px;margin-bottom:6px">
@@ -2485,10 +2456,6 @@ VIEWS.planejamento=function(){
         <button class="btn sm" onclick="enviarPlanoProducaoWhatsapp()">💬 WhatsApp</button></div></div>
       <div class="only-desktop"><table><thead><tr><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prepRows}</tbody></table></div>
       <div class="only-mobile card-b">${prepCards}</div></div>
-    <div class="card section-gap"><div class="card-h"><h3>Pratos a produzir</h3>
-        <div><span class="subtle" style="margin-right:10px">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span></div></div>
-      <div class="only-desktop"><table><thead><tr><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${pratosRows}</tbody></table></div>
-      <div class="only-mobile card-b">${pratosCards}</div></div>
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>
         <div><span class="subtle num" style="margin-right:10px">estimado: ${money(custoCompra)}</span>
         <button class="btn sm" onclick="imprimirListaCompras()">🖨 Imprimir</button>

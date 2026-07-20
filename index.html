@@ -515,6 +515,9 @@ function aplicarIdentidade(i){
   document.title=i.nome||'Food ERP';
 }
 const clienteById=id=>S.clientes.find(c=>c.id===id);
+const nomeProprio=s=>{ if(!s)return s;
+  return s.toLowerCase().replace(/(^|[\s'-])([a-zà-öø-ÿ])/g,(m,sep,c)=>sep+c.toUpperCase()); };
+const clientesOrdenados=(lista)=>(lista||S.clientes).slice().sort((a,b)=>nomeProprio(a.nome).localeCompare(nomeProprio(b.nome),'pt'));
 const fornecedorById=id=>S.fornecedores.find(f=>f.id===id);
 const canalById=id=>S.canais.find(c=>c.id===id);
 const funcById=id=>S.funcionarios.find(f=>f.id===id);
@@ -1147,7 +1150,7 @@ VIEWS.pedidos=function(){
     return `<tr style="cursor:pointer" onclick="pedidoDetalheId='${p.id}';nav('pedido-detalhe','pedidos')">
       <td class="mono-id">${p.id}</td>
       <td class="subtle">${dBR(p.data_pedido)}${p.data_entrega?' → '+dBR(p.data_entrega):''}</td>
-      <td><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b></td>
+      <td><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b></td>
       <td class="r num">${nItens} un.</td>
       <td class="r num"><b>${money(p.valor_total)}</b></td>
       <td><span class="tag ${st.tag}">${st.label}</span>${pedidoPago(p)?' 💰':''}</td>
@@ -1169,7 +1172,7 @@ VIEWS.pedidos=function(){
     const cards=g.itens.map(p=>{
       const st=statusInfo(p.status);
       const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id):null;
-      const nomeCli=cli?cli.nome:(p.cliente||'Cliente avulso');
+      const nomeCli=cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso');
       const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
       const resumoItens=(p.itens||[]).slice(0,3).map(l=>l.quantidade+'x '+nomeLinha(l)).join(', ');
       const hora=p.criado_em?new Date(p.criado_em).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):'';
@@ -1217,7 +1220,7 @@ VIEWS['pedido-detalhe']=function(){
     <div class="grid g2" style="align-items:start">
       <div>
         <div class="card"><div class="card-h"><h3>Cliente</h3></div><div class="card-b">
-          <p><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>'+esc(cli.telefone):''}${cli&&cli.endereco?'<br>'+esc(cli.endereco):''}</p></div></div>
+          <p><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>'+esc(cli.telefone):''}${cli&&cli.endereco?'<br>'+esc(cli.endereco):''}</p></div></div>
         ${p.observacao?`<div class="card section-gap"><div class="card-h"><h3>Observação</h3></div><div class="card-b"><p>${esc(p.observacao)}</p></div></div>`:''}
         <div class="card section-gap"><div class="card-h"><h3>Itens</h3></div><div class="card-b" style="padding:0 6px">
           <table><thead><tr><th>Item</th><th class="r">Unitário</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table></div></div>
@@ -1375,7 +1378,7 @@ function abrirConstrutorMarmita(idxEdicao){
   const perfis=S.perfis_marmita||[];
   const opcoesPerfil=perfis.map(p=>{ const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:'—';
     return `<option value="${p.id}">${esc(cli)} · ${esc(p.nome)}</option>`; }).join('');
-  const cliOpts=S.clientes.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
   openModal(`<div class="m-h"><h3>🛠️ Marmita Sob Medida</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     ${perfis.length?`<div class="field"><label>Carregar perfil salvo</label>
@@ -1495,11 +1498,11 @@ function carrinhoHtml(){
     const sub=(parseFloat(l.qtd)||0)*pu;
     return `<div class="cart-line">
       <div class="cl-info"><div class="cl-nome">${esc(it.nome)}</div>
-        <div class="cl-sub num" style="display:flex;align-items:center;gap:5px">R$ <input type="number" step="0.01" min="0" value="${l.preco}" style="width:62px;padding:2px 4px;border:1px solid var(--line);border-radius:5px;font-size:12px" onclick="event.stopPropagation()" oninput="event.stopPropagation();pedLinhas.find(x=>x.item==='${it.id}').preco=this.value;render();this.focus();this.setSelectionRange(99,99)"> un.${comboAtivo?' <span style="color:var(--primary)">→ '+money(pu)+' c/ combo</span>':''}</div></div>
+        <div class="cl-sub num" style="display:flex;align-items:center;gap:5px">R$ <input type="number" step="0.01" min="0" value="${l.preco}" style="width:62px;padding:2px 4px;border:1px solid var(--line);border-radius:5px;font-size:12px" onclick="event.stopPropagation()" onchange="event.stopPropagation();pedLinhas.find(x=>x.item==='${it.id}').preco=this.value;render()"> un.${comboAtivo?' <span style="color:var(--primary)">→ '+money(pu)+' c/ combo</span>':''}</div></div>
       <div class="stepper"><button onclick="vendaSub('${it.id}')">−</button><span class="num" style="min-width:18px;text-align:center;display:inline-block">${l.qtd}</span><button onclick="vendaAdd('${it.id}')">+</button></div>
       <div class="num" style="width:64px;text-align:right;font-weight:700">${money(sub)}</div></div>`;
   }).join('');
-  const cliOpts=S.clientes.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
   const comboLinha=comboAtivo?`<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--primary);margin-top:8px"><span>Combo ${totalUnidades}+ un. (−${money(COMBO_DESCONTO_UN)}/un.)</span><span class="num">−${money(descCombo)}</span></div>`
     :`<div class="subtle" style="font-size:11.5px;margin-top:8px">Faltam ${COMBO_MIN_UN-totalUnidades} un. pro desconto de combo (−${money(COMBO_DESCONTO_UN)}/un. a partir de ${COMBO_MIN_UN}).</div>`;
   return rows+
@@ -1513,7 +1516,7 @@ function carrinhoHtml(){
             <option value="percentual" ${descTipo==='percentual'?'selected':''}>%</option>
           </select></div>
         <div class="field" style="margin-bottom:0"><label>&nbsp;</label>
-          <input type="number" step="any" min="0" id="pd-desc-valor" value="${descValor||''}" placeholder="0" oninput="descValor=this.value;render();this.focus();this.setSelectionRange(99,99)"></div>
+          <input type="number" step="any" min="0" id="pd-desc-valor" value="${descValor||''}" placeholder="0" onchange="descValor=this.value;render()"></div>
       </div>
       ${descManual>0?`<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--primary);margin-top:6px"><span>Desconto adicional</span><span class="num">−${money(descManual)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;font-weight:700;font-size:15px;margin-top:10px"><span>Total</span><span class="num">${money(total)}</span></div>
@@ -1549,7 +1552,7 @@ function modalPedido(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   if(!vendaveis.length)return toast('Cadastre itens com a função Vendável (e preço de venda).',true);
   pedLinhas=[{item:'',qtd:1,preco:''}];
-  const cliOpts=S.clientes.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('');
+  const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
   openModal(`<div class="m-h"><h3>Novo pedido</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     <div class="frow c3">
@@ -1769,7 +1772,7 @@ function imprimirEtiquetas(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   if(!(p.itens||[]).length)return toast('Esse pedido não tem itens.',true);
   const cli=p.cliente_id?clienteById(p.cliente_id):null;
-  const nomeCli=cli?cli.nome:(p.cliente||'');
+  const nomeCli=cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'');
   prepararLogoImpressao(function(logoPB){
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
@@ -1898,7 +1901,7 @@ function modalRecibo(id){
     <p style="margin-bottom:8px"><span class="subtle">Pedido ${p.id} · ${dBR(p.data_pedido)}${p.data_entrega?' → entrega '+dBR(p.data_entrega):''}</span></p>
     <div class="subtle" style="margin-bottom:6px">${(p.itens||[]).length} itens (qtd. ${nItens})</div>
     <table style="width:100%">${linhas}<tr style="font-weight:700;border-top:1px solid var(--line)"><td style="padding-top:8px">TOTAL</td><td class="r num" style="padding-top:8px">${money(p.valor_total)}</td></tr></table>
-    <p style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)"><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?' · '+esc(cli.telefone):''}${cli&&cli.endereco?'<br><span class="subtle">'+esc(cli.endereco)+'</span>':''}</p>
+    <p style="margin-top:14px;padding-top:10px;border-top:1px dashed var(--line)"><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?' · '+esc(cli.telefone):''}${cli&&cli.endereco?'<br><span class="subtle">'+esc(cli.endereco)+'</span>':''}</p>
     ${p.observacao?`<div class="field" style="margin-top:12px"><label>Observação</label><div class="subtle" style="border:1px dashed var(--line);padding:8px;border-radius:8px">${esc(p.observacao)}</div></div>`:''}
   </div>
   <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="imprimirPedido('${id}')">🖨 Imprimir (bobina 54mm)</button></div>`);
@@ -1938,7 +1941,7 @@ function imprimirPedido(id){
     <hr>
     <table><tr class="tot"><td>Total</td><td class="r">${money(p.valor_total)}</td></tr></table>
     <hr>
-    <div><b>${esc(cli?cli.nome:(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>Tel: '+esc(cli.telefone):''}${cli&&cli.endereco?'<br>End: '+esc(cli.endereco):''}</div>
+    <div><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>Tel: '+esc(cli.telefone):''}${cli&&cli.endereco?'<br>End: '+esc(cli.endereco):''}</div>
     ${p.observacao?`<div class="obs"><b>OBS:</b> ${esc(p.observacao)}</div>`:''}
     <hr>
     <div class="center small">${esc(nomeEmp)}${emp.documento?' - '+esc(emp.documento):''}<br>${dataHoraExtenso}</div>
@@ -2271,11 +2274,11 @@ function marmitasSobMedidaAtivas(){
       if(!l.componentes||!l.componentes.length)return;
       const cli=p.cliente_id?clienteById(p.cliente_id):null;
       lista.push({
-        cliente: cli?cli.nome:(p.cliente||'Cliente avulso'),
+        cliente: cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'),
         nome: l.nome_custom||'Marmita personalizada',
         qtd: l.quantidade,
         componentes: l.componentes.map(c=>{ const it=itemById(c.item_id);
-          return {nome:it?it.nome:c.item_id, quantidade:c.quantidade*l.quantidade, unidade:it?it.unidade_base:''}; })
+          return {nome:it?it.nome:c.item_id, quantidade:c.quantidade, unidade:it?it.unidade_base:''}; })
       });
     }));
   return lista;
@@ -2288,7 +2291,7 @@ function imprimirMarmitasSobMedida(){
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const blocos=lista.map((m,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="ficha">
     <div class="ficha-cli">${esc(m.cliente)}</div>
-    <div class="ficha-prato">🛠️ ${esc(m.nome)}${m.qtd>1?' ('+m.qtd+'un)':''}</div>
+    <div class="ficha-prato">🛠️ ${esc(m.nome)}${m.qtd>1?' ('+m.qtd+'un · medida abaixo é de 1un)':''}</div>
     <div class="ficha-comp">${m.componentes.map(c=>`<div class="comp-linha"><span>${esc(c.nome.toUpperCase())}</span><b>${qty(Math.round(c.quantidade*100)/100,c.unidade)}</b></div>`).join('')}</div>
   </div>`).join('');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Marmitas Sob Medida</title><style>
@@ -2318,7 +2321,7 @@ function enviarMarmitasSobMedidaWhatsapp(){
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   let txt=`*${nomeEmp}*\n🛠️ *FICHAS · MARMITAS SOB MEDIDA*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
   lista.forEach(m=>{
-    txt+=`\n*${m.cliente}*\n${m.nome}${m.qtd>1?' ('+m.qtd+'un)':''}\n`;
+    txt+=`\n*${m.cliente}*\n${m.nome}${m.qtd>1?' ('+m.qtd+'un · medida abaixo é de 1un)':''}\n`;
     m.componentes.forEach(c=>{ txt+=`  • ${c.nome}: ${qty(Math.round(c.quantidade*100)/100,c.unidade)}\n`; });
   });
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
@@ -2483,10 +2486,10 @@ VIEWS.planejamento=function(){
 
 /* ================= CLIENTES ================= */
 VIEWS.clientes=function(){
-  const rows=S.clientes.map(c=>{
+  const rows=clientesOrdenados().map(c=>{
     const sc=saldoCliente(c.id);
     return `<tr style="${c.ativo===false?'opacity:.45':''}">
-      <td><b>${esc(c.nome)}</b><div class="mono-id">${esc(c.telefone||'')}${c.endereco?' · '+esc(c.endereco):''}</div></td>
+      <td><b>${esc(nomeProprio(c.nome))}</b><div class="mono-id">${esc(c.telefone||'')}${c.endereco?' · '+esc(c.endereco):''}</div></td>
       <td class="r num ${sc<0?'neg':(sc>0?'pos':'')}"><b>${money(sc)}</b>${sc<0?'<div class="subtle" style="font-weight:400">a pagar</div>':(sc>0?'<div class="subtle" style="font-weight:400">crédito</div>':'')}</td>
       <td class="r">
         <button class="btn sm primary" onclick="modalCreditoCliente('${c.id}')">+ Recebimento</button>
@@ -2939,7 +2942,7 @@ function analisarCarteiraClientes(){
   const porCli={};
   S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega).forEach(p=>{
     const chave=p.cliente_id||p.cliente||'—';
-    const c=porCli[chave]||(porCli[chave]={chave,nome:p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso',datas:[],receita:0});
+    const c=porCli[chave]||(porCli[chave]={chave,nome:nomeProprio(p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso'),datas:[],receita:0});
     c.datas.push(p.data_entrega); c.receita+=p.valor_total||0;
   });
   const lista=Object.values(porCli).map(c=>{
@@ -2994,7 +2997,7 @@ VIEWS.relatorios=function(){
     const dow=(new Date(p.data_entrega+'T12:00:00').getDay()+6)%7; // 0=seg
     porDiaSemana[dow]+=p.valor_total||0;
     const chaveCli=p.cliente_id||p.cliente||'—';
-    const pc=porCliente[chaveCli]||(porCliente[chaveCli]={nome:p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso',qtd:0,receita:0,ultima:''});
+    const pc=porCliente[chaveCli]||(porCliente[chaveCli]={nome:nomeProprio(p.cliente||(clienteById(p.cliente_id)||{}).nome||'Cliente avulso'),qtd:0,receita:0,ultima:''});
     pc.qtd++; pc.receita+=p.valor_total||0; if(p.data_entrega>pc.ultima)pc.ultima=p.data_entrega;
     (p.itens||[]).forEach(l=>{
       const cu=custoLinha(l); custoTotal+=cu*l.quantidade;

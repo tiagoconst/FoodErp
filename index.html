@@ -458,7 +458,7 @@ const MODS=[['dashboard','Dashboard','#5B3A8C'],['itens','Itens','#1F4E79'],['co
   ['clientes','Clientes','#7A3E6B'],['compras','Compras','#7A4A12'],['estoque','Estoque','#5F6B1B'],
   ['producao','Produção','#C05E10'],['pedidos','Pedidos','#1F6FB2'],['financeiro','Financeiro','#9E2B25'],
   ['margens','Margens','#A87718'],['relatorios','Relatórios','#3E5F8A'],['eventos','Eventos','#8C1D3F'],['planejamento','Planejamento','#2F6B7A'],['fornecedores','Fornecedores','#8A6642'],['integracoes','Integrações','#4A5FA5'],['funcionarios','Funcionários','#3D7A6E']];
-const IDENT_PADRAO=Object.assign({nome:'Food ERP',subtitulo:'Dirigido por itens · Eventos',logo_emoji:'🍲',logo_img:null,
+const IDENT_PADRAO=Object.assign({nome:'Food ERP',subtitulo:'Dirigido por itens · Eventos',logo_emoji:'🍲',logo_img:null,foto_padrao:null,
   cor_primaria:'#2E6E4E',cor_acento:'#E0A63C',cor_sidebar:'#20261F',cor_fundo:'#F6F4EE',
   cor_painel:'#FFFFFF',cor_texto:'#22271F',cor_perigo:'#B3372C'},
   Object.fromEntries(MODS.map(m=>['mod_'+m[0],m[2]])));
@@ -745,6 +745,32 @@ async function uploadFotoItem(evt,prefixo){
     status.textContent='Foto enviada ✓';
   }catch(e){ console.error(e); status.textContent='Erro ao enviar: '+(e.message||e); }
   finally{ evt.target.value=''; }
+}
+async function uploadFotoPadrao(evt){
+  const file=evt.target.files&&evt.target.files[0]; if(!file)return;
+  const status=$('#fp-status');
+  if(!sb||!empresa){ status.textContent='Sem conexão com o banco.'; return; }
+  if(file.size>5*1024*1024){ status.textContent='Imagem muito grande (máx. 5MB).'; return; }
+  status.textContent='Enviando…';
+  try{
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const path=`${empresa.empresa_id}/site/${uid('IMG')}.${ext}`;
+    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+    if(upErr)throw upErr;
+    const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
+    const i=Object.assign({id:'identidade',atualizado_em:new Date().toISOString()},getIdent(),{foto_padrao:data.publicUrl});
+    S.config=(S.config||[]).filter(c=>c.id!=='identidade'); S.config.push(i);
+    registrarEvento('ITEM_ATUALIZADO','Foto padrão dos produtos atualizada');
+    scheduleSave();
+    status.textContent='Foto salva ✓'; render();
+  }catch(e){ console.error(e); status.textContent='Erro ao enviar: '+(e.message||e); }
+  finally{ evt.target.value=''; }
+}
+function removerFotoPadrao(){
+  const i=Object.assign({id:'identidade',atualizado_em:new Date().toISOString()},getIdent(),{foto_padrao:null});
+  S.config=(S.config||[]).filter(c=>c.id!=='identidade'); S.config.push(i);
+  registrarEvento('ITEM_ATUALIZADO','Foto padrão dos produtos removida');
+  scheduleSave(); render(); toast('Foto padrão removida.');
 }
 async function uploadImagemAvulsa(evt){
   const file=evt.target.files&&evt.target.files[0]; if(!file)return;
@@ -3416,6 +3442,18 @@ VIEWS.dados=function(){
       </div>
       <p class="subtle" style="margin-top:10px">A prévia é aplicada enquanto você edita — mas só vale de forma permanente após salvar.</p>
     </div></div>`;
+  const idn2=getIdent();
+  const fotoPadraoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🍽️ Foto padrão dos produtos</h3>
+      <span class="tag mut">usada no site de pedidos quando um produto não tem foto própria</span></div>
+    <div class="card-b">
+      <p class="subtle" style="margin-bottom:12px">Envie uma imagem genérica (ex.: logo em fundo colorido, ou uma foto ilustrativa da marmita). Todo produto vendável sem foto própria passa a usar essa imagem no site, em vez do círculo colorido com emoji.</p>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <input type="file" id="fp-file" accept="image/png,image/jpeg,image/webp" onchange="uploadFotoPadrao(event)">
+        <img id="fp-preview" src="${esc(idn2.foto_padrao||'')}" style="width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--soft);display:${idn2.foto_padrao?'block':'none'}">
+        <span id="fp-status" class="hint"></span>
+        ${idn2.foto_padrao?'<button class="btn sm" onclick="removerFotoPadrao()">Remover</button>':''}
+      </div>
+    </div></div>`;
   const imgAvulsaCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🖼️ Central de imagens</h3>
       <span class="tag mut">pra banners, botões e outras imagens avulsas do site de pedidos</span></div>
     <div class="card-b">
@@ -3434,7 +3472,7 @@ VIEWS.dados=function(){
       </div>
     </div></div>`;
   return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
-  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${imgAvulsaCard}
+  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${imgAvulsaCard}
     <div class="card"><div class="card-h"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
       <button class="btn primary" onclick="exportarJSON()">⬇ Exportar backup (JSON)</button></div></div>

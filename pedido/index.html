@@ -201,14 +201,17 @@ function atualizarBarra(){
 
 /* ===== Cardápio ===== */
 let destaques=[];
+let FOTO_PADRAO='';
 async function carregarCardapio(){
-  const [cardRes,destRes]=await Promise.all([
+  const [cardRes,destRes,identRes]=await Promise.all([
     sb.rpc('erp_cardapio_publico',{p_empresa_id:EMPRESA_ID}),
-    sb.rpc('erp_mais_vendidos_publico',{p_empresa_id:EMPRESA_ID,p_limite:5})
+    sb.rpc('erp_mais_vendidos_publico',{p_empresa_id:EMPRESA_ID,p_limite:5}),
+    sb.rpc('erp_identidade_publica',{p_empresa_id:EMPRESA_ID})
   ]);
   if(cardRes.error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
   cardapio=cardRes.data||[];
   destaques=cardRes.error?[]:(destRes.data||[]);
+  FOTO_PADRAO=(identRes&&identRes.data&&identRes.data.foto_padrao)||'';
   renderCardapio();
   atualizarBarra();
 }
@@ -238,8 +241,9 @@ let _cardBgCounter=0;
 function cardHtml(i){
   const q=carrinho[i.id]||0;
   const bg=THUMB_BG[_cardBgCounter++ % THUMB_BG.length];
+  const foto=i.foto_url||FOTO_PADRAO;
   return `<div class="card">
-    ${i.foto_url?`<img src="${esc(i.foto_url)}" alt="">`:`<div class="thumb-fallback" style="background:${bg}">${emojiPrato(i.nome,i.categoria)}</div>`}
+    ${foto?`<img src="${esc(foto)}" alt="">`:`<div class="thumb-fallback" style="background:${bg}">${emojiPrato(i.nome,i.categoria)}</div>`}
     <div class="card-body">
       <div class="card-info">
         <b>${esc(i.nome)}</b>

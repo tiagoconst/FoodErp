@@ -727,9 +727,10 @@ function modalItem(id){
   <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarItem('${id||''}')">Salvar item</button></div>`);
   setTimeout(()=>$('#it-nome').focus(),50);
 }
-async function uploadFotoItem(evt){
+async function uploadFotoItem(evt,prefixo){
+  prefixo=prefixo||'it';
   const file=evt.target.files&&evt.target.files[0]; if(!file)return;
-  const status=$('#it-foto-status');
+  const status=$('#'+prefixo+'-foto-status');
   if(!sb||!empresa){ status.textContent='Sem conexão com o banco.'; return; }
   if(file.size>5*1024*1024){ status.textContent='Foto muito grande (máx. 5MB).'; return; }
   status.textContent='Enviando…';
@@ -739,8 +740,8 @@ async function uploadFotoItem(evt){
     const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
     if(upErr)throw upErr;
     const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
-    $('#it-foto').value=data.publicUrl;
-    const prev=$('#it-foto-preview'); prev.src=data.publicUrl; prev.style.display='block';
+    $('#'+prefixo+'-foto').value=data.publicUrl;
+    const prev=$('#'+prefixo+'-foto-preview'); prev.src=data.publicUrl; prev.style.display='block';
     status.textContent='Foto enviada ✓';
   }catch(e){ console.error(e); status.textContent='Erro ao enviar: '+(e.message||e); }
   finally{ evt.target.value=''; }
@@ -840,6 +841,18 @@ function modalComposicao(paiId,tipo){
     ${compTipo==='produto'?`<div class="frow c2">
       <div class="field"><label>Preço de venda (R$)</label><input id="cp-preco" type="number" step="0.01" min="0" value="${pai&&pai.preco_venda?pai.preco_venda:''}" placeholder="ex.: 22.00"></div>
       <div class="field"><label>Unidades equivalentes</label><input id="cp-unideq" type="number" step="any" min="0" value="${pai&&pai.unidades_equivalentes?pai.unidades_equivalentes:1}"><span class="hint">pra rateio de custo fixo — ex.: combo de 5 marmitas = 5</span></div>
+    </div>
+    <div class="field">
+      <label>Foto (aparece no site de pedidos)</label>
+      <input type="hidden" id="cp-foto" value="${esc(pai&&pai.foto_url?pai.foto_url:'')}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img id="cp-foto-preview" src="${esc(pai&&pai.foto_url?pai.foto_url:'')}" style="width:64px;height:64px;border-radius:9px;object-fit:cover;background:var(--soft,#eee);display:${pai&&pai.foto_url?'block':'none'}">
+        <div>
+          <input type="file" id="cp-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadFotoItem(event,'cp')">
+          <button type="button" class="btn sm" onclick="$('#cp-foto-file').click()">📷 Enviar foto</button>
+          <span id="cp-foto-status" class="hint" style="margin-left:6px"></span>
+        </div>
+      </div>
     </div>`:''}
     <div class="field"><label>Componentes (quantidade na unidade-base do componente)</label>
       <div class="lines" id="cp-lines"></div>
@@ -867,7 +880,7 @@ function salvarComposicao(paiId){
   validas.forEach(l=>{ const f=itemById(l.item);
     S.composicoes.push({id:uid('CMP'),item_pai_id:pai,item_filho_id:l.item,quantidade:parseFloat(l.qtd),
       unidade:f?f.unidade_base:'un',perda_percentual:parseFloat(l.perda)||0,rendimento:rend,ativo:true,criado_em:new Date().toISOString()}); });
-  if(compTipo==='produto'){ const p=itemById(pai); if(p){ p.preco_venda=parseFloat($('#cp-preco').value)||null; p.unidades_equivalentes=parseFloat($('#cp-unideq').value)||1; } }
+  if(compTipo==='produto'){ const p=itemById(pai); if(p){ p.preco_venda=parseFloat($('#cp-preco').value)||null; p.unidades_equivalentes=parseFloat($('#cp-unideq').value)||1; p.foto_url=$('#cp-foto').value.trim()||null; } }
   registrarEvento('COMPOSICAO_DEFINIDA',`${nomeItem(pai)}: ${validas.length} componentes definidos`,pai);
   closeModal(); scheduleSave(); render(); toast(compTipo==='produto'?'Produto salvo.':'Composição salva.');
 }

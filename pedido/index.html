@@ -75,8 +75,9 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .card .thumb-fallback{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:40px;border-radius:var(--radius) var(--radius) 0 0}
 .info-badge{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.4);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.75);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:400;font-family:Georgia,serif;font-style:italic;cursor:pointer;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 1px 4px rgba(0,0,0,.15);z-index:3;user-select:none;transition:background .15s}
 .info-badge:hover,.info-badge.open{background:rgba(255,255,255,.6)}
-.info-pop{display:none;position:absolute;top:25px;right:0;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);border-radius:10px;box-shadow:0 8px 24px rgba(62,46,32,.16);padding:10px 13px;width:180px;z-index:6;text-align:left;cursor:default}
-.info-badge:hover .info-pop,.info-badge.open .info-pop,.info-badge:focus .info-pop{display:block}
+.info-pop{display:none;position:absolute;top:25px;right:0;max-width:calc(100vw - 32px);background:rgba(255,255,255,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);border-radius:10px;box-shadow:0 8px 24px rgba(62,46,32,.16);padding:10px 13px;width:180px;z-index:6;text-align:left;cursor:default}
+.info-badge.open .info-pop{display:block}
+@media(hover:hover)and(pointer:fine){ .info-badge:hover .info-pop{display:block} }
 .info-pop b{display:block;font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;font-family:var(--font-menu)}
 .info-pop ul{list-style:none;display:flex;flex-direction:column;gap:5px}
 .info-pop li{font-size:12px;font-weight:300;color:var(--ink);display:flex;justify-content:space-between;gap:10px;line-height:1.3;letter-spacing:.01em}
@@ -236,9 +237,34 @@ function composicaoHtml(id){
   const comp=COMPOSICOES[id];
   if(!comp||!comp.length)return '';
   const linhas=comp.map(c=>`<li>${esc(c.nome)}<span class="q">${fmtQtdComposicao(c.quantidade,c.unidade)}</span></li>`).join('');
-  return `<span class="info-badge" tabindex="0" onclick="event.stopPropagation();this.classList.toggle('open')">i<div class="info-pop"><b>Composição</b><ul>${linhas}</ul></div></span>`;
+  return `<span class="info-badge" tabindex="0" onclick="if(event.target.closest('.info-pop'))return;event.stopPropagation();toggleInfo(this)">i<div class="info-pop"><b>Composição</b><ul>${linhas}</ul></div></span>`;
 }
-document.addEventListener('click',()=>{ document.querySelectorAll('.info-badge.open').forEach(b=>b.classList.remove('open')); });
+function fecharInfoAbertos(exceto){
+  document.querySelectorAll('.info-badge.open').forEach(b=>{
+    if(b===exceto)return;
+    b.classList.remove('open');
+    const p=b.querySelector('.info-pop'); if(p)p.style.transform='';
+  });
+}
+function toggleInfo(badge){
+  const abrir=!badge.classList.contains('open');
+  fecharInfoAbertos(abrir?badge:null);
+  badge.classList.toggle('open',abrir);
+  const pop=badge.querySelector('.info-pop');
+  if(pop)pop.style.transform='';
+  if(abrir&&pop){
+    requestAnimationFrame(()=>{
+      const r=pop.getBoundingClientRect();
+      const margem=10;
+      let dx=0;
+      if(r.left<margem)dx=margem-r.left;
+      else if(r.right>window.innerWidth-margem)dx=(window.innerWidth-margem)-r.right;
+      if(dx)pop.style.transform='translateX('+Math.round(dx)+'px)';
+    });
+  }
+}
+document.addEventListener('click',()=>fecharInfoAbertos(null));
+window.addEventListener('scroll',()=>fecharInfoAbertos(null),{passive:true});
 function slug(s){ return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
 /* deixa "GOURMET / ESPECIAIS" -> "Gourmet / Especiais", etc. */
 function capitalizar(s){ return String(s).split(' ').map(w=>w?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w).join(' '); }

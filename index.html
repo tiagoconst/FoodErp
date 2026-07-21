@@ -369,6 +369,11 @@ async function persist(){
   try{ localStorage.setItem(STORE_KEY,data); }catch(e){}
 }
 function scheduleSave(){ clearTimeout(saveTimer); saveTimer=setTimeout(persist,400); }
+async function proximoNumeroPedido(){ // numeração sequencial por empresa, gerada no banco (evita duplicar/pular mesmo com criação simultânea)
+  if(!sb||!empresa)return null; // modo local/demo sem nuvem: fica sem número, só com o id técnico
+  try{ const {data,error}=await sb.rpc('erp_proximo_numero_pedido',{p_empresa_id:empresa.empresa_id}); if(error)throw error; return data; }
+  catch(e){ return null; }
+}
 async function loadState(){
   let raw=null;
   try{ if(window.storage){ const r=await window.storage.get(STORE_KEY); if(r&&r.value) raw=r.value; } }catch(e){}
@@ -1141,7 +1146,7 @@ VIEWS.pedidos=function(){
     pedidosFiltrados=pedidosFiltrados.filter(p=>{
       const cli=(p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:p.cliente)||'';
       const itensTxt=(p.itens||[]).map(l=>nomeLinha(l)).join(' ');
-      return p.id.toLowerCase().includes(q)||cli.toLowerCase().includes(q)||itensTxt.toLowerCase().includes(q);
+      return p.id.toLowerCase().includes(q)||(p.numero&&String(p.numero).includes(q))||cli.toLowerCase().includes(q)||itensTxt.toLowerCase().includes(q);
     });
   }
   const ORDEM_STATUS=Object.keys(STATUS_PED); // pedido→...→finalizado→cancelado, na ordem certa do fluxo
@@ -1157,7 +1162,7 @@ VIEWS.pedidos=function(){
     const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id):null;
     const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
     return `<tr style="cursor:pointer" onclick="pedidoDetalheId='${p.id}';nav('pedido-detalhe','pedidos')">
-      <td class="mono-id">${p.id}</td>
+      <td><b>${p.numero?'#'+p.numero:'—'}</b><div class="mono-id">${p.id}</div></td>
       <td class="subtle">${dBR(p.data_pedido)}${p.data_entrega?' → '+dBR(p.data_entrega):''}</td>
       <td><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b></td>
       <td class="r num">${nItens} un.</td>
@@ -1188,7 +1193,7 @@ VIEWS.pedidos=function(){
       return `<div class="ped-card" onclick="pedidoDetalheId='${p.id}';nav('pedido-detalhe','pedidos')">
         <div class="ped-card-top"><span class="tag ${st.tag}">${st.label}</span><b class="num">${money(p.valor_total)}</b>${hora?`<span class="subtle">${hora}</span>`:''}</div>
         <div class="ped-card-mid subtle">${nItens} itens: ${esc(resumoItens)}${(p.itens||[]).length>3?'…':''}</div>
-        <div class="ped-card-bot"><b>${esc(nomeCli)}</b><span class="mono-id">${p.id}</span>${pedidoPago(p)?' 💰':''}</div>
+        <div class="ped-card-bot"><b>${esc(nomeCli)}</b><span class="mono-id">${p.numero?'#'+p.numero+' · ':''}${p.id}</span>${pedidoPago(p)?' 💰':''}</div>
       </div>`;
     }).join('');
     return `<div class="ped-day"><div class="ped-day-h">${dBR(g.data)}</div><div class="ped-day-sub subtle">${g.itens.length} pedido(s) · ${money(totalDia)}</div>${cards}</div>`;
@@ -1205,7 +1210,7 @@ VIEWS.pedidos=function(){
   `<input class="search" style="width:100%;margin-top:16px" placeholder="Item, cliente ou código" value="${esc(filtroBuscaPedido)}" oninput="filtroBuscaPedido=this.value;render();this.focus();this.setSelectionRange(99,99)">
   <div class="only-mobile" style="margin-top:12px">${statusSelectMobile}</div>
   <div class="only-desktop"><div class="cat-chips">${statusChips}</div>
-    <div class="card"><table><thead><tr><th>Código</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="card"><table><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>
   </div>
   <div class="only-mobile ped-total-bar"><b>Total em pedidos</b><span class="num">${money(totalGeral)} em ${pedidosFiltrados.length} pedido(s)</span></div>
   <div class="only-mobile">${mobileHtml}</div>`;
@@ -1224,7 +1229,7 @@ VIEWS['pedido-detalhe']=function(){
   const historicoHtml=historico.map(e=>`<div class="ev"><span class="ev-dot" style="background:${EVENTO_CORES[e.tipo]||'#999'}"></span><div><b>${e.tipo.replaceAll('_',' ')}</b> — ${esc(e.descricao)}<div class="ev-t">${dtBR(e.data)}</div></div></div>`).join('')||'<div class="empty">Sem histórico ainda.</div>';
   const opcoesStatus=statusDisponiveis().map(s=>`<option value="${s.id}" ${p.status===s.id?'selected':''}>${esc(s.nome)}</option>`).join('');
   const jaPago=pedidoPago(p);
-  return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Pedido ${p.id}</h1></div>
+  return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Pedido ${p.numero?'#'+p.numero:p.id} ${p.numero?`<span class="mono-id" style="font-size:13px;font-weight:400">${p.id}</span>`:''}</h1></div>
     <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button><button class="btn" onclick="imprimirEtiquetas('${p.id}')">🏷️ Etiquetas</button><button class="btn primary" onclick="modalCompartilharPedido('${p.id}')">📤 Compartilhar</button></div></div>
     <div class="grid g2" style="align-items:start">
       <div>
@@ -1539,18 +1544,19 @@ function carrinhoHtml(){
     </div>
     <button class="btn primary" style="width:100%" onclick="salvarPedidoVenda()">Ir para pagamento</button>`;
 }
-function salvarPedidoVenda(){
+async function salvarPedidoVenda(){
   const {linhas,comboAtivo,bruto,descCombo,descManual,total}=totaisCarrinho();
   const validas=linhas.filter(l=>l.item&&parseFloat(l.qtd)>0);
   if(!validas.length)return toast('Adicione ao menos um item.',true);
   const id=uid('PED');
+  const numero=await proximoNumeroPedido();
   const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
   const itens=validas.map(l=>l.custom
     ? {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0),nome_custom:l.nomeCustom,componentes:l.componentes,cmv_unitario:l.cmv}
     : {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)});
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
-  S.pedidos.push({id,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
+  S.pedidos.push({id,numero,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
     status:'pedido',itens,valor_bruto:bruto,desconto_combo:descCombo,desconto_manual:descManual,valor_total:total,
     observacao:$('#pd-obs').value.trim(),recebido:false,faturamento:null,criado_em:new Date().toISOString()});
   registrarEvento('PEDIDO_CONFIRMADO',`Pedido de ${nome||'cliente'} · ${itens.length} itens · ${money(total)} registrado`,id);
@@ -1592,15 +1598,16 @@ function drawPedLines(){
 }
 function pedTotal(){ const t=pedLinhas.reduce((a,l)=>a+(parseFloat(l.qtd)||0)*(parseFloat(l.preco)||0),0);
   const el=$('#pd-total'); if(el)el.textContent='Total do pedido: '+money(t); }
-function salvarPedido(){
+async function salvarPedido(){
   const validas=pedLinhas.filter(l=>l.item&&parseFloat(l.qtd)>0&&parseFloat(l.preco)>=0);
   if(!validas.length)return toast('Adicione ao menos um item.',true);
   const id=uid('PED');
+  const numero=await proximoNumeroPedido();
   const itens=validas.map(l=>({item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:parseFloat(l.preco)}));
   const total=itens.reduce((a,l)=>a+l.quantidade*l.preco_unitario,0);
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
-  S.pedidos.push({id,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
+  S.pedidos.push({id,numero,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
     status:'pedido',itens,valor_total:total,observacao:$('#pd-obs').value.trim(),recebido:false,faturamento:null,criado_em:new Date().toISOString()});
   registrarEvento('PEDIDO_CONFIRMADO',`Pedido de ${nome||'cliente'} · ${itens.length} itens · ${money(total)} registrado`,id);
   closeModal(); scheduleSave(); render(); toast('Pedido registrado. Confirme para reservar o estoque.');

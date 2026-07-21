@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sabores da Ana — Faça seu pedido</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#F6F4EE; --panel:#FFFFFF; --ink:#22271F; --muted:#6F7568; --line:#E4E1D6; --soft:#EFEDE4;
+  --primary:#2E6E4E; --primary-dark:#20523A; --accent:#E0A63C; --danger:#B3372C;
+  --radius:12px; --shadow:0 1px 2px rgba(30,35,25,.06),0 4px 14px rgba(30,35,25,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{max-width:100vw;overflow-x:hidden}
+body{background:var(--bg);color:var(--ink);font-family:Inter,Arial,sans-serif;padding-bottom:90px}
+h1,h2,h3,.brand{font-family:Archivo,Arial,sans-serif}
+.top{background:var(--primary);color:#fff;padding:22px 16px 26px;text-align:center}
+.top .brand{font-size:22px;font-weight:800;letter-spacing:.01em}
+.top .sub{font-size:13px;opacity:.9;margin-top:4px}
+.wrap{max-width:560px;margin:0 auto;padding:0 14px}
+.cat-h{font-family:Archivo;font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);margin:22px 0 10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+.card img{width:64px;height:64px;border-radius:9px;object-fit:cover;flex:none;background:var(--soft)}
+.card-info{flex:1;min-width:0}
+.card-info b{font-size:15px;display:block}
+.card-info .desc{font-size:12.5px;color:var(--muted);margin-top:2px;display:block}
+.card-info .preco{font-weight:700;color:var(--primary-dark);margin-top:6px;font-size:14.5px}
+.stepper{display:flex;align-items:center;gap:8px;flex:none}
+.stepper button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--soft);font-size:16px;font-weight:700;cursor:pointer;color:var(--ink)}
+.stepper button.add{background:var(--primary);color:#fff;border-color:var(--primary)}
+.stepper span{min-width:18px;text-align:center;font-weight:700}
+.empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+.loading{text-align:center;color:var(--muted);padding:40px 20px}
+.cartbar{position:fixed;left:0;right:0;bottom:0;background:var(--primary-dark);color:#fff;padding:13px 16px;display:none;align-items:center;justify-content:space-between;box-shadow:0 -4px 14px rgba(0,0,0,.15);z-index:20}
+.cartbar.show{display:flex}
+.cartbar b{font-size:15px}
+.cartbar .cnt{background:var(--accent);color:#3A2B08;border-radius:20px;padding:2px 9px;font-size:12px;font-weight:700;margin-right:8px}
+.cartbar button{background:#fff;color:var(--primary-dark);border:none;border-radius:8px;padding:9px 16px;font-weight:700;font-size:14px;cursor:pointer}
+.overlay{position:fixed;inset:0;background:rgba(20,24,17,.5);display:none;align-items:flex-end;justify-content:center;z-index:30}
+.overlay.open{display:flex}
+.sheet{background:var(--panel);width:100%;max-width:560px;border-radius:16px 16px 0 0;max-height:88vh;overflow:auto;padding:18px}
+.sheet-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sheet-h h3{font-size:18px}
+.sheet-h .x{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)}
+.line{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed var(--line)}
+.line .nome{font-size:14px;flex:1}
+.line .sub{color:var(--muted);font-size:12px}
+.tot{display:flex;justify-content:space-between;font-weight:800;font-size:17px;margin-top:14px;padding-top:12px;border-top:2px solid var(--line)}
+.field{margin-top:12px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.field input,.field textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:9px;font-size:15px;font-family:inherit;background:var(--soft)}
+.field textarea{resize:vertical;min-height:60px}
+.btn{width:100%;padding:13px;border-radius:10px;border:none;background:var(--primary);color:#fff;font-weight:700;font-size:15px;margin-top:16px;cursor:pointer}
+.btn:disabled{opacity:.55;cursor:default}
+.err{color:var(--danger);font-size:13px;margin-top:8px}
+.ok-screen{text-align:center;padding:50px 16px}
+.ok-screen .em{font-size:44px}
+.ok-screen h2{margin:14px 0 6px}
+.ok-screen p{color:var(--muted);font-size:14px;line-height:1.5}
+.ok-screen .pid{font-family:monospace;background:var(--soft);padding:6px 10px;border-radius:8px;display:inline-block;margin-top:10px;font-size:13px}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="brand" id="loja-nome">Carregando…</div>
+  <div class="sub">Monte seu pedido — combinamos o pagamento na entrega/retirada</div>
+</div>
+
+<div class="wrap" id="cardapio"><div class="loading">Carregando cardápio…</div></div>
+
+<div class="cartbar" id="cartbar">
+  <div><span class="cnt" id="cart-cnt">0</span><b id="cart-tot">R$ 0,00</b></div>
+  <button onclick="abrirCarrinho()">Ver pedido</button>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+'use strict';
+/* ===== Configuração desta loja ===== */
+const SUPABASE_URL='https://jaytdbwaoduefrbragsw.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY';
+const EMPRESA_ID='dd8275c9-e88f-4633-bfd0-bfa262eaf857';
+const LOJA_NOME='Sabores da Ana';
+
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const $=s=>document.querySelector(s);
+const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+document.title=LOJA_NOME+' — Faça seu pedido';
+$('#loja-nome').textContent=LOJA_NOME;
+
+/* ===== Carrinho (persistido no navegador do cliente) ===== */
+const CART_KEY='pedido_carrinho_v1';
+const SESSAO_KEY='pedido_sessao_v1';
+let carrinho=JSON.parse(localStorage.getItem(CART_KEY)||'{}'); // {item_id: qtd}
+let cardapio=[];
+
+function idSessao(){
+  let id=localStorage.getItem(SESSAO_KEY);
+  if(!id){ id=(crypto.randomUUID?crypto.randomUUID():'sess-'+Date.now()+'-'+Math.random().toString(36).slice(2)); localStorage.setItem(SESSAO_KEY,id); }
+  return id;
+}
+function salvarCarrinho(){ localStorage.setItem(CART_KEY,JSON.stringify(carrinho)); atualizarBarra(); }
+function itemPorId(id){ return cardapio.find(i=>i.id===id); }
+function totalCarrinho(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
+function qtdCarrinho(){ return Object.values(carrinho).reduce((a,q)=>a+q,0); }
+function alterarQtd(id,delta){
+  const atual=carrinho[id]||0; const nova=Math.max(0,atual+delta);
+  if(nova<=0)delete carrinho[id]; else carrinho[id]=nova;
+  salvarCarrinho(); renderCardapio(); if($('#overlay').classList.contains('open'))renderCarrinho();
+}
+function atualizarBarra(){
+  const n=qtdCarrinho();
+  $('#cartbar').classList.toggle('show',n>0);
+  $('#cart-cnt').textContent=n;
+  $('#cart-tot').textContent=money(totalCarrinho());
+}
+
+/* ===== Cardápio ===== */
+async function carregarCardapio(){
+  const {data,error}=await sb.rpc('erp_cardapio_publico',{p_empresa_id:EMPRESA_ID});
+  if(error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
+  cardapio=data||[];
+  renderCardapio();
+  atualizarBarra();
+}
+function renderCardapio(){
+  if(!cardapio.length){ $('#cardapio').innerHTML='<div class="empty">Nenhum item disponível no momento.</div>'; return; }
+  const porCategoria={};
+  cardapio.forEach(i=>{ (porCategoria[i.categoria]=porCategoria[i.categoria]||[]).push(i); });
+  const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
+  $('#cardapio').innerHTML=categorias.map(cat=>{
+    const itens=porCategoria[cat].map(i=>{
+      const q=carrinho[i.id]||0;
+      return `<div class="card">
+        ${i.foto_url?`<img src="${esc(i.foto_url)}" alt="">`:''}
+        <div class="card-info">
+          <b>${esc(i.nome)}</b>
+          ${i.descricao?`<span class="desc">${esc(i.descricao)}</span>`:''}
+          <span class="preco">${money(i.preco_venda)}</span>
+        </div>
+        <div class="stepper">
+          ${q>0?`<button onclick="alterarQtd('${i.id}',-1)">−</button><span>${q}</span>`:''}
+          <button class="add" onclick="alterarQtd('${i.id}',1)">+</button>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="cat-h">${esc(cat)}</div>${itens}`;
+  }).join('');
+}
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ===== Carrinho / checkout ===== */
+function abrirCarrinho(){ renderCarrinho(); $('#overlay').classList.add('open'); }
+function fecharCarrinho(){ $('#overlay').classList.remove('open'); }
+function renderCarrinho(){
+  const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
+  if(!ids.length){ fecharCarrinho(); return; }
+  const linhas=ids.map(id=>{
+    const it=itemPorId(id); if(!it)return'';
+    return `<div class="line">
+      <div><div class="nome">${esc(it.nome)}</div><div class="sub">${money(it.preco_venda)} un.</div></div>
+      <div class="stepper"><button onclick="alterarQtd('${id}',-1)">−</button><span>${carrinho[id]}</span><button class="add" onclick="alterarQtd('${id}',1)">+</button></div>
+    </div>`;
+  }).join('');
+  $('#sheet').innerHTML=`<div class="sheet-h"><h3>Seu pedido</h3><button class="x" onclick="fecharCarrinho()">✕</button></div>
+    ${linhas}
+    <div class="tot"><span>Total</span><span>${money(totalCarrinho())}</span></div>
+    <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva"></div>
+    <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000"></div>
+    <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h"></textarea></div>
+    <div id="ck-err" class="err" style="display:none"></div>
+    <button class="btn" id="ck-btn" onclick="enviarPedido()">Confirmar pedido</button>`;
+}
+async function enviarPedido(){
+  const nome=$('#ck-nome').value.trim();
+  const tel=$('#ck-tel').value.trim();
+  const err=$('#ck-err');
+  err.style.display='none';
+  if(!nome||!tel){ err.textContent='Preencha nome e telefone para continuar.'; err.style.display='block'; return; }
+  const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
+  if(!ids.length)return;
+  const btn=$('#ck-btn'); btn.disabled=true; btn.textContent='Enviando…';
+  const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}));
+  const {data,error}=await sb.rpc('erp_criar_pedido_publico',{
+    p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
+    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao()
+  });
+  if(error){
+    btn.disabled=false; btn.textContent='Confirmar pedido';
+    err.textContent=error.message.includes('indisponível')?'Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.':'Não foi possível enviar seu pedido agora. Tente novamente em instantes.';
+    err.style.display='block';
+    return;
+  }
+  carrinho={}; localStorage.removeItem(CART_KEY); localStorage.removeItem(SESSAO_KEY);
+  telaSucesso(data);
+}
+function telaSucesso(data){
+  fecharCarrinho();
+  $('#cardapio').innerHTML=`<div class="ok-screen">
+    <div class="em">✅</div>
+    <h2>Pedido enviado!</h2>
+    <p>Recebemos seu pedido e em breve entraremos em contato para confirmar.<br>Valor total: <b>${money(data.valor_total)}</b></p>
+    <div class="pid">Pedido ${esc(data.pedido_id)}</div>
+    <div style="margin-top:26px"><button class="btn" onclick="location.reload()">Fazer novo pedido</button></div>
+  </div>`;
+  atualizarBarra();
+}
+
+carregarCardapio();
+</script>
+</body>
+</html>

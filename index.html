@@ -693,7 +693,8 @@ function modalItem(id){
   const it=id?itemById(id):null;
   const checks=FUNCOES.map(f=>{
     const on=it&&temFuncao(it,f.id);
-    return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
+    const extra=f.id==='vendavel'?";const w=document.getElementById('it-foto-wrap');if(w)w.style.display=this.checked?'block':'none'":'';
+    return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)${extra}"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
   }).join('');
   const catOpts=S.categorias.filter(c=>c.ativo!==false||(it&&it.categoria===c.nome)).map(c=>`<option value="${esc(c.nome)}" ${it&&it.categoria===c.nome?'selected':''}>${esc(c.nome)}</option>`).join('');
   const fotoAtual=it&&it.foto_url?it.foto_url:'';
@@ -710,8 +711,8 @@ function modalItem(id){
     </div>
     <div class="field"><label>Funções — um item pode ter uma ou várias simultaneamente</label><div class="check-grid">${checks}</div></div>
     <div class="field"><label>Observação</label><textarea id="it-obs" rows="2">${it?esc(it.observacao||''):''}</textarea></div>
-    <div class="field">
-      <label>Foto (aparece no site de pedidos)</label>
+    <div class="field" id="it-foto-wrap" style="display:${it&&temFuncao(it,'vendavel')?'block':'none'}">
+      <label>Foto (aparece no site de pedidos — só faz sentido pra item marcado como "vendável")</label>
       <input type="hidden" id="it-foto" value="${esc(fotoAtual)}">
       <div style="display:flex;align-items:center;gap:12px">
         <img id="it-foto-preview" src="${esc(fotoAtual)}" style="width:64px;height:64px;border-radius:9px;object-fit:cover;background:var(--soft,#eee);display:${fotoAtual?'block':'none'}">

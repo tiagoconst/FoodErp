@@ -35,17 +35,41 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .navbar .cart-btn .cart-badge{position:absolute;top:-4px;left:20px;background:var(--primary-dark);color:#fff;border-radius:999px;min-width:16px;height:16px;padding:0 4px;font-size:10px;line-height:16px;text-align:center;font-weight:700;display:none}
 .hero{height:150px;margin-top:16px;overflow:hidden}
 .hero img{width:100%;height:100%;object-fit:cover;display:block}
-.catnav{position:sticky;top:0;z-index:15;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;white-space:nowrap;padding:14px 14px 10px;display:flex;justify-content:center;gap:8px;scrollbar-width:none}
+.catnav{position:sticky;top:0;z-index:15;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x;white-space:nowrap;padding:14px 14px 10px;display:flex;justify-content:center;gap:8px;scrollbar-width:none}
 .catnav::-webkit-scrollbar{display:none}
-.catpill{flex:none;padding:8px 16px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--ink);font-family:var(--font-menu);font-size:13px;font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.catpill{flex:none;padding:8px 16px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--ink);font-family:var(--font-menu);font-size:13px;font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .catpill.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 .wrap{max-width:1280px;margin:0 auto;padding:0 24px}
-.cat-h{font-family:var(--font-script);font-weight:400;font-size:36px;color:var(--primary-dark);margin:28px 0 12px;scroll-margin-top:60px;text-align:left}
-.destaque-h{font-family:var(--font-script);font-weight:400;font-size:42px;color:var(--primary-dark);margin:8px 0 14px;text-align:left;scroll-margin-top:60px}
+.cat-h{font-family:var(--font-script);font-weight:400;font-size:36px;color:var(--primary-dark);margin:28px 0 12px;scroll-margin-top:calc(var(--catnav-h,60px) + 10px);text-align:left}
+.destaque-h{font-family:var(--font-script);font-weight:400;font-size:42px;color:var(--primary-dark);margin:8px 0 14px;text-align:left;scroll-margin-top:calc(var(--catnav-h,60px) + 10px)}
 .grid-itens{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
-@media(min-width:560px){.grid-itens{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:380px){.grid-itens{grid-template-columns:repeat(3,1fr);gap:10px}}
+@media(min-width:560px){.grid-itens{grid-template-columns:repeat(3,1fr);gap:16px}}
 @media(min-width:820px){.grid-itens{grid-template-columns:repeat(4,1fr)}}
 @media(min-width:1080px){.grid-itens{grid-template-columns:repeat(5,1fr)}}
+@media(max-width:379px){
+  .card-info b{font-size:12.5px}
+  .card-info .desc{display:none}
+  .card-info .preco{font-size:13px}
+  .btn-add{font-size:11.5px;padding:6px}
+}
+@media(min-width:380px)and(max-width:559px){
+  .card-info .desc{display:none}
+  .card-info b{font-size:12px}
+  .card-info .preco{font-size:12.5px}
+  .btn-add{font-size:11px;padding:6px}
+  .card-body{padding:8px 9px 9px}
+}
+@media(max-width:640px){
+  .navbar{gap:0 10px;padding:10px 16px 8px}
+  .navbar .brand img{height:30px}
+  .navbar .cart-btn{order:2}
+  .navbar .cart-btn img{height:28px}
+  .navbar .navlinks{order:3;width:100%;gap:16px;margin-top:6px;font-size:12px}
+  .hero{margin-top:6px;height:110px}
+  .cat-h{font-size:28px;margin:20px 0 10px}
+  .destaque-h{font-size:32px}
+}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column}
 .card img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--soft)}
 .card .thumb-fallback{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:40px}
@@ -267,6 +291,7 @@ function setupScrollSpy(){
   if(!secoes.length)return;
   if(window._catObserver)window._catObserver.disconnect();
   const catnavH=$('#catnav').offsetHeight||0;
+  document.documentElement.style.setProperty('--catnav-h',catnavH+'px');
   window._catObserver=new IntersectionObserver(entries=>{
     entries.forEach(e=>{
       if(e.isIntersecting){

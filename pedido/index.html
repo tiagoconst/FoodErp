@@ -61,12 +61,14 @@ h1,h2,h3,.brand{font-family:Archivo,Arial,sans-serif}
 .ok-screen h2{margin:14px 0 6px}
 .ok-screen p{color:var(--muted);font-size:14px;line-height:1.5}
 .ok-screen .pid{font-family:monospace;background:var(--soft);padding:6px 10px;border-radius:8px;display:inline-block;margin-top:10px;font-size:13px}
-.login-box{display:flex;justify-content:center;margin-top:12px}
-.btn-google{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#3c4043;border:none;border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.btn-google{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#3c4043;border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
 .btn-google svg{width:16px;height:16px;flex:none}
-.user-box{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border-radius:20px;padding:5px 12px 5px 5px;color:#fff;font-size:13px}
-.user-box img{width:24px;height:24px;border-radius:50%}
-.user-box button{background:none;border:none;color:#fff;opacity:.75;font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
+.sheet-login{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--soft);border-radius:10px;padding:10px 12px;margin-bottom:14px}
+.sheet-login .sub{color:var(--muted);font-size:12px}
+.sheet-login .user-box{display:flex;align-items:center;gap:8px;font-size:13.5px}
+.sheet-login .user-box img{width:26px;height:26px;border-radius:50%}
+.sheet-login .user-box b{font-size:13.5px}
+.sheet-login .link-sair{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
 </style>
 </head>
 <body>
@@ -74,7 +76,6 @@ h1,h2,h3,.brand{font-family:Archivo,Arial,sans-serif}
 <div class="top">
   <div class="brand" id="loja-nome">Carregando…</div>
   <div class="sub">Monte seu pedido — combinamos o pagamento na entrega/retirada</div>
-  <div class="login-box" id="login-box"></div>
 </div>
 
 <div class="wrap" id="cardapio"><div class="loading">Carregando cardápio…</div></div>
@@ -167,24 +168,37 @@ function renderCardapio(){
 }
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-/* ===== Login com Google (opcional — dá um cadastro mais robusto) ===== */
+/* ===== Login com Google (opcional — dá um cadastro mais robusto) =====
+   O botão fica dentro da janela de finalizar pedido (é ali que a
+   pessoa realmente se beneficia disso). Da 1ª vez que ela pede
+   logada, ainda precisa digitar o telefone (o Google não compartilha
+   isso); da 2ª vez em diante, a gente já busca o telefone salvo no
+   cadastro anterior dela e preenche sozinho. */
 let usuario=null;
+let cadastroSalvo=null; // {nome, telefone} do pedido anterior, se logado
 const GOOGLE_ICON=`<svg viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.9v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.66 9c0-.59.1-1.17.29-1.7V4.97H.9A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.03l3.05-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .9 4.97l3.05 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>`;
 async function initAuth(){
   const {data:{session}}=await sb.auth.getSession();
-  usuario=session?.user||null;
-  renderLogin();
-  sb.auth.onAuthStateChange((_ev,session)=>{ usuario=session?.user||null; renderLogin(); if($('#overlay').classList.contains('open'))renderCarrinho(); });
+  await aplicarSessao(session);
+  sb.auth.onAuthStateChange(async(_ev,session)=>{ await aplicarSessao(session); if($('#overlay').classList.contains('open'))renderCarrinho(); });
 }
-function renderLogin(){
-  const box=$('#login-box');
+async function aplicarSessao(session){
+  usuario=session?.user||null;
+  cadastroSalvo=null;
+  if(usuario){
+    const {data}=await sb.rpc('erp_meu_cadastro_publico',{p_empresa_id:EMPRESA_ID});
+    cadastroSalvo=data||null;
+  }
+}
+function nomeSugerido(){ return cadastroSalvo?.nome||usuario?.user_metadata?.full_name||usuario?.user_metadata?.name||''; }
+function telefoneSugerido(){ return cadastroSalvo?.telefone||''; }
+function loginHtml(){
   if(usuario){
     const nome=usuario.user_metadata?.full_name||usuario.user_metadata?.name||usuario.email||'Você';
     const foto=usuario.user_metadata?.avatar_url||usuario.user_metadata?.picture||'';
-    box.innerHTML=`<div class="user-box">${foto?`<img src="${esc(foto)}" alt="">`:''}<span>${esc(nome.split(' ')[0])}</span><button onclick="sairConta()">sair</button></div>`;
-  }else{
-    box.innerHTML=`<button class="btn-google" onclick="entrarComGoogle()">${GOOGLE_ICON}Entrar com Google</button>`;
+    return `<div class="sheet-login"><div class="user-box">${foto?`<img src="${esc(foto)}" alt="">`:''}<b>${esc(nome.split(' ')[0])}</b></div><button class="link-sair" onclick="sairConta()">sair</button></div>`;
   }
+  return `<div class="sheet-login"><button class="btn-google" onclick="entrarComGoogle()">${GOOGLE_ICON}Entrar com Google</button><span class="sub">preenche seus dados&nbsp;sozinho</span></div>`;
 }
 async function entrarComGoogle(){
   await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href.split('#')[0]}});
@@ -213,13 +227,13 @@ function renderCarrinho(){
     ${linhas}
     ${comboHtml}
     <div class="tot"><span>Total</span><span>${money(totalCarrinho())}</span></div>
+    ${loginHtml()}
     <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva" value="${esc(nomeSugerido())}"></div>
-    <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000"></div>
+    <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000" value="${esc(telefoneSugerido())}"></div>
     <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h"></textarea></div>
     <div id="ck-err" class="err" style="display:none"></div>
     <button class="btn" id="ck-btn" onclick="enviarPedido()">Confirmar pedido</button>`;
 }
-function nomeSugerido(){ return usuario?.user_metadata?.full_name||usuario?.user_metadata?.name||''; }
 async function enviarPedido(){
   const nome=$('#ck-nome').value.trim();
   const tel=$('#ck-tel').value.trim();

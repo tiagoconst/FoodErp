@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sabores da Ana — Faça seu pedido</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,600&family=Fraunces:wght@600;700&family=Playball&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,600&family=Fraunces:wght@600;700&family=Alex+Brush&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
@@ -21,7 +21,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .navbar{background:var(--primary);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .navbar .brand{display:flex;align-items:center;gap:8px}
 .navbar .brand img{height:38px;display:block}
-.navbar .brand .txt{font-family:Playball,'Playfair Display',cursive;font-size:24px;color:#fff;line-height:1}
+.navbar .brand .txt{font-family:'Alex Brush','Playfair Display',cursive;font-size:32px;color:#fff;line-height:1}
 .navbar .navlinks{display:flex;gap:20px;font-size:13.5px;font-weight:600}
 .navbar .navlinks a{color:#fff;opacity:.92;text-decoration:none;cursor:pointer}
 .navbar .navlinks a:hover{opacity:1;text-decoration:underline}
@@ -38,7 +38,9 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .catpill{flex:none;padding:8px 16px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .catpill.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 .wrap{max-width:760px;margin:0 auto;padding:0 14px}
-.cat-h{font-family:Playball,'Playfair Display',cursive;font-weight:400;font-size:32px;color:var(--primary-dark);margin:30px 0 14px;scroll-margin-top:60px}
+.cat-h{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:19px;color:var(--primary-dark);margin:26px 0 12px;scroll-margin-top:60px;position:relative;padding-bottom:8px}
+.cat-h::after{content:'';display:block;width:36px;height:3px;background:var(--accent);border-radius:2px;margin-top:8px}
+.destaque-h{font-family:'Alex Brush','Playfair Display',cursive;font-weight:400;font-size:42px;color:var(--primary-dark);margin:8px 0 14px;text-align:center}
 .grid-itens{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
 @media(min-width:600px){.grid-itens{grid-template-columns:repeat(3,1fr)}}
 @media(min-width:820px){.grid-itens{grid-template-columns:repeat(4,1fr)}}
@@ -177,10 +179,15 @@ function atualizarBarra(){
 }
 
 /* ===== Cardápio ===== */
+let destaques=[];
 async function carregarCardapio(){
-  const {data,error}=await sb.rpc('erp_cardapio_publico',{p_empresa_id:EMPRESA_ID});
-  if(error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
-  cardapio=data||[];
+  const [cardRes,destRes]=await Promise.all([
+    sb.rpc('erp_cardapio_publico',{p_empresa_id:EMPRESA_ID}),
+    sb.rpc('erp_mais_vendidos_publico',{p_empresa_id:EMPRESA_ID,p_limite:5})
+  ]);
+  if(cardRes.error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
+  cardapio=cardRes.data||[];
+  destaques=cardRes.error?[]:(destRes.data||[]);
   renderCardapio();
   atualizarBarra();
 }
@@ -204,35 +211,41 @@ function emojiPrato(nome,categoria){
   for(const [re,em] of mapa)if(re.test(t))return em;
   return '\ud83c\udf7d\ufe0f';
 }
+let _cardBgCounter=0;
+function cardHtml(i){
+  const q=carrinho[i.id]||0;
+  const bg=THUMB_BG[_cardBgCounter++ % THUMB_BG.length];
+  return `<div class="card">
+    ${i.foto_url?`<img src="${esc(i.foto_url)}" alt="">`:`<div class="thumb-fallback" style="background:${bg}">${emojiPrato(i.nome,i.categoria)}</div>`}
+    <div class="card-body">
+      <div class="card-info">
+        <b>${esc(i.nome)}</b>
+        ${i.descricao?`<span class="desc">${esc(i.descricao)}</span>`:''}
+        <span class="preco">${money(i.preco_venda)}</span>
+      </div>
+      <div class="card-add">
+        ${q>0
+          ?`<div class="stepper"><button onclick="alterarQtd('${i.id}',-1)">−</button><span>${q}</span><button class="add" onclick="alterarQtd('${i.id}',1)">+</button></div>`
+          :`<button class="btn-add" onclick="alterarQtd('${i.id}',1)">+ Adicionar</button>`}
+      </div>
+    </div>
+  </div>`;
+}
 function renderCardapio(){
   if(!cardapio.length){ $('#cardapio').innerHTML='<div class="empty">Nenhum item disponível no momento.</div>'; $('#catnav').innerHTML=''; return; }
   const porCategoria={};
   cardapio.forEach(i=>{ (porCategoria[i.categoria]=porCategoria[i.categoria]||[]).push(i); });
   const categorias=Object.keys(porCategoria).sort((a,b)=>a.localeCompare(b,'pt'));
   $('#catnav').innerHTML=categorias.map((cat,idx)=>`<button class="catpill${idx===0?' active':''}" data-cat="${slug(cat)}" onclick="irParaCategoria('${slug(cat)}')">${esc(cat)}</button>`).join('');
-  let contador=0;
-  $('#cardapio').innerHTML=categorias.map(cat=>{
-    const itens=porCategoria[cat].map(i=>{
-      const q=carrinho[i.id]||0;
-      const bg=THUMB_BG[contador++ % THUMB_BG.length];
-      return `<div class="card">
-        ${i.foto_url?`<img src="${esc(i.foto_url)}" alt="">`:`<div class="thumb-fallback" style="background:${bg}">${emojiPrato(i.nome,i.categoria)}</div>`}
-        <div class="card-body">
-          <div class="card-info">
-            <b>${esc(i.nome)}</b>
-            ${i.descricao?`<span class="desc">${esc(i.descricao)}</span>`:''}
-            <span class="preco">${money(i.preco_venda)}</span>
-          </div>
-          <div class="card-add">
-            ${q>0
-              ?`<div class="stepper"><button onclick="alterarQtd('${i.id}',-1)">−</button><span>${q}</span><button class="add" onclick="alterarQtd('${i.id}',1)">+</button></div>`
-              :`<button class="btn-add" onclick="alterarQtd('${i.id}',1)">+ Adicionar</button>`}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
+  _cardBgCounter=0;
+  const destaquesHtml=destaques.length
+    ?`<div class="destaque-h">Queridinhos da Ana</div><div class="grid-itens" style="margin-bottom:8px">${destaques.map(cardHtml).join('')}</div>`
+    :'';
+  const categoriasHtml=categorias.map(cat=>{
+    const itens=porCategoria[cat].map(cardHtml).join('');
     return `<div class="cat-h" id="cat-${slug(cat)}">${esc(cat)}</div><div class="grid-itens">${itens}</div>`;
   }).join('');
+  $('#cardapio').innerHTML=destaquesHtml+categoriasHtml;
   setupScrollSpy();
   renderHero();
 }

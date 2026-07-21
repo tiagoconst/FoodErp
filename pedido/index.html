@@ -30,13 +30,11 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .navbar .navlinks{display:flex;gap:24px;font-family:var(--font-menu);font-size:14px;font-weight:700}
 .navbar .navlinks a{color:#fff;opacity:.95;text-decoration:none;cursor:pointer}
 .navbar .navlinks a:hover{opacity:1;text-decoration:underline}
-.navbar .cart-btn{display:flex;align-items:center;gap:9px;background:transparent;color:#fff;border:none;padding:6px 4px;font-family:var(--font-menu);font-weight:700;font-size:14px;cursor:pointer;margin-left:auto}
-.navbar .cart-btn svg{width:26px;height:26px;flex:none}
-.hero{display:flex;height:150px;margin-top:16px}
-.hero .tile{flex:1;position:relative;overflow:hidden}
-.hero .tile:not(:last-child){clip-path:polygon(0 0,94% 0,100% 100%,0 100%)}
-.hero .tile img{width:100%;height:100%;object-fit:cover;display:block}
-.hero .tile .ph{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:38px}
+.navbar .cart-btn{position:relative;display:flex;align-items:center;gap:9px;background:transparent;color:#fff;border:none;padding:6px 4px;font-family:var(--font-menu);font-weight:700;font-size:14px;cursor:pointer;margin-left:auto}
+.navbar .cart-btn img{height:34px;display:block}
+.navbar .cart-btn .cart-badge{position:absolute;top:-4px;left:20px;background:var(--primary-dark);color:#fff;border-radius:999px;min-width:16px;height:16px;padding:0 4px;font-size:10px;line-height:16px;text-align:center;font-weight:700;display:none}
+.hero{height:150px;margin-top:16px;overflow:hidden}
+.hero img{width:100%;height:100%;object-fit:cover;display:block}
 .catnav{position:sticky;top:0;z-index:15;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;white-space:nowrap;padding:14px 14px 10px;display:flex;justify-content:center;gap:8px;scrollbar-width:none}
 .catnav::-webkit-scrollbar{display:none}
 .catpill{flex:none;padding:8px 16px;border-radius:20px;border:1px solid var(--line);background:#fff;color:var(--ink);font-family:var(--font-menu);font-size:13px;font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
@@ -103,16 +101,19 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 <body>
 
 <div class="navbar">
-  <div class="brand" id="brand-box"><span class="txt" id="loja-nome">Sabores da Ana</span></div>
+  <div class="brand" id="brand-box"><img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXF7V4NZ.png" alt="Sabores da Ana"></div>
   <div class="navlinks">
     <a onclick="document.getElementById('cardapio').scrollIntoView({behavior:'smooth'})">Produtos</a>
     <a href="https://saboresdaanairati.com.br/" target="_blank" rel="noopener">Sobre Nós</a>
     <a href="https://saboresdaanairati.com.br/" target="_blank" rel="noopener">Contato</a>
   </div>
-  <button class="cart-btn" onclick="abrirCarrinho()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg> <span id="nav-cart-label">Meu Pedido</span></button>
+  <button class="cart-btn" onclick="abrirCarrinho()">
+    <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXDMZRJI.png" alt="Meu Pedido">
+    <span class="cart-badge" id="nav-cart-badge">0</span>
+  </button>
 </div>
 
-<div class="hero" id="hero"></div>
+<div class="hero" id="hero"><img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXCWGC8W.png" alt="Sabores da Ana"></div>
 
 <div class="catnav" id="catnav"></div>
 
@@ -139,14 +140,6 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const $=s=>document.querySelector(s);
 const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 document.title=LOJA_NOME+' — Faça seu pedido';
-$('#loja-nome').textContent=LOJA_NOME;
-async function carregarIdentidade(){
-  try{
-    const {data,error}=await sb.rpc('erp_identidade_publica',{p_empresa_id:EMPRESA_ID});
-    if(error||!data||!data.logo_img)return;
-    $('#brand-box').innerHTML=`<img src="${data.logo_img}" alt="${esc(LOJA_NOME)}">`;
-  }catch(e){ /* sem logo cadastrada ainda — mantém o texto */ }
-}
 
 /* ===== Carrinho (persistido no navegador do cliente) ===== */
 const CART_KEY='pedido_carrinho_v1';
@@ -177,7 +170,9 @@ function atualizarBarra(){
   $('#cartbar').classList.toggle('show',n>0);
   $('#cart-cnt').textContent=n;
   $('#cart-tot').textContent=money(totalCarrinho());
-  $('#nav-cart-label').textContent=n>0?`Meu Pedido (${n})`:'Meu Pedido';
+  const badge=$('#nav-cart-badge');
+  badge.textContent=n;
+  badge.style.display=n>0?'block':'none';
 }
 
 /* ===== Cardápio ===== */
@@ -193,7 +188,9 @@ async function carregarCardapio(){
   renderCardapio();
   atualizarBarra();
 }
-function slug(s){ return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+function slug(s){ return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }
+/* deixa "GOURMET / ESPECIAIS" -> "Gourmet / Especiais", etc. */
+function capitalizar(s){ return String(s).split(' ').map(w=>w?w.charAt(0).toUpperCase()+w.slice(1).toLowerCase():w).join(' '); }
 const THUMB_BG=[
   'linear-gradient(135deg,#F3C9A0,#E7A268)',
   'linear-gradient(135deg,#C9D3AE,#9FAE7E)',
@@ -205,13 +202,13 @@ const THUMB_BG=[
 function emojiPrato(nome,categoria){
   const t=(nome+' '+(categoria||'')).toLowerCase();
   const mapa=[
-    [/frango/,'\ud83c\udf57'],[/carne|bife|picanha|patinho/,'\ud83e\udd69'],[/peixe|salm[aã]o|til[aá]pia/,'\ud83d\udc1f'],[/camar[aã]o/,'\ud83e\udd90'],
-    [/massa|macarr[aã]o|penne|nhoque|ravioli|espaguete/,'\ud83c\udf5d'],[/arroz/,'\ud83c\udf5a'],[/salada/,'\ud83e\udd57'],
-    [/sopa|caldo/,'\ud83c\udf72'],[/torta|quiche/,'\ud83e\udd67'],[/legum|vegetari|vegano/,'\ud83e\udd66'],[/doce|sobremesa|bolo/,'\ud83c\udf70'],
-    [/ovo/,'\ud83c\udf73'],[/feij[aã]o/,'\ud83e\uddb1']
+    [/frango/,'🍗'],[/carne|bife|picanha|patinho/,'🥩'],[/peixe|salm[aã]o|til[aá]pia/,'🐟'],[/camar[aã]o/,'🦐'],
+    [/massa|macarr[aã]o|penne|nhoque|ravioli|espaguete/,'🍝'],[/arroz/,'🍚'],[/salada/,'🥗'],
+    [/sopa|caldo/,'🍲'],[/torta|quiche/,'🥧'],[/legum|vegetari|vegano/,'🥦'],[/doce|sobremesa|bolo/,'🍰'],
+    [/ovo/,'🍳'],[/feij[aã]o/,'🦱']
   ];
   for(const [re,em] of mapa)if(re.test(t))return em;
-  return '\ud83c\udf7d\ufe0f';
+  return '🍽️';
 }
 let _cardBgCounter=0;
 function cardHtml(i){
@@ -234,9 +231,10 @@ function cardHtml(i){
   </div>`;
 }
 /* ordem fixa pedida: Queridinhos, Especiais, Tradicional, Fit, Conforto, Massas, Gourmet
-   — casa pelo início do nome da categoria (ex.: "Tradicionais" cai em "Tradicional",
-   "Gourmet / Especiais" cai em "Gourmet" porque é a primeira palavra) */
-const ORDEM_CATEGORIAS=['Especiais','Tradicional','Fit','Conforto','Massas','Gourmet'];
+   — casa pelo início do nome da categoria. Usa o radical "Tradicion" (não "Tradicional")
+   porque em português o plural é "Tradicionais" (troca "al" por "ais"), então
+   "Tradicionais" NÃO começa com "Tradicional" — precisa do radical comum aos dois. */
+const ORDEM_CATEGORIAS=['Especiais','Tradicion','Fit','Conforto','Massas','Gourmet'];
 function rankCategoria(nome){
   const n=nome.toLowerCase();
   const idx=ORDEM_CATEGORIAS.findIndex(k=>n.startsWith(k.toLowerCase()));
@@ -248,31 +246,17 @@ function renderCardapio(){
   cardapio.forEach(i=>{ (porCategoria[i.categoria]=porCategoria[i.categoria]||[]).push(i); });
   const categorias=Object.keys(porCategoria).sort((a,b)=>rankCategoria(a)-rankCategoria(b)||a.localeCompare(b,'pt'));
   const pillQueridinhos=destaques.length?`<button class="catpill active" data-cat="queridinhos" onclick="irParaCategoria('queridinhos')">Queridinhos</button>`:'';
-  $('#catnav').innerHTML=pillQueridinhos+categorias.map(cat=>`<button class="catpill${destaques.length?'':' active'}" data-cat="${slug(cat)}" onclick="irParaCategoria('${slug(cat)}')">${esc(cat)}</button>`).join('');
+  $('#catnav').innerHTML=pillQueridinhos+categorias.map(cat=>`<button class="catpill${destaques.length?'':' active'}" data-cat="${slug(cat)}" onclick="irParaCategoria('${slug(cat)}')">${esc(capitalizar(cat))}</button>`).join('');
   _cardBgCounter=0;
   const destaquesHtml=destaques.length
     ?`<div class="destaque-h" id="cat-queridinhos">Queridinhos</div><div class="grid-itens" style="margin-bottom:8px">${destaques.map(cardHtml).join('')}</div>`
     :'';
   const categoriasHtml=categorias.map(cat=>{
     const itens=porCategoria[cat].map(cardHtml).join('');
-    return `<div class="cat-h" id="cat-${slug(cat)}">${esc(cat)}</div><div class="grid-itens">${itens}</div>`;
+    return `<div class="cat-h" id="cat-${slug(cat)}">${esc(capitalizar(cat))}</div><div class="grid-itens">${itens}</div>`;
   }).join('');
   $('#cardapio').innerHTML=destaquesHtml+categoriasHtml;
   setupScrollSpy();
-  renderHero();
-}
-/* faixa do topo: usa as 3 primeiras fotos reais que existirem no cardápio;
-   completa com capas coloridas enquanto faltar foto de verdade */
-function renderHero(){
-  const comFoto=cardapio.filter(i=>i.foto_url).slice(0,3);
-  const faltam=3-comFoto.length;
-  const tiles=comFoto.map(i=>`<div class="tile"><img src="${esc(i.foto_url)}" alt="${esc(i.nome)}"></div>`);
-  for(let k=0;k<faltam;k++){
-    const bg=THUMB_BG[k % THUMB_BG.length];
-    const it=cardapio[k];
-    tiles.push(`<div class="tile"><div class="ph" style="background:${bg}">${it?emojiPrato(it.nome,it.categoria):'🍽️'}</div></div>`);
-  }
-  $('#hero').innerHTML=tiles.join('');
 }
 function irParaCategoria(slugId){
   const el=document.getElementById('cat-'+slugId);
@@ -399,7 +383,6 @@ function telaSucesso(data){
 }
 
 carregarCardapio();
-carregarIdentidade();
 initAuth();
 </script>
 </body>

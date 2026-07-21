@@ -835,9 +835,88 @@ VIEWS.produtos=function(){
   const chips=`<button class="cat-chip ${!filtroCategoriaProdutos?'active':''}" style="${!filtroCategoriaProdutos?'background:var(--primary)':''}" onclick='filtroCategoriaProdutos="";render()'>Todas</button>`+
     catsProdutos.map(c=>`<button class="cat-chip ${filtroCategoriaProdutos===c.nome?'active':''}" style="${filtroCategoriaProdutos===c.nome?'background:'+corCategoria(c.nome):''}" onclick='filtroCategoriaProdutos=${JSON.stringify(c.nome)};render()'>${esc(c.nome)}</button>`).join('');
   return header('Produtos','var(--m-produtos)','O que você vende — composto por itens e/ou pré-preparos, com preço de venda definido aqui.',
-    `<button class="btn primary" onclick="modalComposicao(null,'produto')">+ Definir produto</button>`)+
+    `<button class="btn" onclick="modalUploadMassa()">📸 Fotos em massa</button>
+     <button class="btn primary" onclick="modalComposicao(null,'produto')">+ Definir produto</button>`)+
   `<div class="cat-chips">${chips}</div>`+blocos+aviso;
 };
+
+/* ---------- Upload em massa de fotos (casa pelo nome do arquivo com o nome do produto) ---------- */
+let massaArquivos=[]; // {file, previewUrl, nomeArquivo, itemId}
+function normalizarTexto(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,''); }
+function matchProdutoPorNome(nomeSemExt){
+  const alvo=normalizarTexto(nomeSemExt);
+  if(!alvo)return null;
+  const produtos=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
+  let melhor=null,melhorScore=0;
+  produtos.forEach(p=>{
+    const n=normalizarTexto(p.nome);
+    if(!n)return;
+    let score=0;
+    if(n===alvo)score=1000;
+    else if(alvo.includes(n))score=n.length;
+    else if(n.includes(alvo))score=alvo.length;
+    if(score>melhorScore){ melhorScore=score; melhor=p; }
+  });
+  return melhorScore>=3?melhor:null; // evita casar por 1-2 letras em comum
+}
+function modalUploadMassa(){
+  massaArquivos=[];
+  openModal(`<div class="m-h"><h3>📸 Fotos em massa</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <p class="subtle" style="margin-bottom:12px">Renomeie cada foto com o nome do produto (ex.: <b>frango-xadrez.jpg</b> para o produto "Frango Xadrez") antes de selecionar. O sistema tenta casar sozinho pelo nome do arquivo — o que não for reconhecido fica com um seletor pra você escolher manualmente, ou pode deixar como "não enviar".</p>
+    <input type="file" id="massa-file" accept="image/png,image/jpeg,image/webp" multiple onchange="onMassaFilesSelected(event)">
+    <div id="massa-lista" style="margin-top:14px;display:flex;flex-direction:column;gap:6px"></div>
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" id="massa-btn" onclick="enviarFotosMassa()" disabled>Selecione as fotos</button></div>`,true);
+}
+function onMassaFilesSelected(evt){
+  const files=[...(evt.target.files||[])];
+  massaArquivos=files.map(file=>{
+    const nomeSemExt=file.name.replace(/\.[^.]+$/,'');
+    const match=matchProdutoPorNome(nomeSemExt);
+    return {file,previewUrl:URL.createObjectURL(file),nomeArquivo:file.name,itemId:match?match.id:''};
+  });
+  renderMassaLista();
+}
+function renderMassaLista(){
+  const produtos=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  const optsFor=selectedId=>`<option value="">— não enviar —</option>`+produtos.map(p=>`<option value="${p.id}" ${p.id===selectedId?'selected':''}>${esc(p.nome)}</option>`).join('');
+  $('#massa-lista').innerHTML=massaArquivos.map((m,k)=>`<div class="line" style="grid-template-columns:44px 1fr 210px 130px;align-items:center">
+    <img src="${m.previewUrl}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;background:var(--soft,#eee)">
+    <b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.nomeArquivo)}</b>
+    <select onchange="massaArquivos[${k}].itemId=this.value;renderMassaLista()">${optsFor(m.itemId)}</select>
+    <span class="hint">${m.itemId?'✓ reconhecido':'não encontrado'}</span>
+  </div>`).join('')||'<p class="subtle">Nenhuma foto selecionada.</p>';
+  const reconhecidos=massaArquivos.filter(m=>m.itemId).length;
+  const btn=$('#massa-btn');
+  btn.disabled=!reconhecidos;
+  btn.textContent=reconhecidos?`Enviar ${reconhecidos} foto(s)`:'Selecione as fotos';
+}
+async function enviarFotosMassa(){
+  const validos=massaArquivos.filter(m=>m.itemId);
+  if(!validos.length)return;
+  if(!sb||!empresa)return toast('Sem conexão com o banco.',true);
+  const btn=$('#massa-btn'); btn.disabled=true;
+  let ok=0; const falhas=[];
+  for(let i=0;i<validos.length;i++){
+    const m=validos[i];
+    btn.textContent=`Enviando ${i+1}/${validos.length}…`;
+    if(m.file.size>5*1024*1024){ falhas.push(m.nomeArquivo+' (muito grande)'); continue; }
+    try{
+      const ext=(m.file.name.split('.').pop()||'jpg').toLowerCase();
+      const path=`${empresa.empresa_id}/${uid('IMG')}.${ext}`;
+      const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,m.file,{cacheControl:'3600',upsert:false,contentType:m.file.type});
+      if(upErr)throw upErr;
+      const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
+      const item=itemById(m.itemId);
+      if(item)item.foto_url=data.publicUrl;
+      ok++;
+    }catch(e){ console.error(e); falhas.push(m.nomeArquivo); }
+  }
+  if(ok)registrarEvento('ITEM_ATUALIZADO',`${ok} foto(s) enviada(s) em massa`,null);
+  scheduleSave(); render(); closeModal();
+  toast(falhas.length?`${ok} foto(s) enviada(s). Falhou: ${falhas.join(', ')}`:`${ok} foto(s) enviada(s) com sucesso.`,falhas.length>0);
+}
 
 let compLinhas=[], compTipo='preparo';
 function modalComposicao(paiId,tipo){

@@ -696,6 +696,7 @@ function modalItem(id){
     return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
   }).join('');
   const catOpts=S.categorias.filter(c=>c.ativo!==false||(it&&it.categoria===c.nome)).map(c=>`<option value="${esc(c.nome)}" ${it&&it.categoria===c.nome?'selected':''}>${esc(c.nome)}</option>`).join('');
+  const fotoAtual=it&&it.foto_url?it.foto_url:'';
   openModal(`<div class="m-h"><h3>${it?'Editar item':'Novo item'}</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     <div class="frow c2">
@@ -709,15 +710,46 @@ function modalItem(id){
     </div>
     <div class="field"><label>Funções — um item pode ter uma ou várias simultaneamente</label><div class="check-grid">${checks}</div></div>
     <div class="field"><label>Observação</label><textarea id="it-obs" rows="2">${it?esc(it.observacao||''):''}</textarea></div>
+    <div class="field">
+      <label>Foto (aparece no site de pedidos)</label>
+      <input type="hidden" id="it-foto" value="${esc(fotoAtual)}">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img id="it-foto-preview" src="${esc(fotoAtual)}" style="width:64px;height:64px;border-radius:9px;object-fit:cover;background:var(--soft,#eee);display:${fotoAtual?'block':'none'}">
+        <div>
+          <input type="file" id="it-foto-file" accept="image/png,image/jpeg,image/webp" style="display:none" onchange="uploadFotoItem(event)">
+          <button type="button" class="btn sm" onclick="$('#it-foto-file').click()">📷 Enviar foto</button>
+          <span id="it-foto-status" class="hint" style="margin-left:6px"></span>
+        </div>
+      </div>
+    </div>
   </div>
   <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarItem('${id||''}')">Salvar item</button></div>`);
   setTimeout(()=>$('#it-nome').focus(),50);
+}
+async function uploadFotoItem(evt){
+  const file=evt.target.files&&evt.target.files[0]; if(!file)return;
+  const status=$('#it-foto-status');
+  if(!sb||!empresa){ status.textContent='Sem conexão com o banco.'; return; }
+  if(file.size>5*1024*1024){ status.textContent='Foto muito grande (máx. 5MB).'; return; }
+  status.textContent='Enviando…';
+  try{
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const path=`${empresa.empresa_id}/${uid('IMG')}.${ext}`;
+    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+    if(upErr)throw upErr;
+    const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
+    $('#it-foto').value=data.publicUrl;
+    const prev=$('#it-foto-preview'); prev.src=data.publicUrl; prev.style.display='block';
+    status.textContent='Foto enviada ✓';
+  }catch(e){ console.error(e); status.textContent='Erro ao enviar: '+(e.message||e); }
+  finally{ evt.target.value=''; }
 }
 function salvarItem(id){
   const nome=$('#it-nome').value.trim(); if(!nome)return toast('Informe o nome do item.',true);
   const funcoes=[...document.querySelectorAll('input[name=funcao]:checked')].map(c=>c.value);
   const dados={nome,categoria:$('#it-cat').value,unidade_base:$('#it-un').value,
     preco_venda:parseFloat($('#it-preco').value)||null,estoque_minimo:parseFloat($('#it-min').value)||0,
+    foto_url:$('#it-foto').value.trim()||null,
     funcoes,observacao:$('#it-obs').value.trim(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(itemById(id),dados); registrarEvento('ITEM_ATUALIZADO',`${nome} atualizado (${funcoes.length} funções)`,id); }
   else{ const nid=uid('ITM'); S.itens.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},dados));

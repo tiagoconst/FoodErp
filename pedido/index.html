@@ -61,6 +61,12 @@ h1,h2,h3,.brand{font-family:Archivo,Arial,sans-serif}
 .ok-screen h2{margin:14px 0 6px}
 .ok-screen p{color:var(--muted);font-size:14px;line-height:1.5}
 .ok-screen .pid{font-family:monospace;background:var(--soft);padding:6px 10px;border-radius:8px;display:inline-block;margin-top:10px;font-size:13px}
+.login-box{display:flex;justify-content:center;margin-top:12px}
+.btn-google{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#3c4043;border:none;border-radius:8px;padding:8px 14px;font-size:13.5px;font-weight:600;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.btn-google svg{width:16px;height:16px;flex:none}
+.user-box{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);border-radius:20px;padding:5px 12px 5px 5px;color:#fff;font-size:13px}
+.user-box img{width:24px;height:24px;border-radius:50%}
+.user-box button{background:none;border:none;color:#fff;opacity:.75;font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
 </style>
 </head>
 <body>
@@ -68,6 +74,7 @@ h1,h2,h3,.brand{font-family:Archivo,Arial,sans-serif}
 <div class="top">
   <div class="brand" id="loja-nome">Carregando…</div>
   <div class="sub">Monte seu pedido — combinamos o pagamento na entrega/retirada</div>
+  <div class="login-box" id="login-box"></div>
 </div>
 
 <div class="wrap" id="cardapio"><div class="loading">Carregando cardápio…</div></div>
@@ -108,8 +115,12 @@ function idSessao(){
 }
 function salvarCarrinho(){ localStorage.setItem(CART_KEY,JSON.stringify(carrinho)); atualizarBarra(); }
 function itemPorId(id){ return cardapio.find(i=>i.id===id); }
-function totalCarrinho(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
+const COMBO_MIN_UN=5, COMBO_DESCONTO_UN=2;
+function brutoCarrinho(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
 function qtdCarrinho(){ return Object.values(carrinho).reduce((a,q)=>a+q,0); }
+function comboAtivoCarrinho(){ return qtdCarrinho()>=COMBO_MIN_UN; }
+function descontoComboCarrinho(){ return comboAtivoCarrinho()?qtdCarrinho()*COMBO_DESCONTO_UN:0; }
+function totalCarrinho(){ return Math.max(0,brutoCarrinho()-descontoComboCarrinho()); }
 function alterarQtd(id,delta){
   const atual=carrinho[id]||0; const nova=Math.max(0,atual+delta);
   if(nova<=0)delete carrinho[id]; else carrinho[id]=nova;
@@ -156,6 +167,30 @@ function renderCardapio(){
 }
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+/* ===== Login com Google (opcional — dá um cadastro mais robusto) ===== */
+let usuario=null;
+const GOOGLE_ICON=`<svg viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.9v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.95 10.7A5.4 5.4 0 0 1 3.66 9c0-.59.1-1.17.29-1.7V4.97H.9A9 9 0 0 0 0 9c0 1.45.35 2.83.9 4.03l3.05-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .9 4.97l3.05 2.33C4.66 5.17 6.65 3.58 9 3.58z"/></svg>`;
+async function initAuth(){
+  const {data:{session}}=await sb.auth.getSession();
+  usuario=session?.user||null;
+  renderLogin();
+  sb.auth.onAuthStateChange((_ev,session)=>{ usuario=session?.user||null; renderLogin(); if($('#overlay').classList.contains('open'))renderCarrinho(); });
+}
+function renderLogin(){
+  const box=$('#login-box');
+  if(usuario){
+    const nome=usuario.user_metadata?.full_name||usuario.user_metadata?.name||usuario.email||'Você';
+    const foto=usuario.user_metadata?.avatar_url||usuario.user_metadata?.picture||'';
+    box.innerHTML=`<div class="user-box">${foto?`<img src="${esc(foto)}" alt="">`:''}<span>${esc(nome.split(' ')[0])}</span><button onclick="sairConta()">sair</button></div>`;
+  }else{
+    box.innerHTML=`<button class="btn-google" onclick="entrarComGoogle()">${GOOGLE_ICON}Entrar com Google</button>`;
+  }
+}
+async function entrarComGoogle(){
+  await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href.split('#')[0]}});
+}
+async function sairConta(){ await sb.auth.signOut(); }
+
 /* ===== Carrinho / checkout ===== */
 function abrirCarrinho(){ renderCarrinho(); $('#overlay').classList.add('open'); }
 function fecharCarrinho(){ $('#overlay').classList.remove('open'); }
@@ -169,15 +204,22 @@ function renderCarrinho(){
       <div class="stepper"><button onclick="alterarQtd('${id}',-1)">−</button><span>${carrinho[id]}</span><button class="add" onclick="alterarQtd('${id}',1)">+</button></div>
     </div>`;
   }).join('');
+  const combo=comboAtivoCarrinho();
+  const descCombo=descontoComboCarrinho();
+  const comboHtml=combo
+    ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Desconto por quantidade (${qtdCarrinho()}+ un.)</span><span>−${money(descCombo)}</span></div>`
+    :`<div class="sub" style="margin:6px 0 0">Faltam ${COMBO_MIN_UN-qtdCarrinho()} un. pro desconto de ${money(COMBO_DESCONTO_UN)}/un. (a partir de ${COMBO_MIN_UN} un.)</div>`;
   $('#sheet').innerHTML=`<div class="sheet-h"><h3>Seu pedido</h3><button class="x" onclick="fecharCarrinho()">✕</button></div>
     ${linhas}
+    ${comboHtml}
     <div class="tot"><span>Total</span><span>${money(totalCarrinho())}</span></div>
-    <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva"></div>
+    <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva" value="${esc(nomeSugerido())}"></div>
     <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000"></div>
     <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h"></textarea></div>
     <div id="ck-err" class="err" style="display:none"></div>
     <button class="btn" id="ck-btn" onclick="enviarPedido()">Confirmar pedido</button>`;
 }
+function nomeSugerido(){ return usuario?.user_metadata?.full_name||usuario?.user_metadata?.name||''; }
 async function enviarPedido(){
   const nome=$('#ck-nome').value.trim();
   const tel=$('#ck-tel').value.trim();
@@ -190,11 +232,13 @@ async function enviarPedido(){
   const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}));
   const {data,error}=await sb.rpc('erp_criar_pedido_publico',{
     p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
-    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao()
+    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:usuario?.email||null
   });
   if(error){
     btn.disabled=false; btn.textContent='Confirmar pedido';
-    err.textContent=error.message.includes('indisponível')?'Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.':'Não foi possível enviar seu pedido agora. Tente novamente em instantes.';
+    if(error.message.includes('Item indisponível'))err.textContent='Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.';
+    else if(error.message.includes('Loja indisponível'))err.textContent='A loja não está recebendo pedidos no momento. Tente novamente mais tarde.';
+    else err.textContent='Não foi possível enviar seu pedido agora. Tente novamente em instantes.';
     err.style.display='block';
     return;
   }
@@ -214,6 +258,7 @@ function telaSucesso(data){
 }
 
 carregarCardapio();
+initAuth();
 </script>
 </body>
 </html>

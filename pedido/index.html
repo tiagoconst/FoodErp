@@ -73,13 +73,14 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
 .card img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--soft);border-radius:var(--radius) var(--radius) 0 0}
 .card .thumb-fallback{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:40px;border-radius:var(--radius) var(--radius) 0 0}
-.info-badge{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.94);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;font-family:Georgia,serif;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.28);z-index:3;user-select:none}
-.info-pop{display:none;position:absolute;top:26px;right:0;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 22px rgba(0,0,0,.2);padding:10px 12px;width:180px;z-index:6;text-align:left;cursor:default}
+.info-badge{position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.4);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.75);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:400;font-family:Georgia,serif;font-style:italic;cursor:pointer;text-shadow:0 1px 2px rgba(0,0,0,.35);box-shadow:0 1px 4px rgba(0,0,0,.15);z-index:3;user-select:none;transition:background .15s}
+.info-badge:hover,.info-badge.open{background:rgba(255,255,255,.6)}
+.info-pop{display:none;position:absolute;top:25px;right:0;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);border-radius:10px;box-shadow:0 8px 24px rgba(62,46,32,.16);padding:10px 13px;width:180px;z-index:6;text-align:left;cursor:default}
 .info-badge:hover .info-pop,.info-badge.open .info-pop,.info-badge:focus .info-pop{display:block}
-.info-pop b{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em;font-family:var(--font-menu)}
-.info-pop ul{list-style:none;display:flex;flex-direction:column;gap:4px}
-.info-pop li{font-size:12.5px;color:var(--ink);display:flex;justify-content:space-between;gap:10px;line-height:1.3}
-.info-pop li .q{color:var(--muted);white-space:nowrap;font-weight:600}
+.info-pop b{display:block;font-size:10px;font-weight:500;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em;font-family:var(--font-menu)}
+.info-pop ul{list-style:none;display:flex;flex-direction:column;gap:5px}
+.info-pop li{font-size:12px;font-weight:300;color:var(--ink);display:flex;justify-content:space-between;gap:10px;line-height:1.3;letter-spacing:.01em}
+.info-pop li .q{color:var(--muted);white-space:nowrap;font-weight:300}
 .card-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:4px;flex:1}
 .card-info b{font-size:13.5px;line-height:1.25;display:block}
 .card-info .desc{font-size:11.5px;color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
@@ -235,7 +236,7 @@ function composicaoHtml(id){
   const comp=COMPOSICOES[id];
   if(!comp||!comp.length)return '';
   const linhas=comp.map(c=>`<li>${esc(c.nome)}<span class="q">${fmtQtdComposicao(c.quantidade,c.unidade)}</span></li>`).join('');
-  return `<span class="info-badge" tabindex="0" onclick="event.stopPropagation();this.classList.toggle('open')">ⓘ<div class="info-pop"><b>Composição</b><ul>${linhas}</ul></div></span>`;
+  return `<span class="info-badge" tabindex="0" onclick="event.stopPropagation();this.classList.toggle('open')">i<div class="info-pop"><b>Composição</b><ul>${linhas}</ul></div></span>`;
 }
 document.addEventListener('click',()=>{ document.querySelectorAll('.info-badge.open').forEach(b=>b.classList.remove('open')); });
 function slug(s){ return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,''); }

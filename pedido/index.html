@@ -151,6 +151,15 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .sheet-login .user-box img{width:26px;height:26px;border-radius:50%}
 .sheet-login .user-box b{font-size:13.5px}
 .sheet-login .link-sair{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:0}
+.modal-list{display:flex;flex-direction:column;gap:8px}
+.modal-opt{display:flex;align-items:flex-start;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;background:var(--soft)}
+.modal-opt.sel{border-color:var(--primary);background:#fff}
+.modal-opt input{margin-top:3px;flex:none}
+.modal-opt-info{display:flex;flex-direction:column;gap:2px}
+.modal-opt-info b{font-size:13.5px}
+.modal-opt-info .sub{font-size:11.5px;color:var(--muted)}
+.modal-opt-info .prev{color:var(--primary-dark);font-weight:600}
+.tot .sub-linha{font-size:12px;font-weight:500;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -255,12 +264,15 @@ function atualizarBarra(){
 let destaques=[];
 let FOTO_PADRAO='';
 let COMPOSICOES={};
+let MODALIDADES_ENTREGA=[];
+let PRODUCAO_CFG={dias:['seg','qua','sex'],horario_corte:'12:00',horario_pronto:'19:00'};
 async function carregarCardapio(){
-  const [cardRes,destRes,identRes,compRes]=await Promise.all([
+  const [cardRes,destRes,identRes,compRes,entregaRes]=await Promise.all([
     sb.rpc('erp_cardapio_publico',{p_empresa_id:EMPRESA_ID}),
     sb.rpc('erp_mais_vendidos_publico',{p_empresa_id:EMPRESA_ID,p_limite:5}),
     sb.rpc('erp_identidade_publica',{p_empresa_id:EMPRESA_ID}),
-    sb.rpc('erp_composicoes_publico',{p_empresa_id:EMPRESA_ID})
+    sb.rpc('erp_composicoes_publico',{p_empresa_id:EMPRESA_ID}),
+    sb.rpc('erp_modalidades_entrega_publico',{p_empresa_id:EMPRESA_ID})
   ]);
   if(cardRes.error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
   cardapio=cardRes.data||[];
@@ -268,8 +280,46 @@ async function carregarCardapio(){
   FOTO_PADRAO=(identRes&&identRes.data&&identRes.data.foto_padrao)||'';
   renderPromoBanner(identRes&&identRes.data&&identRes.data.banner_promo_desktop,identRes&&identRes.data&&identRes.data.banner_promo_mobile);
   COMPOSICOES=(compRes&&compRes.data)||{};
+  MODALIDADES_ENTREGA=(entregaRes&&entregaRes.data&&entregaRes.data.modalidades)||[];
+  PRODUCAO_CFG=(entregaRes&&entregaRes.data&&entregaRes.data.producao)||PRODUCAO_CFG;
   renderCardapio();
   atualizarBarra();
+}
+/* ===== Cálculo de previsão de entrega/retirada ===== */
+const DIAS_SEMANA_IDX={dom:0,seg:1,ter:2,qua:3,qui:4,sex:5,sab:6};
+function entregaById(id){ return MODALIDADES_ENTREGA.find(m=>m.id===id); }
+function calcularPrevisao(modalidade){
+  const agora=new Date();
+  if(modalidade&&modalidade.segue_prazo_producao===false&&modalidade.prazo_horas){
+    return new Date(agora.getTime()+modalidade.prazo_horas*3600000);
+  }
+  const cfg=PRODUCAO_CFG||{};
+  const diasSet=new Set((cfg.dias||[]).map(d=>DIAS_SEMANA_IDX[d]));
+  const [hC,mC]=(cfg.horario_corte||'12:00').split(':').map(Number);
+  const [hP,mP]=(cfg.horario_pronto||'19:00').split(':').map(Number);
+  for(let i=0;i<14;i++){
+    const dia=new Date(agora); dia.setDate(agora.getDate()+i); dia.setHours(0,0,0,0);
+    if(!diasSet.has(dia.getDay()))continue;
+    if(i===0){
+      const corteHoje=new Date(dia); corteHoje.setHours(hC,mC,0,0);
+      if(agora>corteHoje)continue;
+    }
+    const pronto=new Date(dia); pronto.setHours(hP,mP,0,0);
+    return pronto;
+  }
+  return null;
+}
+function fmtPrevisao(d){
+  if(!d)return '';
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const diaD=new Date(d); diaD.setHours(0,0,0,0);
+  const diffDias=Math.round((diaD-hoje)/86400000);
+  const hora=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  let rotulo;
+  if(diffDias===0)rotulo='hoje';
+  else if(diffDias===1)rotulo='amanhã';
+  else rotulo=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit'});
+  return `${rotulo} após ${hora}`;
 }
 function fmtQtdComposicao(q,u){
   if(q==null||isNaN(q))return '';
@@ -446,6 +496,42 @@ async function entrarComGoogle(){
 }
 async function sairConta(){ await sb.auth.signOut(); }
 
+/* ===== Entrega / retirada (checkout) ===== */
+let modalidadeEscolhida=null;
+let ckNome=null, ckTel=null, ckObs=null, ckEndereco=null;
+function custoEntregaSelecionada(){ const m=entregaById(modalidadeEscolhida); return m?(m.custo||0):0; }
+function salvarRascunhoCk(){
+  const n=$('#ck-nome'); if(n)ckNome=n.value;
+  const t=$('#ck-tel'); if(t)ckTel=t.value;
+  const o=$('#ck-obs'); if(o)ckObs=o.value;
+  const e=$('#ck-endereco'); if(e)ckEndereco=e.value;
+}
+function selecionarModalidade(id){
+  salvarRascunhoCk();
+  modalidadeEscolhida=id;
+  renderCarrinho();
+}
+function modalidadesHtml(){
+  if(!MODALIDADES_ENTREGA.length)return '';
+  const opts=MODALIDADES_ENTREGA.map(m=>{
+    const prev=calcularPrevisao(m);
+    const custoTxt=m.custo>0?money(m.custo):'Grátis';
+    const sel=modalidadeEscolhida===m.id;
+    return `<label class="modal-opt${sel?' sel':''}">
+      <input type="radio" name="ck-modal" value="${esc(m.id)}" ${sel?'checked':''} onchange="selecionarModalidade('${esc(m.id)}')">
+      <div class="modal-opt-info">
+        <b>${esc(m.nome)}</b>
+        <span class="sub">${m.tipo==='entrega'?'Entrega':'Retirada'}${m.regiao?' · '+esc(m.regiao):''} · ${custoTxt}</span>
+        ${prev?`<span class="sub prev">Previsão: ${fmtPrevisao(prev)}</span>`:''}
+      </div>
+    </label>`;
+  }).join('');
+  const modalidadeAtual=entregaById(modalidadeEscolhida);
+  const mostrarEndereco=modalidadeAtual&&modalidadeAtual.tipo==='entrega';
+  return `<div class="field"><label>Entrega ou retirada *</label><div class="modal-list">${opts}</div></div>
+    ${mostrarEndereco?`<div class="field"><label>Endereço para entrega *</label><input id="ck-endereco" placeholder="Rua, número, bairro" value="${esc(ckEndereco??'')}"></div>`:''}`;
+}
+
 /* ===== Carrinho / checkout ===== */
 function abrirCarrinho(){
   if(!qtdCarrinho()){
@@ -473,14 +559,18 @@ function renderCarrinho(){
   const comboHtml=combo
     ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Desconto por quantidade (${qtdCarrinho()}+ un.)</span><span>−${money(descCombo)}</span></div>`
     :`<div class="sub" style="margin:6px 0 0">Faltam ${COMBO_MIN_UN-qtdCarrinho()} un. pro desconto de ${money(COMBO_DESCONTO_UN)}/un. (a partir de ${COMBO_MIN_UN} un.)</div>`;
+  const custoEntrega=custoEntregaSelecionada();
+  const totalFinal=totalCarrinho()+custoEntrega;
   $('#sheet').innerHTML=`<div class="sheet-h"><h3>Seu pedido</h3><button class="x" onclick="fecharCarrinho()">✕</button></div>
     ${linhas}
     ${comboHtml}
-    <div class="tot"><span>Total</span><span>${money(totalCarrinho())}</span></div>
+    ${modalidadesHtml()}
+    ${custoEntrega>0?`<div class="line" style="border-bottom:none"><span class="sub-linha">Entrega</span><span class="sub-linha">${money(custoEntrega)}</span></div>`:''}
+    <div class="tot"><span>Total</span><span>${money(totalFinal)}</span></div>
     ${loginHtml()}
-    <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva" value="${esc(nomeSugerido())}"></div>
-    <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000" value="${esc(telefoneSugerido())}"></div>
-    <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h"></textarea></div>
+    <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva" value="${esc(ckNome??nomeSugerido())}"></div>
+    <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000" value="${esc(ckTel??telefoneSugerido())}"></div>
+    <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h">${esc(ckObs??'')}</textarea></div>
     <div id="ck-err" class="err" style="display:none"></div>
     <button class="btn" id="ck-btn" onclick="enviarPedido()">Confirmar pedido</button>`;
 }
@@ -490,6 +580,13 @@ async function enviarPedido(){
   const err=$('#ck-err');
   err.style.display='none';
   if(!nome||!tel){ err.textContent='Preencha nome e telefone para continuar.'; err.style.display='block'; return; }
+  if(MODALIDADES_ENTREGA.length&&!modalidadeEscolhida){ err.textContent='Escolha entrega ou retirada para continuar.'; err.style.display='block'; return; }
+  const modalidade=entregaById(modalidadeEscolhida);
+  let endereco='';
+  if(modalidade&&modalidade.tipo==='entrega'){
+    endereco=($('#ck-endereco')?.value||'').trim();
+    if(!endereco){ err.textContent='Informe o endereço para entrega.'; err.style.display='block'; return; }
+  }
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
   if(!ids.length)return;
   const btn=$('#ck-btn'); btn.disabled=true; btn.textContent='Enviando…';
@@ -506,9 +603,19 @@ async function enviarPedido(){
     err.style.display='block';
     return;
   }
+  let valorTotalFinal=data.valor_total;
+  if(modalidade){
+    const previsao=calcularPrevisao(modalidade);
+    const {data:dEnt,error:eEnt}=await sb.rpc('erp_definir_entrega_publico',{
+      p_empresa_id:EMPRESA_ID, p_pedido_id:data.pedido_id, p_modalidade_id:modalidade.id,
+      p_endereco:endereco||null, p_previsto_em:previsao?previsao.toISOString():null
+    });
+    if(!eEnt&&dEnt&&dEnt.valor_total!=null)valorTotalFinal=dEnt.valor_total;
+  }
   carrinho={}; localStorage.removeItem(CART_KEY); localStorage.removeItem(SESSAO_KEY);
+  modalidadeEscolhida=null; ckNome=null; ckTel=null; ckObs=null; ckEndereco=null;
   fecharCarrinho();
-  await irParaPagamento(data.pedido_id,data.valor_total);
+  await irParaPagamento(data.pedido_id,valorTotalFinal);
 }
 /* ===== Pagamento (Mercado Pago — Checkout Pro) ===== */
 async function irParaPagamento(pedidoId,valorTotal,err,btn){

@@ -447,7 +447,16 @@ async function entrarComGoogle(){
 async function sairConta(){ await sb.auth.signOut(); }
 
 /* ===== Carrinho / checkout ===== */
-function abrirCarrinho(){ renderCarrinho(); $('#overlay').classList.add('open'); }
+function abrirCarrinho(){
+  if(!qtdCarrinho()){
+    $('#sheet').innerHTML=`<div class="sheet-h"><h3>Seu pedido</h3><button class="x" onclick="fecharCarrinho()">✕</button></div>
+      <div class="empty" style="padding:34px 10px">Seu carrinho está vazio.<br>Escolhe algo gostoso no cardápio! 😋</div>
+      <button class="btn" onclick="fecharCarrinho()">Ver cardápio</button>`;
+    $('#overlay').classList.add('open');
+    return;
+  }
+  renderCarrinho(); $('#overlay').classList.add('open');
+}
 function fecharCarrinho(){ $('#overlay').classList.remove('open'); }
 function renderCarrinho(){
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);

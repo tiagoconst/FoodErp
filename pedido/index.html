@@ -160,6 +160,24 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .modal-opt-info .sub{font-size:11.5px;color:var(--muted)}
 .modal-opt-info .prev{color:var(--primary-dark);font-weight:600}
 .tot .sub-linha{font-size:12px;font-weight:500;color:var(--muted)}
+.sobre-overlay{display:none;position:fixed;inset:0;background:rgba(40,30,22,.55);z-index:60;overflow-y:auto;padding:24px}
+.sobre-overlay.open{display:block}
+.sobre-card{max-width:980px;margin:0 auto;background:var(--panel);border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(62,46,32,.35);display:grid;grid-template-columns:1.1fr 1fr}
+.sobre-close{position:absolute;top:34px;right:calc(50% - 490px + 16px);background:rgba(40,30,22,.55);color:#fff;border:none;width:34px;height:34px;border-radius:50%;font-size:18px;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center}
+.sobre-txt{padding:44px 40px;display:flex;flex-direction:column;justify-content:center}
+.sobre-txt h2{font-family:var(--font-menu);font-weight:800;font-size:26px;line-height:1.2;color:var(--ink);text-transform:uppercase;margin-bottom:18px}
+.sobre-txt h2 span{color:var(--primary)}
+.sobre-txt p{font-family:var(--font-menu);font-size:14.5px;line-height:1.65;color:var(--ink);margin-bottom:14px}
+.sobre-txt p:last-of-type{margin-bottom:0}
+.sobre-foto{position:relative;min-height:320px;background:#20261F}
+.sobre-foto img{width:100%;height:100%;object-fit:cover;display:block}
+@media(max-width:760px){
+  .sobre-close{right:20px;top:20px}
+  .sobre-card{grid-template-columns:1fr;margin-top:50px}
+  .sobre-foto{min-height:260px;order:-1}
+  .sobre-txt{padding:28px 22px}
+  .sobre-txt h2{font-size:21px}
+}
 </style>
 </head>
 <body>
@@ -168,7 +186,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   <div class="brand" id="brand-box"><img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXF7V4NZ.png" alt="Sabores da Ana"></div>
   <div class="navlinks">
     <a onclick="document.getElementById('cardapio').scrollIntoView({behavior:'smooth'})">Produtos</a>
-    <a href="https://saboresdaanairati.com.br/" target="_blank" rel="noopener">Sobre Nós</a>
+    <a onclick="abrirSobre()">Sobre Nós</a>
     <a href="https://saboresdaanairati.com.br/" target="_blank" rel="noopener">Contato</a>
   </div>
   <button class="cart-btn" onclick="abrirCarrinho()">
@@ -194,6 +212,22 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   <div class="sheet" id="sheet"></div>
 </div>
 
+<div class="sobre-overlay" id="sobre-overlay" onclick="if(event.target===this)fecharSobre()">
+  <button class="sobre-close" onclick="fecharSobre()">✕</button>
+  <div class="sobre-card">
+    <div class="sobre-txt">
+      <h2>Conexão com a comida <span>de verdade</span></h2>
+      <p>Depois de 17 anos construindo uma sólida carreira na área de TI, liderando equipes e grandes projetos em uma empresa nacional, a vida me trouxe uma reviravolta, e com ela, a oportunidade de me reconectar com minhas raízes.</p>
+      <p>Voltar para Irati, minha cidade natal, foi mais do que uma mudança de endereço: foi um reencontro comigo mesma, com a minha história e com a paixão que sempre esteve presente — cozinhar com sabor, carinho e atenção em cada detalhe.</p>
+      <p>Através da minha marmitaria, quero compartilhar com cada pessoa um pouco dessa trajetória: a simplicidade da nossa comida caseira, unida aos sabores e experiências que vivi pelo Brasil.</p>
+      <p>Seja bem-vindo(a) a essa nova jornada comigo.<br>Comida feita com propósito, de coração para coração.</p>
+    </div>
+    <div class="sobre-foto">
+      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-WCWRFHVO.jpg" alt="Ana, fundadora da Sabores da Ana">
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 /* ===== Configuração desta loja ===== */
@@ -206,6 +240,10 @@ const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const $=s=>document.querySelector(s);
 const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 document.title=LOJA_NOME+' — Faça seu pedido';
+
+/* ===== Sobre nós ===== */
+function abrirSobre(){ $('#sobre-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function fecharSobre(){ $('#sobre-overlay').classList.remove('open'); document.body.style.overflow=''; }
 
 /* ===== Carrinho (persistido no navegador do cliente) ===== */
 const CART_KEY='pedido_carrinho_v1';

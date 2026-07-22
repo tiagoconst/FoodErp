@@ -195,6 +195,28 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 @media(max-width:760px){
   .contato-card{margin:50px 16px;padding:32px 24px}
 }
+.site-footer{max-width:1280px;margin:36px auto 0;padding:22px 24px 30px;text-align:center;font-family:var(--font-menu);border-top:1px solid var(--line)}
+.site-footer .foot-links{font-size:13px;font-weight:700;margin-bottom:6px}
+.site-footer .foot-links a{color:var(--ink);text-decoration:none;cursor:pointer}
+.site-footer .foot-links a:hover{color:var(--primary-dark);text-decoration:underline}
+.site-footer .foot-sep{color:var(--muted);margin:0 8px}
+.site-footer .foot-brand{font-size:11.5px;color:var(--muted)}
+.legal-card{max-width:680px;margin:44px auto;background:var(--panel);border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(62,46,32,.35);max-height:calc(100vh - 88px);display:flex;flex-direction:column}
+.legal-card .legal-head{padding:26px 32px 16px;border-bottom:1px solid var(--line);flex:none}
+.legal-card .legal-head h2{font-family:'Poppins',var(--font-menu);font-weight:800;font-size:20px;color:var(--ink);margin-bottom:4px}
+.legal-card .legal-head .muted{font-family:var(--font-menu);font-size:12px;color:var(--muted)}
+.legal-body{padding:20px 32px 32px;overflow-y:auto}
+.legal-body h3{font-family:var(--font-menu);font-weight:800;font-size:14px;color:var(--primary-dark);margin:20px 0 6px}
+.legal-body h3:first-child{margin-top:0}
+.legal-body p,.legal-body li{font-family:var(--font-menu);font-size:13.5px;color:var(--ink);line-height:1.6}
+.legal-body p{margin-bottom:10px}
+.legal-body ul{margin:0 0 10px 20px}
+.legal-body a{color:var(--primary-dark)}
+@media(max-width:760px){
+  .legal-card{margin:0;max-height:100vh;height:100vh;border-radius:0}
+  .legal-card .legal-head{padding:22px 20px 14px}
+  .legal-body{padding:16px 20px 28px}
+}
 </style>
 </head>
 <body>
@@ -219,6 +241,11 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 <div class="promo-banner" id="promo-banner"></div>
 
 <div class="wrap" id="cardapio"><div class="loading">Carregando cardápio…</div></div>
+
+<div class="site-footer">
+  <div class="foot-links"><a onclick="abrirPrivacidade()">Política de Privacidade</a><span class="foot-sep">·</span><a onclick="abrirTermos()">Termos de Uso</a></div>
+  <div class="foot-brand">Sabores da Ana</div>
+</div>
 
 <div class="cartbar" id="cartbar">
   <div><span class="cnt" id="cart-cnt">0</span><b id="cart-tot">R$ 0,00</b></div>
@@ -262,6 +289,87 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   </div>
 </div>
 
+<div class="sobre-overlay" id="privacidade-overlay" onclick="if(event.target===this)fecharPrivacidade()">
+  <button class="sobre-close" onclick="fecharPrivacidade()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>Política de Privacidade</h2>
+      <div class="muted">Última atualização: julho de 2026</div>
+    </div>
+    <div class="legal-body">
+      <h3>Quem somos</h3>
+      <p>Esta página descreve como a Sabores da Ana coleta, usa e protege as informações de quem faz pedidos pelo nosso site (pedido.saboresdaanairati.com.br).</p>
+
+      <h3>Quais dados coletamos</h3>
+      <ul>
+        <li>Nome e telefone/WhatsApp informados no momento do pedido;</li>
+        <li>Itens, quantidades e observações do pedido;</li>
+        <li>Endereço de entrega, quando o pedido é pra entrega;</li>
+        <li>Dados de pagamento processados diretamente pelo Mercado Pago — não armazenamos número de cartão nem dados sensíveis de pagamento em nossos servidores;</li>
+        <li>Se você optar por entrar com sua conta Google, recebemos seu nome, e-mail e foto de perfil públicos, fornecidos pelo próprio Google — não temos acesso à sua senha.</li>
+      </ul>
+
+      <h3>Para que usamos esses dados</h3>
+      <ul>
+        <li>Processar, confirmar e entregar seu pedido;</li>
+        <li>Calcular prazo e custo de entrega ou retirada;</li>
+        <li>Processar o pagamento com segurança através do Mercado Pago;</li>
+        <li>Entrar em contato sobre o andamento do pedido;</li>
+        <li>Reconhecer você em pedidos futuros, evitando cadastro duplicado;</li>
+        <li>Manter um histórico de pedidos para fins administrativos e fiscais.</li>
+      </ul>
+
+      <h3>Com quem compartilhamos</h3>
+      <p>Não vendemos nem compartilhamos seus dados com terceiros para fins de publicidade. Seus dados de pedido ficam armazenados em nosso banco de dados (hospedado pela Supabase) e são acessados apenas pela equipe da Sabores da Ana para operar o negócio. Os dados de pagamento são processados diretamente pelo Mercado Pago, conforme a política de privacidade própria deles.</p>
+
+      <h3>Cookies e armazenamento local</h3>
+      <p>Usamos o armazenamento local do seu navegador (localStorage) apenas para lembrar o carrinho de compras entre uma visita e outra — nenhuma informação é usada para rastreamento publicitário.</p>
+
+      <h3>Seus direitos</h3>
+      <p>Você pode solicitar a qualquer momento a atualização, exclusão ou uma cópia dos seus dados, entrando em contato conosco pelos canais informados no site ou no rodapé do seu recibo de pedido, conforme a Lei Geral de Proteção de Dados (LGPD).</p>
+
+      <h3>Contato</h3>
+      <p>Dúvidas sobre esta política podem ser enviadas pelo <a onclick="fecharPrivacidade();abrirContato()">canal de contato</a> da loja.</p>
+    </div>
+  </div>
+</div>
+
+<div class="sobre-overlay" id="termos-overlay" onclick="if(event.target===this)fecharTermos()">
+  <button class="sobre-close" onclick="fecharTermos()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>Termos de Uso</h2>
+      <div class="muted">Última atualização: julho de 2026</div>
+    </div>
+    <div class="legal-body">
+      <h3>Sobre este site</h3>
+      <p>Este site permite montar e enviar pedidos para a Sabores da Ana. Ao usá-lo, você concorda com os termos abaixo.</p>
+
+      <h3>Pedidos</h3>
+      <ul>
+        <li>Os preços exibidos podem ser ajustados a qualquer momento, sem aviso prévio;</li>
+        <li>Descontos por quantidade, quando aplicáveis, são calculados automaticamente no fechamento do pedido;</li>
+        <li>Ao escolher entrega ou retirada, o site calcula automaticamente a previsão de quando o pedido fica pronto, com base nos dias e horários de produção da loja.</li>
+      </ul>
+
+      <h3>Pagamento</h3>
+      <p>O pagamento é feito diretamente pelo site, de forma segura, através do Mercado Pago. O pedido só é confirmado após a aprovação do pagamento.</p>
+
+      <h3>Entrega e retirada</h3>
+      <p>O custo e o prazo de entrega variam de acordo com a modalidade escolhida no momento do pedido. Pedidos de retirada devem ser buscados no endereço e horário informados pela loja.</p>
+
+      <h3>Cancelamentos</h3>
+      <p>Cancelamentos ou alterações de pedido devem ser combinados diretamente com a loja pelo telefone/WhatsApp informado no contato.</p>
+
+      <h3>Login com Google</h3>
+      <p>Ao optar por entrar com sua conta Google, você autoriza o compartilhamento do seu nome, e-mail e foto de perfil públicos com este site, conforme descrito em nossa <a onclick="fecharTermos();abrirPrivacidade()">Política de Privacidade</a>.</p>
+
+      <h3>Contato</h3>
+      <p>Dúvidas sobre estes termos podem ser enviadas pelo <a onclick="fecharTermos();abrirContato()">canal de contato</a> da loja.</p>
+    </div>
+  </div>
+</div>
+
 <script>
 'use strict';
 /* ===== Configuração desta loja ===== */
@@ -282,6 +390,12 @@ function fecharSobre(){ $('#sobre-overlay').classList.remove('open'); document.b
 /* ===== Contato ===== */
 function abrirContato(){ $('#contato-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
 function fecharContato(){ $('#contato-overlay').classList.remove('open'); document.body.style.overflow=''; }
+
+/* ===== Política de Privacidade / Termos de Uso ===== */
+function abrirPrivacidade(){ $('#privacidade-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function fecharPrivacidade(){ $('#privacidade-overlay').classList.remove('open'); document.body.style.overflow=''; }
+function abrirTermos(){ $('#termos-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function fecharTermos(){ $('#termos-overlay').classList.remove('open'); document.body.style.overflow=''; }
 
 /* ===== Carrinho (persistido no navegador do cliente) ===== */
 const CART_KEY='pedido_carrinho_v1';

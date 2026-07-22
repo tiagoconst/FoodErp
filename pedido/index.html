@@ -73,9 +73,10 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);display:flex;flex-direction:column;position:relative}
 .card img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:var(--soft);border-radius:var(--radius) var(--radius) 0 0}
 .card .thumb-fallback{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;font-size:40px;border-radius:var(--radius) var(--radius) 0 0}
-.info-badge{position:absolute;top:0;right:0;width:48px;height:48px;clip-path:polygon(100% 0,100% 100%,0 0);background:rgba(40,30,22,.62);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);cursor:pointer;z-index:3;user-select:none;transition:background .15s}
-.info-badge:hover,.info-badge.open{background:rgba(40,30,22,.8)}
-.info-badge .ic{position:absolute;top:6px;right:8px;font-size:15px;font-weight:400;font-family:Georgia,serif;font-style:italic;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4)}
+.info-badge{position:absolute;top:0;right:0;width:48px;height:48px;cursor:pointer;z-index:3;user-select:none}
+.info-badge .tri{position:absolute;inset:0;clip-path:polygon(100% 0,100% 100%,0 0);background:rgba(40,30,22,.62);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);transition:background .15s;pointer-events:none}
+.info-badge:hover .tri,.info-badge.open .tri{background:rgba(40,30,22,.8)}
+.info-badge .ic{position:absolute;top:6px;right:8px;font-size:15px;font-weight:400;font-family:Georgia,serif;font-style:italic;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.4);pointer-events:none}
 .info-pop{display:none;position:absolute;top:42px;right:0;max-width:calc(100vw - 32px);background:rgba(255,255,255,.82);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.6);border-radius:10px;box-shadow:0 8px 24px rgba(62,46,32,.16);padding:10px 13px;width:180px;z-index:6;text-align:left;cursor:default}
 .info-badge.open .info-pop{display:block}
 @media(hover:hover)and(pointer:fine){ .info-badge:hover .info-pop{display:block} }
@@ -238,7 +239,7 @@ function composicaoHtml(id){
   const comp=COMPOSICOES[id];
   if(!comp||!comp.length)return '';
   const linhas=comp.map(c=>`<li>${esc(c.nome)}<span class="q">${fmtQtdComposicao(c.quantidade,c.unidade)}</span></li>`).join('');
-  return `<span class="info-badge" tabindex="0" onclick="if(event.target.closest('.info-pop'))return;event.stopPropagation();toggleInfo(this)"><span class="ic">i</span><div class="info-pop"><b>Composição</b><ul>${linhas}</ul></div></span>`;
+  return `<span class="info-badge" tabindex="0" onclick="if(event.target.closest('.info-pop'))return;event.stopPropagation();toggleInfo(this)"><span class="tri"></span><span class="ic">i</span><div class="info-pop"><b>Composição</b><ul>${linhas}</ul></div></span>`;
 }
 function fecharInfoAbertos(exceto){
   document.querySelectorAll('.info-badge.open').forEach(b=>{

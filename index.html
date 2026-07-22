@@ -2019,7 +2019,7 @@ function prepararLogoImpressao(cb){
   const img=new Image();
   img.onload=function(){
     try{
-      const alvo=700; // resolução alta antes de binarizar — sua imagem original é boa, então dá pra manter detalhe
+      const alvo=1000; // resolução alta antes de binarizar — sua imagem original é boa, então dá pra manter detalhe
       const escala=alvo/Math.max(img.width,img.height);
       const canvas=document.createElement('canvas');
       canvas.width=Math.round(img.width*escala); canvas.height=Math.round(img.height*escala);
@@ -2065,7 +2065,7 @@ function imprimirEtiquetas(id){
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .et{padding:3mm 0;text-align:center}
-    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo img{max-height:8mm;max-width:44mm;image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges}
     .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
     .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:2.5mm}
     .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
@@ -2193,7 +2193,7 @@ function imprimirPedido(id){
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .center{text-align:center}
-    .logo{max-height:12mm;margin-bottom:1mm}
+    .logo{max-height:12mm;margin-bottom:1mm;image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges}
     h1{font-size:12px;margin:1mm 0}
     hr{border:none;border-top:1px dashed #000;margin:2.5mm 0}
     table{width:100%;border-collapse:collapse} td{padding:1mm 0;vertical-align:top;font-size:10px} .r{text-align:right;white-space:nowrap}

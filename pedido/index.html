@@ -499,7 +499,10 @@ function telaPagamentoPendente(pedidoId,numero,valorTotal){
     <h2>Pagamento em processamento</h2>
     <p>Assim que o Mercado Pago confirmar (geralmente leva só alguns instantes — no Pix pode ser na hora, em boleto pode levar até 2 dias úteis), seu pedido é liberado automaticamente.<br>Valor: <b>${money(valorTotal)}</b></p>
     <div class="pid">Pedido ${esc(numero||pedidoId)}</div>
-    <div style="margin-top:26px"><button class="btn" onclick="location.reload()">Atualizar status</button></div>
+    <div style="margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn" style="width:auto" onclick="location.reload()">Atualizar status</button>
+      <button class="btn" style="width:auto;background:var(--muted)" onclick="location.href=location.pathname">Voltar à loja</button>
+    </div>
   </div>`;
   atualizarBarra();
 }
@@ -508,7 +511,10 @@ function telaPagamentoFalhou(pedidoId,valorTotal){
     <div class="em">❌</div>
     <h2>Pagamento não foi concluído</h2>
     <p>Seu pedido <b>${esc(pedidoId)}</b> (${money(valorTotal)}) continua salvo — você pode tentar pagar de novo.</p>
-    <div style="margin-top:26px"><button class="btn" style="width:auto" onclick="irParaPagamento('${esc(pedidoId)}',${valorTotal})">Tentar pagamento de novo</button></div>
+    <div style="margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn" style="width:auto" onclick="irParaPagamento('${esc(pedidoId)}',${valorTotal})">Tentar pagamento de novo</button>
+      <button class="btn" style="width:auto;background:var(--muted)" onclick="location.href=location.pathname">Voltar à loja</button>
+    </div>
   </div>`;
   atualizarBarra();
 }

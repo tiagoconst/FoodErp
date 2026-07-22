@@ -267,16 +267,18 @@ let COMPOSICOES={};
 let MODALIDADES_ENTREGA=[];
 let PRODUCAO_CFG={dias:['seg','qua','sex'],horario_corte:'12:00',horario_pronto:'19:00'};
 async function carregarCardapio(){
-  const [cardRes,destRes,identRes,compRes,entregaRes]=await Promise.all([
+  const [cardRes,destRes,identRes,compRes,entregaRes,queridRes]=await Promise.all([
     sb.rpc('erp_cardapio_publico',{p_empresa_id:EMPRESA_ID}),
     sb.rpc('erp_mais_vendidos_publico',{p_empresa_id:EMPRESA_ID,p_limite:5}),
     sb.rpc('erp_identidade_publica',{p_empresa_id:EMPRESA_ID}),
     sb.rpc('erp_composicoes_publico',{p_empresa_id:EMPRESA_ID}),
-    sb.rpc('erp_modalidades_entrega_publico',{p_empresa_id:EMPRESA_ID})
+    sb.rpc('erp_modalidades_entrega_publico',{p_empresa_id:EMPRESA_ID}),
+    sb.rpc('erp_queridinhos_publico',{p_empresa_id:EMPRESA_ID})
   ]);
   if(cardRes.error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
   cardapio=cardRes.data||[];
-  destaques=cardRes.error?[]:(destRes.data||[]);
+  const querid=(queridRes&&queridRes.data)||[];
+  destaques=querid.length?querid:(cardRes.error?[]:(destRes.data||[]));
   FOTO_PADRAO=(identRes&&identRes.data&&identRes.data.foto_padrao)||'';
   renderPromoBanner(identRes&&identRes.data&&identRes.data.banner_promo_desktop,identRes&&identRes.data&&identRes.data.banner_promo_mobile);
   COMPOSICOES=(compRes&&compRes.data)||{};

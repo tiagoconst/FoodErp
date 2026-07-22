@@ -891,6 +891,17 @@ function salvarItem(id){
 }
 function toggleItem(id){ const i=itemById(id); i.ativo=i.ativo===false; // registros não são excluídos, apenas inativados
   registrarEvento('ITEM_ATUALIZADO',`${i.nome} ${i.ativo?'reativado':'inativado'}`,id); scheduleSave(); render(); }
+function toggleQueridinho(id){
+  const i=itemById(id); if(!i)return;
+  i.destaque_manual=!i.destaque_manual;
+  registrarEvento('ITEM_ATUALIZADO',`${i.nome} ${i.destaque_manual?'marcado':'desmarcado'} como Queridinho`,id);
+  scheduleSave(); render();
+}
+function definirOrdemQueridinho(id,val){
+  const i=itemById(id); if(!i)return;
+  i.destaque_ordem=val===''?null:(parseInt(val)||0);
+  scheduleSave();
+}
 
 /* ================= COMPOSIÇÕES (pré-preparos e itens intermediários) & PRODUTOS (vendáveis) ================= */
 function composicoesDeTodas(paiId){ return S.composicoes.filter(c=>c.item_pai_id===paiId); }
@@ -3598,6 +3609,20 @@ VIEWS.dados=function(){
       <table><thead><tr><th>Nome</th><th>Tipo</th><th class="r">Custo</th><th>Prazo</th><th class="r"></th></tr></thead><tbody>${entregasListaHtml}</tbody></table>
       <button class="btn sm" style="margin-top:10px" onclick="modalEntregaCad()">+ Nova modalidade</button>
     </div></div>`;
+  const itensQuerid=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  const queridinhosListaHtml=itensQuerid.map(i=>`<tr>
+      <td><input type="checkbox" ${i.destaque_manual?'checked':''} onchange="toggleQueridinho('${i.id}')"></td>
+      <td><b>${esc(i.nome)}</b></td>
+      <td class="subtle">${esc(i.categoria||'')}</td>
+      <td class="r"><input type="number" style="width:64px" value="${i.destaque_ordem??''}" placeholder="—" ${i.destaque_manual?'':'disabled'} onchange="definirOrdemQueridinho('${i.id}',this.value)"></td>
+    </tr>`).join('')
+    ||`<tr><td colspan="4"><div class="empty"><b>Nenhum item vendável cadastrado ainda.</b></div></td></tr>`;
+  const queridinhosCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>⭐ Queridinhos do site</h3>
+      <span class="tag mut">escolha manualmente os itens em destaque no topo do cardápio</span></div>
+    <div class="card-b">
+      <p class="subtle" style="margin-bottom:12px">Marque os itens que devem aparecer na seção "Queridinhos" do site de pedidos. O número na coluna Ordem define a posição (menor número aparece primeiro; deixe em branco pra não se importar com a ordem). Se nenhum item estiver marcado, o site volta a mostrar os mais vendidos automaticamente.</p>
+      <table><thead><tr><th></th><th>Item</th><th>Categoria</th><th class="r">Ordem</th></tr></thead><tbody>${queridinhosListaHtml}</tbody></table>
+    </div></div>`;
   const imgAvulsaCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🖼️ Central de imagens</h3>
       <span class="tag mut">pra banners, botões e outras imagens avulsas do site de pedidos</span></div>
     <div class="card-b">
@@ -3616,7 +3641,7 @@ VIEWS.dados=function(){
       </div>
     </div></div>`;
   return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
-  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${producaoCard}${entregasCard}${imgAvulsaCard}
+  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${queridinhosCard}${producaoCard}${entregasCard}${imgAvulsaCard}
     <div class="card"><div class="card-h"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
       <button class="btn primary" onclick="exportarJSON()">⬇ Exportar backup (JSON)</button></div></div>

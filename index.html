@@ -60,6 +60,11 @@ main{padding:26px 32px 64px;max-width:1240px;width:100%;overflow-x:hidden}
 .card .card-h{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:10px}
 .card .card-h h3{font-size:14.5px;font-weight:700}
 .card .card-b{padding:16px 18px;overflow-x:auto}
+.card.acc .card-h{cursor:pointer;user-select:none}
+.card.acc .card-h::after{content:'▾';margin-left:4px;opacity:.5;font-size:12px;transition:transform .15s;flex:none}
+.card.acc:not(.open) .card-h{border-bottom:none}
+.card.acc:not(.open) .card-h::after{transform:rotate(-90deg)}
+.card.acc:not(.open) .card-b{display:none}
 .grid{display:grid;gap:16px}
 .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
 @media(max-width:1020px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
@@ -3451,13 +3456,13 @@ VIEWS.dados=function(){
     const planoTxt=empresa.status==='ativa'?'<span class="tag f">plano ativo</span>'
       :empresa.status==='trial'?'<span class="tag warn">teste grátis — '+(diasRestantes(empresa.trial_expira_em)||0)+' dia(s) restante(s)</span>'
       :'<span class="tag bad">bloqueado</span>';
-    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem</h3>${planoTxt}</div>
+    cloudCard=`<div class="card acc open" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>☁️ Modo nuvem</h3>${planoTxt}</div>
       <div class="card-b">
         <p style="margin-bottom:10px"><b>${esc(empresa.nome||'')}</b> · usuário <b>${esc(sessao&&sessao.user?sessao.user.email:'')}</b> (${esc(empresa.papel||'')})</p>
         <p class="subtle" style="margin-bottom:12px">Código de convite da empresa — compartilhe com funcionários para que criem conta e entrem nesta mesma base: <b style="color:var(--ink);font-size:15px;letter-spacing:.06em">${esc(empresa.codigo_convite||'—')}</b></p>
         <button class="btn" onclick="sairConta()">Sair da conta</button></div></div>`;
   } else {
-    cloudCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>☁️ Modo nuvem</h3><span class="tag warn">aguardando login</span></div>
+    cloudCard=`<div class="card acc open" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>☁️ Modo nuvem</h3><span class="tag warn">aguardando login</span></div>
       <div class="card-b"><button class="btn primary" onclick="showAuth('login')">Fazer login</button></div></div>`;
   }
   const idn=getIdent();
@@ -3465,7 +3470,7 @@ VIEWS.dados=function(){
     <span style="width:11px;height:11px;border-radius:3px;background:${p[1]};display:inline-block"></span>
     <span style="width:11px;height:11px;border-radius:3px;background:${p[2]};display:inline-block"></span>${p[0]}</button>`).join(' ');
   const emp=getEmpresaInfo();
-  const empresaCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🏢 Dados da empresa</h3>
+  const empresaCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>🏢 Dados da empresa</h3>
       <span class="tag mut">usados no recibo e nos documentos</span></div>
     <div class="card-b">
       <div class="frow c3">
@@ -3489,7 +3494,7 @@ VIEWS.dados=function(){
       <button class="btn primary" onclick="salvarDadosEmpresa()">Salvar dados da empresa</button>
     </div></div>`;
   const modoAtual=controlaEstoque();
-  const operacaoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>📦 Modo de operação</h3></div>
+  const operacaoCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>📦 Modo de operação</h3></div>
     <div class="card-b">
       <p class="subtle" style="margin-bottom:14px">Escolha o que faz mais sentido pro seu negócio — não afeta o cálculo de custo (CMV), só como o Planejamento sugere compras.</p>
       <div class="frow c2">
@@ -3503,7 +3508,7 @@ VIEWS.dados=function(){
         </label>
       </div>
     </div></div>`;
-  const identCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🎨 Identidade visual</h3>
+  const identCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>🎨 Identidade visual</h3>
       <span class="tag mut">${cfg?'sincroniza para todos os dispositivos da empresa':'salva neste navegador'}</span></div>
     <div class="card-b">
       <div class="field"><label>Paletas prontas</label><div style="display:flex;gap:7px;flex-wrap:wrap">${presetBtns}</div></div>
@@ -3542,7 +3547,7 @@ VIEWS.dados=function(){
       <p class="subtle" style="margin-top:10px">A prévia é aplicada enquanto você edita — mas só vale de forma permanente após salvar.</p>
     </div></div>`;
   const idn2=getIdent();
-  const fotoPadraoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🍽️ Foto padrão dos produtos</h3>
+  const fotoPadraoCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>🍽️ Foto padrão dos produtos</h3>
       <span class="tag mut">usada no site de pedidos quando um produto não tem foto própria</span></div>
     <div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Envie uma imagem genérica (ex.: logo em fundo colorido, ou uma foto ilustrativa da marmita). Todo produto vendável sem foto própria passa a usar essa imagem no site, em vez do círculo colorido com emoji.</p>
@@ -3553,7 +3558,7 @@ VIEWS.dados=function(){
         ${idn2.foto_padrao?'<button class="btn sm" onclick="removerFotoPadrao()">Remover</button>':''}
       </div>
     </div></div>`;
-  const bannerPromoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>📢 Banner de promoção</h3>
+  const bannerPromoCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>📢 Banner de promoção</h3>
       <span class="tag mut">aparece no site de pedidos, logo abaixo do filtro de categorias</span></div>
     <div class="card-b">
       <p class="subtle" style="margin-bottom:14px">Envie duas versões da mesma arte — uma pro computador (mais larga e baixa) e outra pro celular (mais estreita, pode ser mais alta). Se não enviar nada, o site mostra um banner padrão com o texto do desconto por quantidade.</p>
@@ -3581,7 +3586,7 @@ VIEWS.dados=function(){
       </div>
     </div></div>`;
   const prodCfg=getProducaoConfig();
-  const producaoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>📅 Dias de produção &amp; prazos</h3>
+  const producaoCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>📅 Dias de produção &amp; prazos</h3>
       <span class="tag mut">usado pra calcular quando um pedido fica pronto</span></div>
     <div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Marque os dias em que vocês produzem. Um pedido feito até o horário de corte num dia de produção fica pronto no mesmo dia; feito depois do corte, fica pronto só no próximo dia de produção.</p>
@@ -3603,7 +3608,7 @@ VIEWS.dados=function(){
         <button class="btn sm ghost" onclick="toggleEntregaCad('${e.id}')">${e.ativo===false?'Reativar':'Inativar'}</button>
         <button class="btn sm ghost" onclick="removerEntregaCad('${e.id}')">✕</button></td></tr>`).join('')
     ||`<tr><td colspan="5"><div class="empty"><b>Nenhuma modalidade cadastrada</b>Cadastre pelo menos uma opção de "Retirada no local" pra começar.</div></td></tr>`;
-  const entregasCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🚚 Entregas e retiradas</h3>
+  const entregasCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>🚚 Entregas e retiradas</h3>
       <span class="tag mut">modalidades que o cliente vai poder escolher no site</span></div>
     <div class="card-b">
       <table><thead><tr><th>Nome</th><th>Tipo</th><th class="r">Custo</th><th>Prazo</th><th class="r"></th></tr></thead><tbody>${entregasListaHtml}</tbody></table>
@@ -3617,13 +3622,13 @@ VIEWS.dados=function(){
       <td class="r"><input type="number" style="width:64px" value="${i.destaque_ordem??''}" placeholder="—" ${i.destaque_manual?'':'disabled'} onchange="definirOrdemQueridinho('${i.id}',this.value)"></td>
     </tr>`).join('')
     ||`<tr><td colspan="4"><div class="empty"><b>Nenhum item vendável cadastrado ainda.</b></div></td></tr>`;
-  const queridinhosCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>⭐ Queridinhos do site</h3>
+  const queridinhosCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>⭐ Queridinhos do site</h3>
       <span class="tag mut">escolha manualmente os itens em destaque no topo do cardápio</span></div>
     <div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Marque os itens que devem aparecer na seção "Queridinhos" do site de pedidos. O número na coluna Ordem define a posição (menor número aparece primeiro; deixe em branco pra não se importar com a ordem). Se nenhum item estiver marcado, o site volta a mostrar os mais vendidos automaticamente.</p>
       <table><thead><tr><th></th><th>Item</th><th>Categoria</th><th class="r">Ordem</th></tr></thead><tbody>${queridinhosListaHtml}</tbody></table>
     </div></div>`;
-  const imgAvulsaCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🖼️ Central de imagens</h3>
+  const imgAvulsaCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>🖼️ Central de imagens</h3>
       <span class="tag mut">pra banners, botões e outras imagens avulsas do site de pedidos</span></div>
     <div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Envie qualquer imagem aqui pra gerar um link público — útil pra mandar pro Claude quando ele não consegue receber a imagem direto pelo chat, ou pra qualquer outro uso que precise de um link de imagem.</p>
@@ -3642,17 +3647,17 @@ VIEWS.dados=function(){
     </div></div>`;
   return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
   `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${queridinhosCard}${producaoCard}${entregasCard}${imgAvulsaCard}
-    <div class="card"><div class="card-h"><h3>Backup</h3></div><div class="card-b">
+    <div class="card acc"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
       <button class="btn primary" onclick="exportarJSON()">⬇ Exportar backup (JSON)</button></div></div>
-    <div class="card"><div class="card-h"><h3>Restaurar</h3></div><div class="card-b">
+    <div class="card acc"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>Restaurar</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Substitui os dados atuais pelo conteúdo de um backup exportado anteriormente.</p>
       <input type="file" id="imp-file" accept="application/json" style="margin-bottom:10px">
       <button class="btn" onclick="importarJSON()">⬆ Importar backup</button></div></div>
-    <div class="card"><div class="card-h"><h3>Dados de exemplo</h3></div><div class="card-b">
+    <div class="card acc"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>Dados de exemplo</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Carrega o exemplo do diagrama (Marmita G = arroz branco + frango desfiado + feijão + embalagem 700 ml + etiqueta), com composições encadeadas.</p>
       <button class="btn" onclick="carregarExemplo()">Carregar exemplo Marmitaria</button></div></div>
-    <div class="card"><div class="card-h"><h3>Zerar sistema</h3></div><div class="card-b">
+    <div class="card acc"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>Zerar sistema</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Apaga todos os dados deste navegador. Exporte um backup antes.</p>
       <button class="btn danger" onclick="zerarTudo()">Apagar todos os dados</button></div></div>
   </div>`;

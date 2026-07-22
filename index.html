@@ -355,7 +355,7 @@ const EVENTO_CORES = {
 var S = {
   empresa:{nome:'Meu Restaurante'},
   itens:[], categorias:[], composicoes:[], custos_fixos:[], status_personalizados:[], perfis_marmita:[], movimentos:[], compras:[], producoes:[],
-  pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], seq:{}
+  pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], entregas:[], seq:{}
 };
 let currentView='dashboard';
 let saveTimer=null;
@@ -489,6 +489,63 @@ function salvarModoOperacao(controla){
   S.config.push({id:'operacao',controla_estoque:controla});
   registrarEvento('ITEM_ATUALIZADO',`Modo de operação alterado: ${controla?'controle de estoque ativo':'compra sob demanda (sem controle de estoque)'}`);
   scheduleSave(); render(); toast('Modo de operação salvo.');
+}
+const DIAS_SEMANA=[['dom','Dom'],['seg','Seg'],['ter','Ter'],['qua','Qua'],['qui','Qui'],['sex','Sex'],['sab','Sáb']];
+const PRODUCAO_PADRAO={dias:['seg','qua','sex'],horario_corte:'12:00',horario_pronto:'19:00'};
+function getProducaoConfig(){ if(!S.config)S.config=[];
+  return Object.assign({},PRODUCAO_PADRAO,S.config.find(x=>x.id==='producao')||{}); }
+function salvarProducaoConfig(dias,corte,pronto){
+  if(!S.config)S.config=[];
+  S.config=S.config.filter(c=>c.id!=='producao');
+  S.config.push({id:'producao',dias,horario_corte:corte,horario_pronto:pronto});
+  registrarEvento('ITEM_ATUALIZADO','Dias de produção e prazos atualizados');
+  scheduleSave(); render(); toast('Configuração de produção salva.');
+}
+function entregaById(id){ return (S.entregas||[]).find(e=>e.id===id); }
+function modalEntregaCad(id){
+  if(!S.entregas)S.entregas=[];
+  const e=id?entregaById(id):null;
+  openModal(`<div class="m-h"><h3>${e?'Editar modalidade':'Nova modalidade de entrega/retirada'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <div class="frow c2">
+      <div class="field"><label>Nome *</label><input id="ed-nome" value="${e?esc(e.nome):''}" placeholder="ex.: Retirada no local, Entrega Centro, Entrega Expressa"></div>
+      <div class="field"><label>Tipo *</label><select id="ed-tipo"><option value="retirada" ${e&&e.tipo==='retirada'?'selected':''}>Retirada no local</option><option value="entrega" ${!e||e.tipo==='entrega'?'selected':''}>Entrega</option></select></div>
+    </div>
+    <div class="frow c2">
+      <div class="field"><label>Custo (R$)</label><input id="ed-custo" type="number" step="0.01" min="0" value="${e&&e.custo?e.custo:''}" placeholder="0,00 = grátis"></div>
+      <div class="field"><label>Região / observação</label><input id="ed-regiao" value="${e?esc(e.regiao||''):''}" placeholder="ex.: Bairro Centro, Irati"></div>
+    </div>
+    <div class="field">
+      <label class="check ${!e||e.segue_prazo_producao!==false?'on':''}"><input type="checkbox" id="ed-segue" ${!e||e.segue_prazo_producao!==false?'checked':''} onchange="$('#ed-prazo-wrap').style.display=this.checked?'none':'block';this.closest('.check').classList.toggle('on',this.checked)"><span><b>Segue o prazo padrão de produção</b><small>Usa a regra dos dias de produção (ex.: pronto no mesmo dia após as 19h se pedido até o corte, senão no próximo dia de produção)</small></span></label>
+    </div>
+    <div class="field" id="ed-prazo-wrap" style="display:${e&&e.segue_prazo_producao===false?'block':'none'}">
+      <label>Prazo próprio (em horas a partir do pedido)</label>
+      <input id="ed-prazo-horas" type="number" step="1" min="1" value="${e&&e.prazo_horas?e.prazo_horas:''}" placeholder="ex.: 3 (pra entrega expressa)">
+      <span class="hint">Use isso pra opções que não seguem os dias de produção, tipo entrega expressa ou fora da área padrão.</span>
+    </div>
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarEntregaCad('${id||''}')">Salvar</button></div>`);
+  setTimeout(()=>$('#ed-nome').focus(),50);
+}
+function salvarEntregaCad(id){
+  const nome=$('#ed-nome').value.trim(); if(!nome)return toast('Informe o nome.',true);
+  const segue=$('#ed-segue').checked;
+  const dados={nome,tipo:$('#ed-tipo').value,custo:parseFloat($('#ed-custo').value)||0,
+    regiao:$('#ed-regiao').value.trim(),segue_prazo_producao:segue,
+    prazo_horas:segue?null:(parseFloat($('#ed-prazo-horas').value)||null)};
+  if(!S.entregas)S.entregas=[];
+  if(id){ Object.assign(entregaById(id),dados); registrarEvento('ITEM_ATUALIZADO',`Modalidade de entrega "${nome}" atualizada`,id); }
+  else{ const nid=uid('ENT'); S.entregas.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},dados));
+    registrarEvento('ITEM_CRIADO',`Modalidade de entrega "${nome}" criada`,nid); }
+  closeModal(); scheduleSave(); render(); toast('Modalidade salva.');
+}
+function toggleEntregaCad(id){ const e=entregaById(id); if(!e)return; e.ativo=e.ativo===false?true:false;
+  registrarEvento('ITEM_ATUALIZADO',`${e.nome} ${e.ativo?'reativada':'inativada'}`,id); scheduleSave(); render(); }
+function removerEntregaCad(id){ const e=entregaById(id); if(!e)return;
+  if(!confirm(`Remover "${e.nome}"?`))return;
+  S.entregas=S.entregas.filter(x=>x.id!==id);
+  registrarEvento('ITEM_ATUALIZADO',`Modalidade de entrega "${e.nome}" removida`);
+  scheduleSave(); render(); toast('Removida.');
 }
 function getIdent(){ if(!S.config)S.config=[];
   return Object.assign({},IDENT_PADRAO,S.config.find(x=>x.id==='identidade')||{}); }
@@ -3510,6 +3567,35 @@ VIEWS.dados=function(){
         </div>
       </div>
     </div></div>`;
+  const prodCfg=getProducaoConfig();
+  const producaoCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>📅 Dias de produção &amp; prazos</h3>
+      <span class="tag mut">usado pra calcular quando um pedido fica pronto</span></div>
+    <div class="card-b">
+      <p class="subtle" style="margin-bottom:12px">Marque os dias em que vocês produzem. Um pedido feito até o horário de corte num dia de produção fica pronto no mesmo dia; feito depois do corte, fica pronto só no próximo dia de produção.</p>
+      <div class="field"><label>Dias de produção</label>
+        <div class="check-grid" id="prod-dias">${DIAS_SEMANA.map(([k,n])=>`<label class="check ${prodCfg.dias.includes(k)?'on':''}"><input type="checkbox" name="prod-dia" value="${k}" ${prodCfg.dias.includes(k)?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)"><span><b>${n}</b></span></label>`).join('')}</div>
+      </div>
+      <div class="frow c2">
+        <div class="field"><label>Horário de corte</label><input id="prod-corte" type="time" value="${prodCfg.horario_corte}"><span class="hint">pedidos até esse horário entram no dia de produção atual</span></div>
+        <div class="field"><label>Horário que fica pronto</label><input id="prod-pronto" type="time" value="${prodCfg.horario_pronto}"><span class="hint">horário do dia de produção em que o pedido fica disponível</span></div>
+      </div>
+      <button class="btn primary" onclick="salvarProducaoConfig([...document.querySelectorAll('input[name=prod-dia]:checked')].map(c=>c.value),$('#prod-corte').value,$('#prod-pronto').value)">Salvar dias e prazos</button>
+    </div></div>`;
+  const entregasListaHtml=(S.entregas||[]).map(e=>`<tr style="${e.ativo===false?'opacity:.45':''}">
+      <td><b>${esc(e.nome)}</b>${e.regiao?`<div class="mono-id">${esc(e.regiao)}</div>`:''}</td>
+      <td>${e.tipo==='retirada'?'Retirada':'Entrega'}</td>
+      <td class="r num">${e.custo?money(e.custo):'Grátis'}</td>
+      <td>${e.segue_prazo_producao===false?(e.prazo_horas?`${e.prazo_horas}h a partir do pedido`:'Prazo próprio'):'Padrão de produção'}</td>
+      <td class="r"><button class="btn sm" onclick="modalEntregaCad('${e.id}')">Editar</button>
+        <button class="btn sm ghost" onclick="toggleEntregaCad('${e.id}')">${e.ativo===false?'Reativar':'Inativar'}</button>
+        <button class="btn sm ghost" onclick="removerEntregaCad('${e.id}')">✕</button></td></tr>`).join('')
+    ||`<tr><td colspan="5"><div class="empty"><b>Nenhuma modalidade cadastrada</b>Cadastre pelo menos uma opção de "Retirada no local" pra começar.</div></td></tr>`;
+  const entregasCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🚚 Entregas e retiradas</h3>
+      <span class="tag mut">modalidades que o cliente vai poder escolher no site</span></div>
+    <div class="card-b">
+      <table><thead><tr><th>Nome</th><th>Tipo</th><th class="r">Custo</th><th>Prazo</th><th class="r"></th></tr></thead><tbody>${entregasListaHtml}</tbody></table>
+      <button class="btn sm" style="margin-top:10px" onclick="modalEntregaCad()">+ Nova modalidade</button>
+    </div></div>`;
   const imgAvulsaCard=`<div class="card" style="grid-column:1/-1"><div class="card-h"><h3>🖼️ Central de imagens</h3>
       <span class="tag mut">pra banners, botões e outras imagens avulsas do site de pedidos</span></div>
     <div class="card-b">
@@ -3528,7 +3614,7 @@ VIEWS.dados=function(){
       </div>
     </div></div>`;
   return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
-  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${imgAvulsaCard}
+  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${producaoCard}${entregasCard}${imgAvulsaCard}
     <div class="card"><div class="card-h"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
       <button class="btn primary" onclick="exportarJSON()">⬇ Exportar backup (JSON)</button></div></div>
@@ -3615,7 +3701,7 @@ function importarJSON(){
 }
 async function zerarTudo(){
   if(!confirm('Apagar TODOS os dados? Esta ação não pode ser desfeita.'))return;
-  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],perfis_marmita:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],seq:{}}); // config (identidade) é preservada
+  S=Object.assign(S,{itens:[],categorias:[],composicoes:[],custos_fixos:[],status_personalizados:[],perfis_marmita:[],movimentos:[],compras:[],producoes:[],pedidos:[],lancamentos:[],eventos:[],clientes:[],clientes_mov:[],formas:[],fornecedores:[],canais:[],funcionarios:[],funcionarios_mov:[],entregas:[],seq:{}}); // config (identidade) é preservada
   await persist(); render(); toast('Sistema zerado.');
 }
 
@@ -3684,7 +3770,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 

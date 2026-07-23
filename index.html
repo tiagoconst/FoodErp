@@ -1712,9 +1712,13 @@ function componentesDisponiveis(){
   return S.itens.filter(i=>i.ativo!==false&&!temFuncao(i,'vendavel')&&(temFuncao(i,'compravel')||temFuncao(i,'composto')))
     .sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
 }
+// Grupos de cardápio reconhecidos como "componente principal" pra puxar automaticamente
+// na Marmita Sob Medida (proteína, carboidrato, legume, molho…) — independe do estágio de
+// produção do item (matéria-prima/pré-preparo/produto), que já é resolvido pelas Funções.
+const CATEGORIAS_SOB_MEDIDA=['proteína','proteina','carboidratos','legumes/verduras','molho','massas','pré-preparo','pre-preparo'];
 function produtoBaseComponentesSugeridos(produtoId){
   return componentesDe(produtoId)
-    .filter(c=>{ const it=itemById(c.item_filho_id); return it&&(it.categoria||'').trim()==='Pré-preparo'; })
+    .filter(c=>{ const it=itemById(c.item_filho_id); return it&&CATEGORIAS_SOB_MEDIDA.includes((it.categoria||'').trim().toLowerCase()); })
     .map(c=>({item_id:c.item_filho_id, quantidade:c.quantidade}));
 }
 function abrirConstrutorMarmita(idxEdicao){

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Entregas — Sabores da Ana</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --primary:#2E6E4E; --primary-dark:#20261F; --bg:#F6F4EE; --panel:#FFFFFF;
+    --ink:#22271F; --muted:#6F7568; --line:#E4E1D6; --soft:#EFEDE4; --danger:#B3372C; --warn:#C05E10;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:24px}
+  header{position:sticky;top:0;z-index:5;background:var(--primary);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  header h1{font-size:16px;margin:0;font-weight:800}
+  header small{display:block;font-size:11.5px;opacity:.85;font-weight:500}
+  .refresh{background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:700}
+  main{padding:14px}
+  .search{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:15px;background:var(--panel);margin-bottom:12px}
+  .empty{text-align:center;padding:50px 20px;color:var(--muted)}
+  .empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .card:active{background:var(--soft)}
+  .card .num{font-weight:800;font-size:15px}
+  .card .nome{color:var(--muted);font-size:13.5px;margin-top:2px}
+  .tag{font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;white-space:nowrap;flex:none}
+  .tag.confirmado{background:#FCEFD9;color:#8A5A15}
+  .tag.em_producao{background:#FCEFD9;color:#8A5A15}
+  .tag.disponivel{background:#E3EEFA;color:#1F5C99}
+  .tag.entrega_parcial{background:#FCEFD9;color:#8A5A15}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:700;background:var(--soft);color:var(--ink);margin-top:10px;cursor:pointer;text-align:center}
+  .btn.primary{background:var(--primary);color:#fff}
+  .btn.ghost{background:transparent;border:1.5px solid var(--line)}
+  .btn.danger{background:#FBEAE6;color:var(--danger)}
+  .btn:disabled{opacity:.55}
+  .voltar{background:none;border:none;color:#fff;font-size:14px;font-weight:700;padding:0;margin-bottom:2px;cursor:pointer}
+  .detalhe-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .detalhe-card h2{margin:0 0 4px;font-size:19px}
+  .detalhe-card .end{font-size:14.5px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .detalhe-card .end b{color:var(--ink)}
+  .valor-total{font-size:26px;font-weight:800;color:var(--primary);margin:10px 0 2px}
+  .linha-info{display:flex;justify-content:space-between;font-size:13.5px;color:var(--muted);padding:6px 0;border-top:1px dashed var(--line);margin-top:8px}
+  .tel-link{color:var(--primary);text-decoration:none;font-weight:700}
+  .secao-label{font-size:12.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:18px 0 8px}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;z-index:20}
+  .overlay .sheet{background:var(--panel);width:100%;border-radius:18px 18px 0 0;padding:22px 18px 26px;max-height:82vh;overflow:auto}
+  .overlay .sheet h3{margin:0 0 4px;font-size:17px}
+  .loading{text-align:center;padding:60px 20px;color:var(--muted)}
+  .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--primary);border-radius:50%;margin:0 auto 14px;animation:sp 0.8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .sucesso{text-align:center;padding:60px 20px}
+  .sucesso .em{font-size:56px;margin-bottom:10px}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:88%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--danger)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <button class="voltar" id="btn-voltar" style="display:none" onclick="mostrarLista()">‹ Voltar</button>
+    <h1 id="hdr-titulo">Entregas — Sabores da Ana</h1>
+    <small id="hdr-sub">toque num pedido pra confirmar a entrega</small>
+  </div>
+  <button class="refresh" onclick="carregarTudo()">🔄</button>
+</header>
+<main id="main"><div class="loading"><div class="spin"></div>Carregando pedidos…</div></main>
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+'use strict';
+const SUPABASE_URL='https://jaytdbwaoduefrbragsw.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY';
+const EMPRESA_ID='dd8275c9-e88f-4633-bfd0-bfa262eaf857';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+const ALLOWED_STATUS=['confirmado','em_producao','disponivel','entrega_parcial'];
+const STATUS_LABEL={confirmado:'Confirmado',em_producao:'Em produção',disponivel:'Disponível',entrega_parcial:'Entrega parcial'};
+
+let S={pedidos:[],itens:[],composicoes:[],clientes:[],formas:[],movimentos:[]};
+let pedidoAtualId=null, buscaAtual='', enviando=false;
+
+/* ---------- helpers (mesma lógica do ERP principal) ---------- */
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>(v==null||isNaN(v))?'—':v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const hoje=()=>new Date().toISOString().slice(0,10);
+const uid=p=>p+'-'+Date.now().toString(36).slice(-6).toUpperCase()+Math.floor(Math.random()*1296).toString(36).toUpperCase().padStart(2,'0');
+const nomeProprio=s=>{ if(!s)return s; return s.toLowerCase().replace(/(^|[\s'-])([a-zà-öø-ÿ])/g,(m,sep,c)=>sep+c.toUpperCase()); };
+const itemById=id=>S.itens.find(i=>i.id===id);
+const clienteById=id=>S.clientes.find(c=>c.id===id);
+const temFuncao=(item,f)=>item&&item.funcoes&&item.funcoes.includes(f);
+const componentesDe=paiId=>S.composicoes.filter(c=>c.item_pai_id===paiId&&c.ativo!==false);
+function rendimentoDe(paiId){ const c=componentesDe(paiId); return (c.length&&c[0].rendimento>0)?c[0].rendimento:1; }
+function saldo(itemId){ return S.movimentos.filter(m=>m.item_id===itemId).reduce((a,m)=>a+m.quantidade,0); }
+function custoMedio(itemId){
+  const ent=S.movimentos.filter(m=>m.item_id===itemId&&m.quantidade>0&&m.custo_unitario!=null);
+  if(!ent.length)return null;
+  const tq=ent.reduce((a,m)=>a+m.quantidade,0), tv=ent.reduce((a,m)=>a+m.quantidade*m.custo_unitario,0);
+  return tq>0?tv/tq:null;
+}
+function custoItem(itemId,vis){
+  vis=vis||new Set(); if(vis.has(itemId))return null; vis.add(itemId);
+  const cm=custoMedio(itemId); if(cm!=null)return cm;
+  const comps=componentesDe(itemId);
+  if(comps.length){
+    let total=0,algum=false;
+    comps.forEach(c=>{ const cu=custoItem(c.item_filho_id,new Set(vis));
+      if(cu==null)return; algum=true; const perda=1+((c.perda_percentual||0)/100); total+=cu*c.quantidade*perda; });
+    return algum?total/rendimentoDe(itemId):null;
+  }
+  return null;
+}
+function lotesDe(itemId){
+  const map={};
+  S.movimentos.filter(m=>m.item_id===itemId).forEach(m=>{
+    const key=(m.lote||'')+'|'+(m.validade||'');
+    if(!map[key])map[key]={lote:m.lote||null,validade:m.validade||null,saldo:0};
+    map[key].saldo+=m.quantidade;
+  });
+  return Object.values(map);
+}
+const novosMovimentos=[]; // acumula os movimentos novos desta confirmação, pra gravar no Supabase no final
+function registrarMovimento(itemId,quantidade,origemTipo,origemId,custoUnit,obs,lote,validade){
+  const mov={id:uid('MOV'),item_id:itemId,quantidade,tipo:quantidade>=0?'entrada':'saida',
+    origem_evento:origemTipo,origem_id:origemId||null,custo_unitario:custoUnit??null,
+    lote:lote||null,validade:validade||null,observacao:obs||null,data:new Date().toISOString()};
+  S.movimentos.push(mov); novosMovimentos.push(mov);
+}
+function consumirFEFO(itemId,qtd,origemTipo,origemId,obs){
+  let rest=qtd;
+  const lotes=lotesDe(itemId).filter(l=>l.saldo>0.000001).sort((a,b)=>{
+    if(a.validade&&b.validade)return a.validade<b.validade?-1:1;
+    if(a.validade)return -1; if(b.validade)return 1; return 0; });
+  for(const l of lotes){ if(rest<=0.000001)break;
+    const take=Math.min(l.saldo,rest); rest-=take;
+    registrarMovimento(itemId,-take,origemTipo,origemId,null,obs,l.lote,l.validade); }
+  if(rest>0.000001) registrarMovimento(itemId,-rest,origemTipo,origemId,null,obs);
+}
+function qtdPendente(l){ return Math.max(0,l.quantidade-(l.quantidade_entregue||0)); }
+function totalEntregue(p){ return (p.itens||[]).every(l=>(l.quantidade_entregue||0)>=l.quantidade); }
+function nomeLinha(l){ if(l.nome_custom)return l.nome_custom; const i=itemById(l.item_id); return i?i.nome:(l.descricao||'item'); }
+function toast(msg,err){ const t=document.getElementById('toast'); t.textContent=msg; t.className=err?'toast show err':'toast show'; clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',2800); }
+function enderecoDoPedido(p){
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  if(p.tipo_entrega==='retirada')return '🏠 Retirada no balcão/loja';
+  return p.endereco_entrega || (cli&&cli.endereco) || 'Endereço não informado — confirme com o cliente';
+}
+function telefoneDoPedido(p){
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  return p.telefone || (cli&&cli.telefone) || '';
+}
+
+/* ---------- carregar dados ---------- */
+async function carregarTabela(nome,extra){
+  let q=sb.from('erp_'+nome).select('id,dados').eq('empresa_id',EMPRESA_ID);
+  if(extra)q=extra(q);
+  const {data,error}=await q;
+  if(error)throw error;
+  return data.map(r=>Object.assign({},r.dados,{id:r.dados.id||r.id}));
+}
+async function carregarTudo(){
+  document.getElementById('main').innerHTML='<div class="loading"><div class="spin"></div>Carregando pedidos…</div>';
+  try{
+    const [pedidos,itens,composicoes,clientes,formas,movimentos]=await Promise.all([
+      carregarTabela('pedidos'),
+      carregarTabela('itens'),
+      carregarTabela('composicoes'),
+      carregarTabela('clientes'),
+      carregarTabela('formas'),
+      carregarTabela('movimentos',q=>q.limit(5000))
+    ]);
+    S={pedidos,itens,composicoes,clientes,formas:formas.filter(f=>f.ativo!==false),movimentos};
+    mostrarLista();
+  }catch(e){
+    document.getElementById('main').innerHTML=`<div class="empty"><b>Não foi possível carregar</b>${esc(e.message||'Verifique sua internet e tente de novo.')}<br><br><button class="btn primary" onclick="carregarTudo()" style="width:auto;display:inline-block;padding:12px 22px">Tentar de novo</button></div>`;
+  }
+}
+
+/* ---------- tela: lista de pedidos ---------- */
+function mostrarLista(){
+  pedidoAtualId=null;
+  document.getElementById('btn-voltar').style.display='none';
+  document.getElementById('hdr-titulo').textContent='Entregas — Sabores da Ana';
+  document.getElementById('hdr-sub').textContent='toque num pedido pra confirmar a entrega';
+  renderLista();
+}
+function pedidosAbertos(){
+  return S.pedidos.filter(p=>ALLOWED_STATUS.includes(p.status))
+    .sort((a,b)=>(a.numero||0)-(b.numero||0));
+}
+function renderLista(){
+  const lista=pedidosAbertos().filter(p=>{
+    if(!buscaAtual)return true;
+    const alvo=(String(p.numero||'')+' '+(p.cliente||'')).toLowerCase();
+    return alvo.includes(buscaAtual.toLowerCase());
+  });
+  const linhas=lista.map(p=>{
+    const cli=p.cliente_id?clienteById(p.cliente_id):null;
+    const nome=nomeProprio(cli?cli.nome:(p.cliente||'Cliente avulso'));
+    return `<div class="card" onclick="selecionarPedido('${p.id}')">
+      <div><div class="num">#${esc(p.numero)}</div><div class="nome">${esc(nome)}</div></div>
+      <span class="tag ${p.status}">${STATUS_LABEL[p.status]||p.status}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('main').innerHTML=`
+    <input class="search" placeholder="Buscar por número ou nome…" value="${esc(buscaAtual)}" oninput="buscaAtual=this.value;renderLista()">
+    ${lista.length?linhas:'<div class="empty"><b>Nenhum pedido em aberto</b>Os pedidos confirmados, em produção, disponíveis ou com entrega parcial aparecem aqui.</div>'}
+  `;
+}
+
+/* ---------- tela: detalhe do pedido + formas de pagamento ---------- */
+function selecionarPedido(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  pedidoAtualId=id;
+  document.getElementById('btn-voltar').style.display='block';
+  document.getElementById('hdr-titulo').textContent='Pedido #'+p.numero;
+  document.getElementById('hdr-sub').textContent='confirme a entrega e o pagamento';
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const nome=nomeProprio(cli?cli.nome:(p.cliente||'Cliente avulso'));
+  const tel=telefoneDoPedido(p);
+  const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+
+  const botoesForma=S.formas.map(f=>
+    `<button class="btn" onclick="abrirConfirmacao('pago','${f.id}','${esc(f.nome).replace(/'/g,"\\'")}')">${esc(f.nome)}</button>`).join('');
+  const botaoConta=p.cliente_id?`<button class="btn ghost" onclick="abrirConfirmacao('conta',null,'Na conta do cliente')">📒 Na conta do cliente (mensalista)</button>`:'';
+  const botaoAReceber=`<button class="btn danger" onclick="abrirConfirmacao('areceber',null,'Ainda não pagou')">🕒 Ainda não pagou (fica pendente)</button>`;
+
+  document.getElementById('main').innerHTML=`
+    <div class="detalhe-card">
+      <h2>${esc(nome)}</h2>
+      ${tel?`<a class="tel-link" href="tel:${esc(tel.replace(/\D/g,''))}">📞 ${esc(tel)}</a>`:''}
+      <div class="end"><b>Endereço:</b><br>${esc(enderecoDoPedido(p))}</div>
+      <div class="valor-total">${money(p.valor_total)}</div>
+      <div class="linha-info"><span>${nItens} item(ns)</span><span>${STATUS_LABEL[p.status]||p.status}</span></div>
+    </div>
+    <div class="secao-label">Como o cliente pagou?</div>
+    ${botoesForma}
+    ${botaoConta}
+    ${botaoAReceber}
+  `;
+}
+
+/* ---------- confirmação final ---------- */
+function abrirConfirmacao(modo,formaId,formaNome){
+  const p=S.pedidos.find(x=>x.id===pedidoAtualId); if(!p)return;
+  const overlay=document.createElement('div');
+  overlay.className='overlay'; overlay.id='overlay-confirma';
+  overlay.innerHTML=`<div class="sheet">
+    <h3>Confirmar entrega</h3>
+    <p style="color:var(--muted);font-size:14px;margin:0 0 14px">Pedido #${esc(p.numero)} — valor <b>${money(p.valor_total)}</b></p>
+    <p style="font-size:15px;margin:0 0 18px">Forma: <b>${esc(formaNome)}</b></p>
+    <button class="btn primary" id="btn-confirmar-entrega" onclick="confirmarEntrega('${modo}',${formaId?`'${formaId}'`:'null'})">✅ Confirmar entrega</button>
+    <button class="btn ghost" onclick="document.getElementById('overlay-confirma').remove()">Cancelar</button>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function confirmarEntrega(modo,formaId){
+  if(enviando)return; enviando=true;
+  const btn=document.getElementById('btn-confirmar-entrega');
+  if(btn){ btn.disabled=true; btn.textContent='Confirmando…'; }
+  const p=S.pedidos.find(x=>x.id===pedidoAtualId);
+  if(!p){ enviando=false; return; }
+  novosMovimentos.length=0;
+  const novosLancamentos=[]; const novosClientesMov=[];
+
+  try{
+    if(!p.data_entrega)p.data_entrega=hoje();
+    p.itens.forEach(l=>{
+      const q=qtdPendente(l); if(q<=0)return;
+      l.quantidade_entregue=(l.quantidade_entregue||0)+q;
+      if(l.componentes&&l.componentes.length){
+        l.componentes.forEach(c=>{ if(temFuncao(itemById(c.item_id),'estocavel'))
+          consumirFEFO(c.item_id,c.quantidade*q,'PEDIDO_ENTREGUE',p.id,'Pedido '+(p.cliente||p.id)); });
+        return;
+      }
+      if(l.cmv_unitario==null)l.cmv_unitario=custoItem(l.item_id);
+      if(temFuncao(itemById(l.item_id),'estocavel'))
+        consumirFEFO(l.item_id,q,'PEDIDO_ENTREGUE',p.id,'Pedido '+(p.cliente||p.id));
+    });
+
+    const completo=totalEntregue(p);
+    if(!completo){
+      p.status='entrega_parcial';
+    } else if(modo==='pago'){
+      p.status='finalizado'; p.pago=true; p.recebido=true; p.faturamento='pago'; p.forma_id=formaId||null;
+      const lan={id:uid('LAN'),tipo:'receita',descricao:'Pedido '+(p.cliente||p.id),valor:p.valor_total,
+        categoria:'Vendas',forma_id:formaId,data:p.data_entrega,status:'liquidado',data_liquidacao:p.data_entrega,origem:p.id};
+      novosLancamentos.push(lan);
+    } else if(modo==='conta'){
+      p.status='entregue'; p.recebido=false; p.faturamento='conta';
+      const mov={id:uid('CMV2'),cliente_id:p.cliente_id,tipo:'debito',valor:p.valor_total,
+        descricao:'Pedido '+p.id,forma_id:null,data:p.data_entrega,origem:p.id,criado_em:new Date().toISOString()};
+      novosClientesMov.push(mov);
+    } else { // areceber
+      p.status='entregue'; p.recebido=false; p.faturamento='areceber';
+      const lan={id:uid('LAN'),tipo:'receita',descricao:'Pedido '+(p.cliente||p.id),valor:p.valor_total,
+        categoria:'Vendas',data:p.data_entrega,status:'aberto',data_liquidacao:null,origem:p.id};
+      novosLancamentos.push(lan);
+    }
+
+    // grava tudo no Supabase
+    await sb.from('erp_pedidos').update({dados:p,atualizado_em:new Date().toISOString()}).eq('id',p.id).eq('empresa_id',EMPRESA_ID);
+    if(novosMovimentos.length){
+      await sb.from('erp_movimentos').insert(novosMovimentos.map(m=>({id:m.id,empresa_id:EMPRESA_ID,dados:m,atualizado_em:new Date().toISOString()})));
+    }
+    if(novosLancamentos.length){
+      await sb.from('erp_lancamentos').insert(novosLancamentos.map(l=>({id:l.id,empresa_id:EMPRESA_ID,dados:l,atualizado_em:new Date().toISOString()})));
+    }
+    if(novosClientesMov.length){
+      await sb.from('erp_clientes_mov').insert(novosClientesMov.map(m=>({id:m.id,empresa_id:EMPRESA_ID,dados:m,atualizado_em:new Date().toISOString()})));
+    }
+
+    document.getElementById('overlay-confirma')?.remove();
+    const mensagem=!completo?'Entrega parcial registrada.':(modo==='pago'?'Pedido entregue e pago!':'Pedido entregue — pagamento pendente.');
+    document.getElementById('main').innerHTML=`<div class="sucesso"><div class="em">✅</div><h2>${esc(mensagem)}</h2>
+      <button class="btn primary" style="width:auto;display:inline-block;padding:14px 26px;margin-top:14px" onclick="mostrarLista();carregarTudo()">Voltar pra lista</button></div>`;
+  }catch(e){
+    toast('Erro ao confirmar: '+(e.message||e),true);
+    if(btn){ btn.disabled=false; btn.textContent='✅ Confirmar entrega'; }
+  }
+  enviando=false;
+}
+
+carregarTudo();
+</script>
+</body>
+</html>

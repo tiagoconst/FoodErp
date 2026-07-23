@@ -3400,6 +3400,32 @@ VIEWS.relatorios=function(){
   }).join('')||'<span class="subtle">Nenhum pedido em aberto 👍</span>';
   const naoPagos=S.pedidos.filter(p=>p.status!=='cancelado'&&!pedidoPago(p));
   const valorNaoPago=naoPagos.reduce((a,p)=>a+(p.valor_total||0),0);
+
+  // Pesquisa de satisfação (respostas chegam automaticamente do Google Forms)
+  const pesquisas=(S.pesquisas||[]).filter(q=>q.respondido_em&&q.respondido_em>=ini&&q.respondido_em<=fim);
+  const nPesquisas=pesquisas.length;
+  const notaMedia=nPesquisas?pesquisas.reduce((a,q)=>a+(q.nota_geral||0),0)/nPesquisas:0;
+  const pctRecomenda=nPesquisas?Math.round(pesquisas.filter(q=>q.recomendaria==='Sim').length/nPesquisas*100):0;
+  const comentariosRecentes=pesquisas.filter(q=>q.comentario&&q.comentario.trim())
+    .sort((a,b)=>(b.respondido_em||'').localeCompare(a.respondido_em||'')).slice(0,5);
+  const contarCategoria=(campo)=>{ const m={}; pesquisas.forEach(q=>{ const v=q[campo]||'—'; m[v]=(m[v]||0)+1; }); return m; };
+  const barrasCategoria=(mapa)=>{ const total=Object.values(mapa).reduce((a,b)=>a+b,0)||1;
+    return Object.entries(mapa).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+      `<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>${esc(k)}</span><span class="subtle">${v}</span></div>
+       <div style="background:var(--soft);border-radius:6px;height:6px;overflow:hidden"><div style="width:${Math.round(v/total*100)}%;height:100%;background:var(--primary)"></div></div></div>`).join(''); };
+  const pesquisaCard=`<div class="card section-gap"><div class="card-h"><h3>😊 Satisfação dos clientes</h3><span class="subtle">pesquisa pós-venda · ${label}</span></div>
+    <div class="card-b">${nPesquisas?`
+    <div class="grid g3" style="margin-bottom:16px;align-items:start">
+      <div class="kpi" style="border:none;padding:0"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Nota média</div><div class="k-value num">${notaMedia.toFixed(1)} / 5</div><div class="k-foot">${nPesquisas} resposta(s)</div></div>
+      <div class="kpi" style="border:none;padding:0"><div class="k-label"><span class="dot" style="background:var(--ok,#7FBF9B)"></span>Recomendariam a gente</div><div class="k-value num">${pctRecomenda}%</div></div>
+      <div><div class="k-label" style="margin-bottom:6px">Sabor/tempero</div>${barrasCategoria(contarCategoria('sabor'))}</div>
+    </div>
+    <div class="k-label" style="margin-bottom:6px">Pontualidade da entrega/retirada</div>${barrasCategoria(contarCategoria('pontualidade'))}
+    ${comentariosRecentes.length?`<div class="k-label" style="margin:14px 0 6px">Últimos comentários</div>${comentariosRecentes.map(c=>
+      `<div style="border-left:3px solid var(--primary);padding:6px 10px;background:var(--soft);border-radius:6px;font-size:13px;margin-bottom:6px">“${esc(c.comentario)}”<div class="subtle" style="margin-top:2px">${dBR(c.respondido_em)}</div></div>`).join('')}`:''}
+    `:`<div class="empty"><b>Nenhuma resposta no período</b>As respostas do formulário de pesquisa de satisfação aparecem aqui automaticamente, assim que os clientes responderem.</div>`}
+    </div></div>`;
+
   const abertosCard=`<div class="grid g2 section-gap">
     <div class="card"><div class="card-h"><h3>📬 Pedidos em aberto</h3><a class="link" onclick="nav('pedidos')">ver todos</a></div>
       <div class="card-b"><div class="k-value num" style="font-size:30px;margin-bottom:10px">${pedidosAbertos.length}</div>
@@ -3419,6 +3445,7 @@ VIEWS.relatorios=function(){
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Clientes atendidos</div><div class="k-value num">${clientesAtendidos}</div><div class="k-foot">${inativos.length} compraram só 1x (${money(inativosValor)})</div></div>
   </div>
   <div class="card section-gap"><div class="card-h"><h3>Vendas por dia da semana</h3></div><div class="card-b"><div class="bars">${barrasDia}</div></div></div>
+  ${pesquisaCard}
   <div class="grid g2 section-gap">
     <div class="card"><div class="card-h"><h3>Produtos mais vendidos</h3><span class="subtle">top 15 por receita</span></div>
       <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Produto</th><th class="r">Qtd</th><th class="r">Receita</th><th class="r">Margem</th></tr></thead><tbody>${produtosRows}</tbody></table></div></div>
@@ -3909,7 +3936,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas','cupons'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas','cupons','pesquisas'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
@@ -4042,7 +4069,7 @@ async function entrarNoSistema(){
         TABLES.forEach(t=>{ S[t]=p[t]||[]; }); await cloudPersist(); }
     }catch(e){} }
   }
-  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[]; if(!S.cupons)S.cupons=[];
+  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[]; if(!S.cupons)S.cupons=[]; if(!S.pesquisas)S.pesquisas=[];
   garantirCategoriasPadrao();
   aplicarIdentidade();
   if(!S.formas.length){ garantirFormasPadrao(); cloudPersist(); }

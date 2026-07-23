@@ -30,9 +30,8 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .navbar .navlinks{display:flex;gap:24px;font-family:var(--font-menu);font-size:14px;font-weight:700}
 .navbar .navlinks a{color:#fff;opacity:.95;text-decoration:none;cursor:pointer}
 .navbar .navlinks a:hover{opacity:1;text-decoration:underline}
-.navbar .navlinks a.nav-destaque{display:inline-flex;align-items:center;border:1.5px solid rgba(255,255,255,.85);border-radius:20px;padding:4px 12px;opacity:1;white-space:nowrap;box-shadow:0 2px 6px rgba(62,46,32,.15)}
-.navbar .navlinks a.nav-destaque:hover{background:rgba(255,255,255,.15);text-decoration:none}
-@media(max-width:640px){ .navbar .navlinks a.nav-destaque{padding:4px 10px} }
+.navbar a.nav-destaque{flex:none;display:inline-flex;align-items:center;color:#fff;font-family:var(--font-menu);font-size:14px;font-weight:700;text-decoration:none;cursor:pointer;border:1.5px solid rgba(255,255,255,.85);border-radius:20px;padding:6px 14px;white-space:nowrap;box-shadow:0 2px 6px rgba(62,46,32,.15)}
+.navbar a.nav-destaque:hover{background:rgba(255,255,255,.15);text-decoration:none}
 .cm-line{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .cm-line select{flex:1;min-width:0;padding:10px 8px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13.5px;font-family:inherit;color:var(--ink)}
 .cm-line input{width:64px;flex:none;padding:10px 6px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13.5px;font-family:inherit;text-align:center}
@@ -90,9 +89,10 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 @media(max-width:640px){
   .navbar{gap:0 10px;padding:10px 16px 8px}
   .navbar .brand img{height:30px}
-  .navbar .cart-btn{order:2}
+  .navbar a.nav-destaque{order:2;font-size:12px;padding:5px 11px}
+  .navbar .cart-btn{order:3}
   .navbar .cart-btn img{height:28px}
-  .navbar .navlinks{order:3;width:100%;gap:16px;margin-top:6px;font-size:12px}
+  .navbar .navlinks{order:4;width:100%;gap:16px;margin-top:6px;font-size:12px}
   .hero{margin-top:6px;height:110px}
   .cat-h{font-size:28px;margin:20px 0 10px}
   .destaque-h{font-size:32px}
@@ -242,8 +242,8 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
     <a onclick="abrirPreparo()">Modo de Preparar</a>
     <a onclick="abrirSobre()">Sobre Nós</a>
     <a onclick="abrirContato()">Contato</a>
-    <a class="nav-destaque" onclick="abrirMontarMarmita()">Monte a Sua</a>
   </div>
+  <a class="nav-destaque" onclick="abrirMontarMarmita()">Monte a Sua</a>
   <button class="cart-btn" onclick="abrirCarrinho()">
     <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXDMZRJI.png" alt="Meu Pedido">
     <span class="cart-badge" id="nav-cart-badge">0</span>

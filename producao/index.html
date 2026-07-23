@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Produção — Sabores da Ana</title>
+<link rel="icon" href="data:,">
+<style>
+  :root{
+    --primary:#2E6E4E; --primary-dark:#20261F; --bg:#F6F4EE; --panel:#FFFFFF;
+    --ink:#22271F; --muted:#6F7568; --line:#E4E1D6; --soft:#EFEDE4; --danger:#B3372C; --warn:#C05E10;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{max-width:520px;margin:0 auto;min-height:100vh;padding-bottom:24px}
+  header{position:sticky;top:0;z-index:5;background:var(--primary);color:#fff;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+  header h1{font-size:16px;margin:0;font-weight:800}
+  header small{display:block;font-size:11.5px;opacity:.85;font-weight:500}
+  .refresh{background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:700}
+  main{padding:14px}
+  .search{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;font-size:15px;background:var(--panel);margin-bottom:12px}
+  .empty{text-align:center;padding:50px 20px;color:var(--muted)}
+  .empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:6px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .card:active{background:var(--soft)}
+  .card .num{font-weight:800;font-size:15px}
+  .card .nome{color:var(--muted);font-size:13.5px;margin-top:2px}
+  .tag{font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;white-space:nowrap;flex:none;background:#FCEFD9;color:#8A5A15}
+  .tag.entrega{background:#E3EEFA;color:#1F5C99}
+  .tag.retirada{background:#EAF3EC;color:#2E6E4E}
+  .btn{display:block;width:100%;padding:14px;border:none;border-radius:12px;font-size:15px;font-weight:700;background:var(--soft);color:var(--ink);margin-top:10px;cursor:pointer;text-align:center}
+  .btn.primary{background:var(--primary);color:#fff}
+  .btn.ghost{background:transparent;border:1.5px solid var(--line)}
+  .btn:disabled{opacity:.55}
+  .voltar{background:none;border:none;color:#fff;font-size:14px;font-weight:700;padding:0;margin-bottom:2px;cursor:pointer}
+  .detalhe-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  .detalhe-card h2{margin:0 0 4px;font-size:19px}
+  .linha-info{display:flex;justify-content:space-between;font-size:13.5px;color:var(--muted);padding:6px 0;border-top:1px dashed var(--line);margin-top:8px}
+  .tel-link{color:var(--primary);text-decoration:none;font-weight:700}
+  .itens-lista{margin-top:10px;font-size:13.5px;color:var(--ink)}
+  .itens-lista div{padding:3px 0}
+  .secao-label{font-size:12.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:18px 0 8px}
+  textarea.msg{width:100%;font-family:inherit;font-size:14.5px;padding:12px;border:1.5px solid var(--line);border-radius:12px;resize:vertical;background:var(--panel)}
+  .loading{text-align:center;padding:60px 20px;color:var(--muted)}
+  .spin{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--primary);border-radius:50%;margin:0 auto 14px;animation:sp 0.8s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .sucesso{text-align:center;padding:60px 20px}
+  .sucesso .em{font-size:56px;margin-bottom:10px}
+  .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;opacity:0;pointer-events:none;transition:.25s;z-index:50;max-width:88%;text-align:center}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.err{background:var(--danger)}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <button class="voltar" id="btn-voltar" style="display:none" onclick="mostrarLista()">‹ Voltar</button>
+    <h1 id="hdr-titulo">Produção — Sabores da Ana</h1>
+    <small id="hdr-sub">toque num pedido confirmado quando terminar de produzir</small>
+  </div>
+  <button class="refresh" onclick="carregarTudo()">🔄</button>
+</header>
+<main id="main"><div class="loading"><div class="spin"></div>Carregando pedidos…</div></main>
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+'use strict';
+const SUPABASE_URL='https://jaytdbwaoduefrbragsw.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY';
+const EMPRESA_ID='dd8275c9-e88f-4633-bfd0-bfa262eaf857';
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+let S={pedidos:[],itens:[],clientes:[]};
+let pedidoAtualId=null, buscaAtual='', enviando=false;
+
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=v=>(v==null||isNaN(v))?'—':v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const nomeProprio=s=>{ if(!s)return s; return s.toLowerCase().replace(/(^|[\s'-])([a-zà-öø-ÿ])/g,(m,sep,c)=>sep+c.toUpperCase()); };
+const itemById=id=>S.itens.find(i=>i.id===id);
+const clienteById=id=>S.clientes.find(c=>c.id===id);
+function nomeLinha(l){ if(l.nome_custom)return l.nome_custom; const i=itemById(l.item_id); return i?i.nome:(l.descricao||'item'); }
+function toast(msg,err){ const t=document.getElementById('toast'); t.textContent=msg; t.className=err?'toast show err':'toast show'; clearTimeout(t._h); t._h=setTimeout(()=>t.className='toast',2800); }
+function normalizarTelWhats(tel){ let d=(tel||'').replace(/\D/g,''); if(!d)return ''; if(d.length<=11)d='55'+d; return d; }
+function telefoneDoPedido(p){ const cli=p.cliente_id?clienteById(p.cliente_id):null; return p.telefone || (cli&&cli.telefone) || ''; }
+
+async function carregarTabela(nome){
+  const {data,error}=await sb.from('erp_'+nome).select('id,dados').eq('empresa_id',EMPRESA_ID);
+  if(error)throw error;
+  return data.map(r=>r.dados);
+}
+async function carregarTudo(){
+  document.getElementById('main').innerHTML='<div class="loading"><div class="spin"></div>Carregando pedidos…</div>';
+  try{
+    const [pedidos,itens,clientes]=await Promise.all([carregarTabela('pedidos'),carregarTabela('itens'),carregarTabela('clientes')]);
+    S={pedidos,itens,clientes};
+    mostrarLista();
+  }catch(e){
+    document.getElementById('main').innerHTML=`<div class="empty"><b>Não foi possível carregar</b>${esc(e.message||'Verifique sua internet e tente de novo.')}<br><br><button class="btn primary" onclick="carregarTudo()" style="width:auto;display:inline-block;padding:12px 22px">Tentar de novo</button></div>`;
+  }
+}
+
+function mostrarLista(){
+  pedidoAtualId=null;
+  document.getElementById('btn-voltar').style.display='none';
+  document.getElementById('hdr-titulo').textContent='Produção — Sabores da Ana';
+  document.getElementById('hdr-sub').textContent='toque num pedido confirmado quando terminar de produzir';
+  renderLista();
+}
+function pedidosConfirmados(){ return S.pedidos.filter(p=>p.status==='confirmado').sort((a,b)=>(a.numero||0)-(b.numero||0)); }
+function renderLista(){
+  const lista=pedidosConfirmados().filter(p=>{
+    if(!buscaAtual)return true;
+    const alvo=(String(p.numero||'')+' '+(p.cliente||'')).toLowerCase();
+    return alvo.includes(buscaAtual.toLowerCase());
+  });
+  const linhas=lista.map(p=>{
+    const cli=p.cliente_id?clienteById(p.cliente_id):null;
+    const nome=nomeProprio(cli?cli.nome:(p.cliente||'Cliente avulso'));
+    const tipo=p.tipo_entrega;
+    return `<div class="card" onclick="selecionarPedido('${p.id}')">
+      <div><div class="num">#${esc(p.numero)}</div><div class="nome">${esc(nome)}</div></div>
+      ${tipo?`<span class="tag ${tipo}">${tipo==='entrega'?'Entrega':'Retirada'}</span>`:'<span class="tag">A combinar</span>'}
+    </div>`;
+  }).join('');
+  document.getElementById('main').innerHTML=`
+    <input class="search" placeholder="Buscar por número ou nome…" value="${esc(buscaAtual)}" oninput="buscaAtual=this.value;renderLista()">
+    ${lista.length?linhas:'<div class="empty"><b>Nenhum pedido confirmado aguardando produção</b>Os pedidos aparecem aqui assim que forem confirmados no ERP.</div>'}
+  `;
+}
+
+function montarMensagemPronto(p){
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const nome=nomeProprio(cli?cli.nome:(p.cliente||''))||'';
+  let msg=`Oi ${nome}! Aqui é da Sabores da Ana 💚\n\nSeu pedido #${p.numero} ficou pronto!`;
+  if(p.tipo_entrega==='retirada'){
+    msg+=' Já pode vir retirar quando quiser 😊';
+  } else if(p.tipo_entrega==='entrega'){
+    msg+=' Vamos entregar hoje, após as 19h — pode ser?';
+  } else {
+    msg+=' Você prefere receber em casa (entrega após as 19h) ou vai retirar com a gente?';
+  }
+  if(!p.pago){
+    msg+=`\n\nSobre o pagamento (${money(p.valor_total)}): prefere que eu te mande um link de pagamento (Pix, débito ou crédito) agora, ou prefere pagar na hora com a maquininha (débito, crédito ou Pix)?`;
+  }
+  return msg;
+}
+
+function selecionarPedido(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  pedidoAtualId=id;
+  document.getElementById('btn-voltar').style.display='block';
+  document.getElementById('hdr-titulo').textContent='Pedido #'+p.numero;
+  document.getElementById('hdr-sub').textContent='confirme a produção e avise o cliente';
+  const cli=p.cliente_id?clienteById(p.cliente_id):null;
+  const nome=nomeProprio(cli?cli.nome:(p.cliente||'Cliente avulso'));
+  const tel=telefoneDoPedido(p);
+  const telW=normalizarTelWhats(tel);
+  const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+  const itensHtml=(p.itens||[]).map(l=>`<div>${l.quantidade}x ${esc(nomeLinha(l))}</div>`).join('');
+
+  document.getElementById('main').innerHTML=`
+    <div class="detalhe-card">
+      <h2>${esc(nome)}</h2>
+      ${tel?`<a class="tel-link" href="tel:${esc(tel.replace(/\D/g,''))}">📞 ${esc(tel)}</a>`:'<span style="color:var(--danger);font-size:13.5px">sem telefone cadastrado — não vai dar pra avisar por WhatsApp</span>'}
+      <div class="linha-info"><span>${nItens} item(ns) · ${money(p.valor_total)}</span><span>${p.tipo_entrega==='retirada'?'Retirada':p.tipo_entrega==='entrega'?'Entrega':'A combinar'}</span></div>
+      <div class="itens-lista">${itensHtml}</div>
+    </div>
+    <div class="secao-label">Mensagem pra avisar o cliente (edite à vontade)</div>
+    <textarea class="msg" id="msg-pronto" rows="7">${esc(montarMensagemPronto(p))}</textarea>
+    <button class="btn primary" id="btn-produzido" ${telW?'':'disabled'} onclick="marcarProduzidoEAvisar()">✅ Marcar como produzido e avisar no WhatsApp</button>
+    <button class="btn ghost" onclick="marcarProduzidoSemAvisar()">Marcar como produzido sem avisar</button>
+  `;
+}
+
+async function atualizarStatusProduzido(p){
+  p.status='disponivel';
+  await sb.from('erp_pedidos').update({dados:p,atualizado_em:new Date().toISOString()}).eq('id',p.id).eq('empresa_id',EMPRESA_ID);
+}
+async function marcarProduzidoEAvisar(){
+  if(enviando)return; enviando=true;
+  const btn=document.getElementById('btn-produzido'); if(btn){ btn.disabled=true; btn.textContent='Confirmando…'; }
+  const p=S.pedidos.find(x=>x.id===pedidoAtualId); if(!p){ enviando=false; return; }
+  const tel=normalizarTelWhats(telefoneDoPedido(p));
+  const texto=document.getElementById('msg-pronto').value;
+  try{
+    await atualizarStatusProduzido(p);
+    if(tel)window.open('https://wa.me/'+tel+'?text='+encodeURIComponent(texto),'_blank');
+    mostrarSucesso();
+  }catch(e){
+    toast('Erro ao confirmar: '+(e.message||e),true);
+    if(btn){ btn.disabled=false; btn.textContent='✅ Marcar como produzido e avisar no WhatsApp'; }
+  }
+  enviando=false;
+}
+async function marcarProduzidoSemAvisar(){
+  if(enviando)return; enviando=true;
+  const p=S.pedidos.find(x=>x.id===pedidoAtualId); if(!p){ enviando=false; return; }
+  try{
+    await atualizarStatusProduzido(p);
+    mostrarSucesso();
+  }catch(e){ toast('Erro ao confirmar: '+(e.message||e),true); }
+  enviando=false;
+}
+function mostrarSucesso(){
+  document.getElementById('main').innerHTML=`<div class="sucesso"><div class="em">✅</div><h2>Pedido marcado como produzido!</h2>
+    <button class="btn primary" style="width:auto;display:inline-block;padding:14px 26px;margin-top:14px" onclick="mostrarLista();carregarTudo()">Voltar pra lista</button></div>`;
+}
+
+carregarTudo();
+</script>
+</body>
+</html>

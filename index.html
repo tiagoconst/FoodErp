@@ -1903,11 +1903,18 @@ function modalPedido(){
   openModal(`<div class="m-h"><h3>Novo pedido</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     <div class="frow c3">
-      <div class="field"><label>Cliente cadastrado</label><select id="pd-cliid" onchange="$('#pd-cli').style.display=this.value?'none':'block'"><option value="">— avulso —</option>${cliOpts}</select></div>
+      <div class="field"><label>Cliente cadastrado</label><select id="pd-cliid" onchange="const c=S.clientes.find(x=>x.id===this.value);$('#pd-cli').style.display=this.value?'none':'block';if(c){$('#pd-tel').value=c.telefone||'';if($('#pd-tipo-entrega').value==='entrega')$('#pd-endereco').value=c.endereco||'';}">
+        <option value="">— avulso —</option>${cliOpts}</select></div>
       <div class="field"><label>Nome (avulso)</label><input id="pd-cli" placeholder="ex.: Maria (balcão)"></div>
       <div class="field"><label>Data do pedido</label><input id="pd-data" type="date" value="${hoje()}"></div>
     </div>
-    <div class="field"><label>Canal de venda</label><select id="pd-canal"><option value="">Balcão / próprio</option>${S.canais.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}${c.taxa_percentual?' ('+c.taxa_percentual+'%)':''}</option>`).join('')}</select></div>
+    <div class="frow c3">
+      <div class="field"><label>Telefone (opcional — pra poder avisar por WhatsApp)</label><input id="pd-tel" placeholder="ex.: (42) 99999-9999"></div>
+      <div class="field"><label>Entrega ou retirada?</label><select id="pd-tipo-entrega" onchange="$('#pd-endereco-wrap').style.display=this.value==='entrega'?'block':'none'">
+        <option value="">— a combinar —</option><option value="entrega">Entrega</option><option value="retirada">Retirada</option></select></div>
+      <div class="field"><label>Canal de venda</label><select id="pd-canal"><option value="">Balcão / próprio</option>${S.canais.filter(c=>c.ativo!==false).map(c=>`<option value="${c.id}">${esc(c.nome)}${c.taxa_percentual?' ('+c.taxa_percentual+'%)':''}</option>`).join('')}</select></div>
+    </div>
+    <div class="field" id="pd-endereco-wrap" style="display:none"><label>Endereço de entrega</label><input id="pd-endereco" placeholder="Rua, número, bairro"></div>
     <div class="field"><label>Itens vendidos (preço fotografado — pode ajustar por pedido)</label>
       <div class="lines" id="pd-lines"></div>
       <button class="btn sm" onclick="pedLinhas.push({item:'',qtd:1,preco:''});drawPedLines()">+ Adicionar item</button></div>
@@ -1939,7 +1946,10 @@ async function salvarPedido(){
   const total=itens.reduce((a,l)=>a+l.quantidade*l.preco_unitario,0);
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
-  S.pedidos.push({id,numero,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
+  const tipoEntrega=$('#pd-tipo-entrega').value||null;
+  S.pedidos.push({id,numero,cliente_id:cliId,cliente:nome,telefone:$('#pd-tel').value.trim()||null,
+    canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
+    tipo_entrega:tipoEntrega,endereco_entrega:tipoEntrega==='entrega'?($('#pd-endereco').value.trim()||null):null,
     status:'pedido',itens,valor_total:total,observacao:$('#pd-obs').value.trim(),recebido:false,faturamento:null,criado_em:new Date().toISOString()});
   registrarEvento('PEDIDO_CONFIRMADO',`Pedido de ${nome||'cliente'} · ${itens.length} itens · ${money(total)} registrado`,id);
   closeModal(); scheduleSave(); render(); toast('Pedido registrado. Confirme para reservar o estoque.');

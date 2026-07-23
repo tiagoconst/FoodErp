@@ -463,7 +463,7 @@ const MODS=[['dashboard','Dashboard','#5B3A8C'],['itens','Itens','#1F4E79'],['co
   ['clientes','Clientes','#7A3E6B'],['compras','Compras','#7A4A12'],['estoque','Estoque','#5F6B1B'],
   ['producao','Produção','#C05E10'],['pedidos','Pedidos','#1F6FB2'],['financeiro','Financeiro','#9E2B25'],
   ['margens','Margens','#A87718'],['relatorios','Relatórios','#3E5F8A'],['eventos','Eventos','#8C1D3F'],['planejamento','Planejamento','#2F6B7A'],['fornecedores','Fornecedores','#8A6642'],['integracoes','Integrações','#4A5FA5'],['funcionarios','Funcionários','#3D7A6E']];
-const IDENT_PADRAO=Object.assign({nome:'Food ERP',subtitulo:'Dirigido por itens · Eventos',logo_emoji:'🍲',logo_img:null,imprimir_logo_texto:false,foto_padrao:null,banner_promo_desktop:null,banner_promo_mobile:null,
+const IDENT_PADRAO=Object.assign({nome:'Food ERP',subtitulo:'Dirigido por itens · Eventos',logo_emoji:'🍲',logo_img:null,imprimir_logo_texto:false,foto_padrao:null,banner_promo_desktop:null,banner_promo_mobile:null,link_pesquisa_satisfacao:'',
   cor_primaria:'#2E6E4E',cor_acento:'#E0A63C',cor_sidebar:'#20261F',cor_fundo:'#F6F4EE',
   cor_painel:'#FFFFFF',cor_texto:'#22271F',cor_perigo:'#B3372C'},
   Object.fromEntries(MODS.map(m=>['mod_'+m[0],m[2]])));
@@ -2265,7 +2265,9 @@ function imprimirPedido(id){
   const linhas=p.itens.map(l=>`<tr><td>${l.quantidade}x ${esc(nomeLinha(l))}</td><td class="r">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recibo ${p.id}</title><style>
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recibo ${p.id}</title>
+    ${idn.link_pesquisa_satisfacao?'<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>':''}
+    <style>
     @page{ margin:3mm; }
     *{box-sizing:border-box}
     html,body{width:100%}
@@ -2280,6 +2282,9 @@ function imprimirPedido(id){
     .tot td{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm}
     .obs{border:1px dashed #000;padding:1.5mm;margin-top:2mm;font-size:9.5px}
     .small{font-size:9px}
+    .pesquisa{margin-top:2.5mm;padding-top:2mm;border-top:1px dashed #000;text-align:center}
+    .pesquisa #qr-pesquisa{display:flex;justify-content:center;margin-bottom:1mm}
+    .pesquisa small{display:block;font-size:8.5px;line-height:1.3}
   </style></head><body>
     <div class="center">
       ${logoPB?`<img src="${logoPB}" class="logo">`:`<div class="nome-cursivo">${esc(nomeEmp)}</div>`}
@@ -2297,7 +2302,8 @@ function imprimirPedido(id){
     ${p.observacao?`<div class="obs"><b>OBS:</b> ${esc(p.observacao)}</div>`:''}
     <hr>
     <div class="center small">${esc(nomeEmp)}${emp.documento?' - '+esc(emp.documento):''}<br>${dataHoraExtenso}</div>
-    <script>window.onload=function(){window.print()}<\/script></body></html>`;
+    ${idn.link_pesquisa_satisfacao?`<div class="pesquisa"><div id="qr-pesquisa"></div><small>Como foi sua marmita? Aponte a câmera<br>e conta pra gente 💚</small></div>`:''}
+    <script>${idn.link_pesquisa_satisfacao?`new QRCode(document.getElementById('qr-pesquisa'),{text:${JSON.stringify(idn.link_pesquisa_satisfacao)},width:90,height:90,correctLevel:QRCode.CorrectLevel.M});`:''}window.onload=function(){window.print()}<\/script></body></html>`;
   const w=window.open('','_blank','width=320,height=640');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
@@ -3589,6 +3595,8 @@ VIEWS.dados=function(){
         </div><span class="hint">a imagem é reduzida para 96 px e aparece na barra lateral e no comprovante</span></div>
       <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="id-logo-texto" ${idn.imprimir_logo_texto?'checked':''} style="width:auto"> Imprimir o nome da loja com a fonte cursiva na bobina, em vez da imagem do logo</label>
         <span class="hint">recomendado se o logo tiver traços finos/cursivos — em impressoras térmicas pequenas, logos em imagem costumam sair borrados ou pixelizados; escrevendo o nome com a fonte de verdade (não uma imagem), ele sai sempre nítido, do mesmo jeito da sua marca</span></div>
+      <div class="field"><label>Link da pesquisa de satisfação</label><input id="id-link-pesquisa" value="${esc(idn.link_pesquisa_satisfacao||'')}" placeholder="ex.: https://forms.gle/xxxxxxx">
+        <span class="hint">se preenchido, imprime um QR code no rodapé do recibo (bobina 54mm) convidando o cliente a responder. Deixe em branco pra não imprimir nada.</span></div>
       <div class="field"><label>Cores gerais — selecione livremente</label>
       <div class="frow" style="grid-template-columns:repeat(4,1fr)">
         <div class="field"><label>Primária</label><input id="id-c1" type="color" value="${idn.cor_primaria}" oninput="previewIdent()" style="height:40px;padding:3px"></div>
@@ -3754,6 +3762,7 @@ function identDosInputs(){
     logo_emoji:$('#id-emoji').value.trim()||'🍲',
     logo_img:_logoTmp===undefined?salvo.logo_img:_logoTmp,
     imprimir_logo_texto:$('#id-logo-texto')?$('#id-logo-texto').checked:salvo.imprimir_logo_texto,
+    link_pesquisa_satisfacao:$('#id-link-pesquisa')?$('#id-link-pesquisa').value.trim():salvo.link_pesquisa_satisfacao,
     cor_primaria:$('#id-c1').value,cor_acento:$('#id-c2').value,cor_sidebar:$('#id-c3').value,cor_fundo:$('#id-c4').value,
     cor_painel:$('#id-c5').value,cor_texto:$('#id-c6').value,cor_perigo:$('#id-c7').value};
   MODS.forEach(m=>{ const el=$('#id-m-'+m[0]); if(el)o['mod_'+m[0]]=el.value; });

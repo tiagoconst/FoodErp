@@ -90,11 +90,15 @@ function normalizarTelWhats(tel){ let d=(tel||'').replace(/\D/g,''); if(!d)retur
 function telefoneDoPedido(p){ const cli=p.cliente_id?clienteById(p.cliente_id):null; return p.telefone || (cli&&cli.telefone) || ''; }
 
 async function carregarTabela(nome){
-  const cb=Date.now()+'_'+Math.random().toString(36).slice(2);
-  const url=`${SUPABASE_URL}/rest/v1/erp_${nome}?select=id,dados&empresa_id=eq.${encodeURIComponent(EMPRESA_ID)}&limit=5000&_cb=${cb}`;
+  const url=`${SUPABASE_URL}/rest/v1/erp_${nome}?select=id,dados&empresa_id=eq.${encodeURIComponent(EMPRESA_ID)}&limit=5000`;
   const resp=await fetch(url,{
     cache:'no-store',
-    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY }
+    headers:{
+      apikey:SUPABASE_ANON_KEY,
+      Authorization:'Bearer '+SUPABASE_ANON_KEY,
+      'Cache-Control':'no-cache, no-store, must-revalidate',
+      Pragma:'no-cache'
+    }
   });
   if(!resp.ok){ const txt=await resp.text().catch(()=>''); throw new Error('Erro '+resp.status+' ao buscar '+nome+(txt?': '+txt.slice(0,200):'')); }
   const data=await resp.json();

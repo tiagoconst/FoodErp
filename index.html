@@ -1706,7 +1706,7 @@ function vendaSair(){
   if(pedLinhas.length&&!confirm('Sair sem salvar? O pedido em andamento será perdido.'))return;
   pedLinhas=[]; vendaCat='__todas__'; vendaBusca=''; descTipo='valor'; descValor=0; nav('pedidos');
 }
-let construtorComponentes=[], construtorEditandoIdx=null;
+let construtorComponentes=[], construtorEditandoIdx=null, construtorProdutoBaseId='';
 let margemAlvoPadrao=60;
 function componentesDisponiveis(){
   return S.itens.filter(i=>i.ativo!==false&&!temFuncao(i,'vendavel')&&(temFuncao(i,'compravel')||temFuncao(i,'composto')))
@@ -1714,9 +1714,13 @@ function componentesDisponiveis(){
 }
 function abrirConstrutorMarmita(idxEdicao){
   construtorEditandoIdx = idxEdicao!=null ? idxEdicao : null;
+  construtorProdutoBaseId=''; let baseQtdInicial='';
   if(construtorEditandoIdx!=null){
     const l = pedLinhas[construtorEditandoIdx];
-    construtorComponentes = l.componentes.map(c=>({...c}));
+    const todos = l.componentes.map(c=>({...c}));
+    const baseIdx = todos.findIndex(c=>c.base);
+    if(baseIdx>=0){ construtorProdutoBaseId=todos[baseIdx].item_id; baseQtdInicial=todos[baseIdx].quantidade; todos.splice(baseIdx,1); }
+    construtorComponentes = todos;
   } else {
     construtorComponentes = [];
   }
@@ -1725,12 +1729,18 @@ function abrirConstrutorMarmita(idxEdicao){
   const opcoesPerfil=perfis.map(p=>{ const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:'—';
     return `<option value="${p.id}">${esc(cli)} · ${esc(p.nome)}</option>`; }).join('');
   const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
+  const opcoesBase=disp.map(i=>`<option value="${i.id}">${esc(i.nome)}</option>`).join('');
   openModal(`<div class="m-h"><h3>🛠️ Marmita Sob Medida</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     ${perfis.length?`<div class="field"><label>Carregar perfil salvo</label>
       <select id="cm-perfil" onchange="carregarPerfilMarmita(this.value)"><option value="">— montar do zero —</option>${opcoesPerfil}</select></div>`:''}
-    <div class="field"><label>Nome do prato (aparece no pedido e na etiqueta)</label><input id="cm-nome" placeholder="ex.: Marmita Fit - Frango 180g"></div>
-    <div class="field"><label>Componentes</label><div id="cm-componentes"></div>
+    <div class="frow c2">
+      <div class="field"><label>Produto (pré-preparo) — vira o nome do prato</label>
+        <select id="cm-produto-base" onchange="construtorProdutoBaseId=this.value;cmRecalcular()"><option value="">— selecione —</option>${opcoesBase}</select></div>
+      <div class="field"><label>Quantidade</label><input id="cm-produto-base-qtd" type="number" min="0" step="any" value="${baseQtdInicial}" oninput="cmRecalcular()"></div>
+    </div>
+    <p class="subtle" style="margin-top:-6px;margin-bottom:10px">O nome que aparece no pedido, na etiqueta e na lista de produção vem direto do produto escolhido acima — assim pratos iguais agrupam certinho na lista, mesmo vindo de pedidos diferentes.</p>
+    <div class="field"><label>Outros componentes</label><div id="cm-componentes"></div>
       <button class="btn sm" onclick="cmAddComponente()">+ Adicionar componente</button></div>
     <div class="frow c2" style="margin-top:14px">
       <div class="field"><label>Margem alvo (%)</label><input id="cm-margem" type="number" min="0" max="95" value="${margemAlvoPadrao}" oninput="margemAlvoPadrao=parseFloat(this.value)||0;cmRecalcular()"></div>
@@ -1745,7 +1755,8 @@ function abrirConstrutorMarmita(idxEdicao){
   </div>
   <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="confirmarMarmitaSobMedida()">Adicionar ao pedido</button></div>`,true);
   cmDesenharComponentes();
-  if(construtorEditandoIdx!=null){ $('#cm-nome').value=pedLinhas[construtorEditandoIdx].nomeCustom||''; $('#cm-preco').value=pedLinhas[construtorEditandoIdx].preco||''; }
+  if(construtorProdutoBaseId)$('#cm-produto-base').value=construtorProdutoBaseId;
+  if(construtorEditandoIdx!=null){ $('#cm-preco').value=pedLinhas[construtorEditandoIdx].preco||''; }
 }
 function cmAddComponente(){ construtorComponentes.push({item_id:'',quantidade:100}); cmDesenharComponentes(); }
 function cmDesenharComponentes(){
@@ -1760,7 +1771,10 @@ function cmDesenharComponentes(){
   cmRecalcular();
 }
 function cmRecalcular(){
-  const cmv=construtorComponentes.reduce((a,c)=>a+(c.item_id?(custoItem(c.item_id)||0)*c.quantidade:0),0);
+  const baseId=construtorProdutoBaseId||$('#cm-produto-base')?.value||'';
+  const baseQtd=parseFloat($('#cm-produto-base-qtd')?.value)||0;
+  const cmvBase=baseId?(custoItem(baseId)||0)*baseQtd:0;
+  const cmv=cmvBase+construtorComponentes.reduce((a,c)=>a+(c.item_id?(custoItem(c.item_id)||0)*c.quantidade:0),0);
   const margem=parseFloat($('#cm-margem')?.value)||0;
   const sugerido=margem<95?cmv/(1-margem/100):cmv;
   const elPreco=$('#cm-preco');
@@ -1771,26 +1785,30 @@ function cmRecalcular(){
 function carregarPerfilMarmita(perfilId){
   const p=(S.perfis_marmita||[]).find(x=>x.id===perfilId); if(!p)return;
   construtorComponentes=p.componentes.map(c=>({...c}));
-  $('#cm-nome').value=p.nome||'';
   cmDesenharComponentes();
+  toast('Componentes do perfil carregados — selecione acima o produto (pré-preparo) que representa esse prato.');
 }
 function confirmarMarmitaSobMedida(){
-  const nome=$('#cm-nome').value.trim();
-  const validos=construtorComponentes.filter(c=>c.item_id&&c.quantidade>0);
-  if(!nome)return toast('Dá um nome pro prato.',true);
-  if(!validos.length)return toast('Adicione pelo menos 1 componente.',true);
+  const baseId=$('#cm-produto-base').value;
+  const baseQtd=parseFloat($('#cm-produto-base-qtd').value)||0;
+  if(!baseId)return toast('Selecione o produto (pré-preparo) do prato.',true);
+  if(!(baseQtd>0))return toast('Informe a quantidade do produto selecionado.',true);
+  const baseItem=itemById(baseId);
+  const nome=baseItem?baseItem.nome:'Marmita personalizada';
+  const outros=construtorComponentes.filter(c=>c.item_id&&c.quantidade>0);
+  const todos=[{item_id:baseId,quantidade:baseQtd,base:true}, ...outros.map(c=>({...c}))];
   const preco=parseFloat($('#cm-preco').value)||0;
-  const cmv=validos.reduce((a,c)=>a+(custoItem(c.item_id)||0)*c.quantidade,0);
+  const cmv=todos.reduce((a,c)=>a+(custoItem(c.item_id)||0)*c.quantidade,0);
   if($('#cm-salvar-perfil').checked){
     const cliId=$('#cm-cli').value||null;
     const nomePerfil=$('#cm-perfil-nome').value.trim()||nome;
-    S.perfis_marmita.push({id:uid('PFM'),cliente_id:cliId,nome:nomePerfil,componentes:validos.map(c=>({...c})),criado_em:new Date().toISOString()});
+    S.perfis_marmita.push({id:uid('PFM'),cliente_id:cliId,nome:nomePerfil,componentes:outros.map(c=>({...c})),criado_em:new Date().toISOString()});
   }
   if(construtorEditandoIdx!=null){
     const l=pedLinhas[construtorEditandoIdx];
-    l.nomeCustom=nome; l.preco=preco; l.componentes=validos.map(c=>({...c})); l.cmv=cmv;
+    l.nomeCustom=nome; l.preco=preco; l.componentes=todos; l.cmv=cmv;
   } else {
-    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,qtd:1,preco,componentes:validos.map(c=>({...c})),cmv});
+    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,qtd:1,preco,componentes:todos,cmv});
   }
   closeModal(); scheduleSave(); render(); toast('Marmita personalizada adicionada.');
 }
@@ -2151,11 +2169,12 @@ function imprimirEtiquetas(id){
   const validade=new Date(hoje_); validade.setDate(validade.getDate()+30);
   const etiquetas=[];
   p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
-    for(let k=0;k<n;k++)etiquetas.push(nomeLinha(l)); });
-  const blocos=etiquetas.map((nome,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
+    for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom}); });
+  const blocos=etiquetas.map((et,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
     <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
     ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
-    <div class="et-sabor">${esc(nome)}</div>
+    ${et.sobMedida?'<div class="et-tarja">SOB MEDIDA</div>':''}
+    <div class="et-sabor">${esc(et.nome)}</div>
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
   </div>`).join('');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
@@ -2166,6 +2185,7 @@ function imprimirEtiquetas(id){
     .et{padding:3mm 0;text-align:center}
     .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:15px;line-height:1.2;letter-spacing:.02em} .et-topo img{max-height:8mm;max-width:44mm}
     .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
+    .et-tarja{background:#000;color:#fff;font-weight:800;font-size:10.5px;letter-spacing:.06em;padding:1.3mm 0;margin-bottom:1.5mm}
     .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:2.5mm}
     .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}

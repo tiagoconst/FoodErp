@@ -2177,13 +2177,14 @@ function imprimirEtiquetas(id){
   const etiquetas=[];
   p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
     for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom}); });
-  const blocos=etiquetas.map((et,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
+  const linhaCorte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
+  const blocos=linhaCorte+etiquetas.map((et,i)=>`${i>0?linhaCorte:''}<div class="et">
     <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
     ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
-    ${et.sobMedida?'<div class="et-tarja">SOB MEDIDA</div>':''}
     <div class="et-sabor">${esc(et.nome)}</div>
+    ${et.sobMedida?'<div class="et-tarja">SOB MEDIDA</div>':''}
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
-  </div>`).join('');
+  </div>`).join('')+linhaCorte;
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
     @page{ margin:3mm; }
     *{box-sizing:border-box}
@@ -2192,8 +2193,8 @@ function imprimirEtiquetas(id){
     .et{padding:3mm 0;text-align:center}
     .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:15px;line-height:1.2;letter-spacing:.02em} .et-topo img{max-height:8mm;max-width:44mm}
     .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
-    .et-tarja{background:#000;color:#fff;font-weight:800;font-size:10.5px;letter-spacing:.06em;padding:1.3mm 0;margin-bottom:1.5mm}
-    .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:2.5mm}
+    .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:1.5mm}
+    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:8px;letter-spacing:.05em;padding:0.6mm 2mm;border-radius:2px;margin-bottom:1.5mm}
     .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
   </style></head><body>

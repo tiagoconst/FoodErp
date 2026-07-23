@@ -694,22 +694,7 @@ let modalidadeEscolhida=null;
 let ckNome=null, ckTel=null, ckObs=null, ckEndereco=null;
 let cupomAplicado=null; // {codigo, tipo, valor, desconto, valor_final}
 let cupomErro=null; let cupomValidando=false; let cupomCodigoDigitado='';
-let formaPagamentoEscolhida='online'; // 'online' | 'entrega'
 function custoEntregaSelecionada(){ const m=entregaById(modalidadeEscolhida); return m?(m.custo||0):0; }
-function selecionarFormaPagamento(v){ salvarRascunhoCk(); formaPagamentoEscolhida=v; renderCarrinho(); }
-function formaPagamentoHtml(){
-  const opts=[
-    {v:'online',emoji:'💳',titulo:'Pagar agora',sub:'Pix, cartão ou boleto — pagamento seguro pelo Mercado Pago'},
-    {v:'entrega',emoji:'💵',titulo:'Pagar na entrega/retirada',sub:'Combine o pagamento direto com a loja (dinheiro, cartão na maquininha, etc.)'}
-  ].map(o=>{
-    const sel=formaPagamentoEscolhida===o.v;
-    return `<label class="modal-opt${sel?' sel':''}">
-      <input type="radio" name="ck-forma-pag" value="${o.v}" ${sel?'checked':''} onchange="selecionarFormaPagamento('${o.v}')">
-      <div class="modal-opt-info"><b>${o.emoji} ${o.titulo}</b><span class="sub">${o.sub}</span></div>
-    </label>`;
-  }).join('');
-  return `<div class="field"><label>Como você quer pagar? *</label><div class="modal-list">${opts}</div></div>`;
-}
 function salvarRascunhoCk(){
   const n=$('#ck-nome'); if(n)ckNome=n.value;
   const t=$('#ck-tel'); if(t)ckTel=t.value;
@@ -788,13 +773,14 @@ function renderCarrinho(){
     ${cupomHtml}
     ${custoEntrega>0?`<div class="line" style="border-bottom:none"><span class="sub-linha">Entrega</span><span class="sub-linha">${money(custoEntrega)}</span></div>`:''}
     <div class="tot"><span>Total</span><span>${money(totalFinal)}</span></div>
-    ${formaPagamentoHtml()}
     ${loginHtml()}
     <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva" value="${esc(ckNome??nomeSugerido())}"></div>
     <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000" value="${esc(ckTel??telefoneSugerido())}"></div>
     <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h">${esc(ckObs??'')}</textarea></div>
     <div id="ck-err" class="err" style="display:none"></div>
-    <button class="btn" id="ck-btn" onclick="enviarPedido()">Confirmar pedido</button>`;
+    <div class="field"><label>Como você quer pagar? *</label></div>
+    <button class="btn" id="ck-btn-online" style="margin-top:8px" onclick="enviarPedido('online')">💳 Pagar agora</button>
+    <button class="btn" id="ck-btn-entrega" style="margin-top:10px;background:var(--soft);color:var(--ink);border:1.5px solid var(--line)" onclick="enviarPedido('entrega')">💵 Pagar na entrega/retirada</button>`;
 }
 async function aplicarCupom(){
   salvarRascunhoCk();
@@ -814,7 +800,7 @@ async function aplicarCupom(){
   renderCarrinho();
 }
 function removerCupomAplicado(){ salvarRascunhoCk(); cupomAplicado=null; cupomErro=null; cupomCodigoDigitado=''; renderCarrinho(); }
-async function enviarPedido(){
+async function enviarPedido(formaPagamento){
   const nome=$('#ck-nome').value.trim();
   const tel=$('#ck-tel').value.trim();
   const err=$('#ck-err');
@@ -829,16 +815,18 @@ async function enviarPedido(){
   }
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
   if(!ids.length)return;
-  const btn=$('#ck-btn'); btn.disabled=true; btn.textContent='Enviando…';
+  const btnOnline=$('#ck-btn-online'), btnEntrega=$('#ck-btn-entrega');
+  const btnClicado=formaPagamento==='entrega'?btnEntrega:btnOnline;
+  const textoOriginal=btnClicado.textContent;
+  btnOnline.disabled=true; btnEntrega.disabled=true; btnClicado.textContent='Enviando…';
   const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}));
-  const formaPagamento=formaPagamentoEscolhida;
   const {data,error}=await sb.rpc('erp_criar_pedido_publico',{
     p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
     p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:usuario?.email||null,
     p_cupom_codigo:cupomAplicado?cupomAplicado.codigo:null, p_forma_pagamento:formaPagamento
   });
   if(error){
-    btn.disabled=false; btn.textContent='Confirmar pedido';
+    btnOnline.disabled=false; btnEntrega.disabled=false; btnClicado.textContent=textoOriginal;
     if(error.message.includes('Item indisponível'))err.textContent='Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.';
     else if(error.message.includes('Loja indisponível'))err.textContent='A loja não está recebendo pedidos no momento. Tente novamente mais tarde.';
     else if(cupomAplicado){ err.textContent=error.message||'Não foi possível aplicar o cupom agora.'; cupomAplicado=null; renderCarrinho(); return; }
@@ -858,7 +846,7 @@ async function enviarPedido(){
   const numeroPedido=data.numero;
   carrinho={}; localStorage.removeItem(CART_KEY); localStorage.removeItem(SESSAO_KEY);
   modalidadeEscolhida=null; ckNome=null; ckTel=null; ckObs=null; ckEndereco=null;
-  cupomAplicado=null; cupomErro=null; cupomCodigoDigitado=''; formaPagamentoEscolhida='online';
+  cupomAplicado=null; cupomErro=null; cupomCodigoDigitado='';
   fecharCarrinho();
   if(formaPagamento==='entrega'){ telaPedidoConfirmadoSemPagamento(numeroPedido,valorTotalFinal); return; }
   await irParaPagamento(data.pedido_id,valorTotalFinal);

@@ -2150,7 +2150,7 @@ function imprimirEtiquetas(id){
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
   </style></head><body>
     ${blocos}
-    <script>window.onload=function(){window.print()}<\/script></body></html>`;
+    <script>window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
   const w=window.open('','_blank','width=320,height=500');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
@@ -2303,7 +2303,7 @@ function imprimirPedido(id){
     <hr>
     <div class="center small">${esc(nomeEmp)}${emp.documento?' - '+esc(emp.documento):''}<br>${dataHoraExtenso}</div>
     ${idn.link_pesquisa_satisfacao?`<div class="pesquisa"><div id="qr-pesquisa"></div><small>Como foi sua marmita? Aponte a câmera<br>e conta pra gente 💚</small></div>`:''}
-    <script>${idn.link_pesquisa_satisfacao?`new QRCode(document.getElementById('qr-pesquisa'),{text:${JSON.stringify(idn.link_pesquisa_satisfacao)},width:90,height:90,correctLevel:QRCode.CorrectLevel.M});`:''}window.onload=function(){window.print()}<\/script></body></html>`;
+    <script>${idn.link_pesquisa_satisfacao?`new QRCode(document.getElementById('qr-pesquisa'),{text:${JSON.stringify(idn.link_pesquisa_satisfacao)},width:90,height:90,correctLevel:QRCode.CorrectLevel.M});`:''}window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
   const w=window.open('','_blank','width=320,height=640');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();

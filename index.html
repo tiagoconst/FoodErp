@@ -3325,6 +3325,16 @@ function analisarCarteiraClientes(){
   let acumulado=0;
   lista.forEach(c=>{ acumulado+=c.receita; const pct=acumulado/totalReceita;
     c.classe = pct<=0.80?'A':pct<=0.95?'B':'C'; });
+  // telefone de cada cliente, pra poder chamar no WhatsApp depois — tenta o telefone
+  // registrado no cadastro (clienteById) e cai pro telefone anotado no último pedido
+  lista.forEach(c=>{
+    const cr=clienteById(c.chave);
+    c.telefone=(cr&&cr.telefone)||'';
+  });
+  S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&p.telefone).forEach(p=>{
+    const chave=p.cliente_id||p.cliente||'—';
+    const c=porCli[chave]; if(c&&!c.telefone)c.telefone=p.telefone;
+  });
   const contagem={ativo:0,atencao:0,risco:0,inativo:0};
   lista.forEach(c=>contagem[c.status]++);
   const inativos=lista.filter(c=>c.status==='inativo');
@@ -3506,8 +3516,15 @@ function carteiraHtml(c){
         <div class="subtle">soma do ticket médio de cada um, se voltarem a comprar 1x</div>
       </div></div></div>
   </div>
-  <div class="card section-gap"><div class="card-h"><h3>Detalhamento dos clientes</h3><span class="subtle">top 15 · classe ABC pela curva de receita (A=80%, B=15%, C=5%)</span></div>
-    <div class="card-b" style="padding:0 6px"><table><thead><tr><th>Cliente</th><th class="r">Classe</th><th class="r">Total gasto</th><th class="r">Pedidos</th><th class="r">Ticket médio</th><th class="r">Dias sem comprar</th><th class="r">Status</th></tr></thead><tbody>${tabela}</tbody></table></div></div>
+  <div class="card section-gap"><div class="card-h"><h3>Detalhamento dos clientes</h3><span class="subtle">top 15 na tabela · classe ABC pela curva de receita (A=80%, B=15%, C=5%)</span></div>
+    <div class="card-b" style="padding:0 6px 14px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 6px 14px;border-bottom:1px solid var(--line);margin-bottom:6px">
+      <button class="btn sm" style="width:auto" onclick="exportarClientesCSV('todos')">⬇️ Exportar todos em CSV (${c.total})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('ativo')">💬 Top 5 ativos (${c.contagem.ativo})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('risco')">💬 Top 5 em risco (${c.contagem.risco})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('inativo')">💬 Top 5 inativos (${c.contagem.inativo})</button>
+    </div>
+    <table><thead><tr><th>Cliente</th><th class="r">Classe</th><th class="r">Total gasto</th><th class="r">Pedidos</th><th class="r">Ticket médio</th><th class="r">Dias sem comprar</th><th class="r">Status</th></tr></thead><tbody>${tabela}</tbody></table></div></div>
   </div>`;
 }
 VIEWS.custosfixos=function(){
@@ -3861,6 +3878,64 @@ function salvarIdentidade(){
 function restaurarIdentidade(){
   S.config=(S.config||[]).filter(c=>c.id!=='identidade'); _logoTmp=undefined;
   aplicarIdentidade(); scheduleSave(); render(); toast('Identidade padrão restaurada.');
+}
+function csvCampo(v){
+  const s=(v==null?'':String(v));
+  return /[";\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+}
+function exportarClientesCSV(filtro){
+  const STATUS_LABEL={ativo:'Ativo',atencao:'Atenção',risco:'Em risco',inativo:'Inativo'};
+  const c=analisarCarteiraClientes();
+  const lista=filtro&&filtro!=='todos' ? c.lista.filter(cl=>cl.status===filtro) : c.lista;
+  if(!lista.length)return toast('Nenhum cliente nesse grupo.',true);
+  const cab=['Nome','Classe ABC','Total gasto','Pedidos','Ticket médio','Dias sem comprar','Status','Primeira compra','Última compra'];
+  const linhas=lista.map(cl=>[cl.nome,cl.classe,cl.receita.toFixed(2).replace('.',','),cl.n,cl.ticketMedio.toFixed(2).replace('.',','),cl.diasSemComprar,STATUS_LABEL[cl.status],dBR(cl.primeira),dBR(cl.ultima)].map(csvCampo).join(';'));
+  const csv='﻿'+cab.join(';')+'\n'+linhas.join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  const sufixo=filtro&&filtro!=='todos'?'-'+filtro:'';
+  a.download='clientes'+sufixo+'-'+hoje()+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+  toast(lista.length+' cliente(s) exportado(s).');
+}
+function normalizarTelWhats(tel){
+  let d=(tel||'').replace(/\D/g,'');
+  if(!d)return '';
+  if(d.length<=11)d='55'+d; // assume Brasil quando não tem DDI
+  return d;
+}
+function formatarTelExibicao(tel){
+  const d=(tel||'').replace(/\D/g,'');
+  if(d.length===11)return '('+d.slice(0,2)+') '+d.slice(2,7)+'-'+d.slice(7);
+  if(d.length===10)return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6);
+  return tel||'sem telefone';
+}
+function gerarTextoListaClientes(status,top){
+  const STATUS_LABEL={ativo:'Clientes ativos',risco:'Clientes em risco',inativo:'Clientes inativos'};
+  const linhas=top.map((cl,i)=>`${i+1}. *${nomeProprio(cl.nome)}* — ${formatarTelExibicao(cl.telefone)}\n   ${cl.diasSemComprar}d sem comprar · ${cl.n} pedido(s) · ticket médio ${money(cl.ticketMedio)} · total ${money(cl.receita)}`).join('\n\n');
+  return `📋 *Top 5 — ${STATUS_LABEL[status]}*\n_Sabores da Ana · gerado em ${dBR(hoje())}_\n\n${linhas||'(nenhum cliente nesse grupo no momento)'}`;
+}
+function modalTopClientes(status){
+  const STATUS_LABEL={ativo:'Clientes ativos',risco:'Clientes em risco',inativo:'Clientes inativos'};
+  const c=analisarCarteiraClientes();
+  const top=c.lista.filter(cl=>cl.status===status).sort((a,b)=>b.receita-a.receita).slice(0,5);
+  window._topClientesModal={status,top};
+  const linhas=top.length?top.map(cl=>{
+    const tel=cl.telefone;
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
+      <b>${esc(nomeProprio(cl.nome))}</b> <span class="subtle">${esc(formatarTelExibicao(tel))}</span>
+      <div class="subtle">${cl.diasSemComprar}d sem comprar · ${cl.n} pedido(s) · ticket médio ${money(cl.ticketMedio)} · total ${money(cl.receita)}</div></div>`;
+  }).join(''):'<div class="empty"><b>Nenhum cliente nesse grupo no momento</b></div>';
+  openModal(`<div class="m-h"><h3>💬 Top 5 — ${STATUS_LABEL[status]}</h3><button class="x" onclick="closeModal()">✕</button></div>
+    <div class="m-b">
+    <p class="subtle" style="margin-bottom:10px">Copie a lista abaixo e cole numa conversa do WhatsApp pro time de relacionamento entrar em contato com esses clientes.</p>
+    ${linhas}
+    </div>
+    <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="copiarListaClientes()">📋 Copiar lista pro WhatsApp</button></div>`);
+}
+function copiarListaClientes(){
+  const ctx=window._topClientesModal||{status:'',top:[]};
+  const texto=gerarTextoListaClientes(ctx.status,ctx.top);
+  navigator.clipboard.writeText(texto).then(()=>toast('Lista copiada — cole numa conversa do WhatsApp.')).catch(()=>toast('Não foi possível copiar — tente novamente.',true));
 }
 function exportarJSON(){
   const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});

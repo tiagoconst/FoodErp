@@ -3409,20 +3409,34 @@ VIEWS.relatorios=function(){
   const comentariosRecentes=pesquisas.filter(q=>q.comentario&&q.comentario.trim())
     .sort((a,b)=>(b.respondido_em||'').localeCompare(a.respondido_em||'')).slice(0,5);
   const contarCategoria=(campo)=>{ const m={}; pesquisas.forEach(q=>{ const v=q[campo]||'—'; m[v]=(m[v]||0)+1; }); return m; };
-  const barrasCategoria=(mapa)=>{ const total=Object.values(mapa).reduce((a,b)=>a+b,0)||1;
-    return Object.entries(mapa).sort((a,b)=>b[1]-a[1]).map(([k,v])=>
-      `<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span>${esc(k)}</span><span class="subtle">${v}</span></div>
-       <div style="background:var(--soft);border-radius:6px;height:6px;overflow:hidden"><div style="width:${Math.round(v/total*100)}%;height:100%;background:var(--primary)"></div></div></div>`).join(''); };
+  const CORES_PIZZA=['var(--primary)','var(--m-financeiro,#E0A63C)','var(--m-clientes,#8B6FB3)','var(--muted)'];
+  const pizzaCategoria=(mapa,titulo)=>{
+    const entradas=Object.entries(mapa).sort((a,b)=>b[1]-a[1]);
+    const total=entradas.reduce((a,[,v])=>a+v,0)||1;
+    let acc=0;
+    const fatias=entradas.map(([k,v],i)=>{ const de=acc,ate=acc+v/total*100; acc=ate; return `${CORES_PIZZA[i%CORES_PIZZA.length]} ${de}% ${ate}%`; }).join(', ');
+    const legenda=entradas.map(([k,v],i)=>`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;margin-bottom:5px">
+        <span style="width:10px;height:10px;border-radius:3px;background:${CORES_PIZZA[i%CORES_PIZZA.length]};flex:none"></span>
+        <span style="flex:1;min-width:0">${esc(k)}</span><b class="num">${Math.round(v/total*100)}%</b></div>`).join('');
+    return `<div><div class="k-label" style="margin-bottom:10px">${titulo}</div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="width:76px;height:76px;border-radius:50%;background:conic-gradient(${fatias});flex:none;position:relative" title="${entradas.map(([k,v])=>esc(k)+': '+v).join(' · ')}">
+          <div style="position:absolute;inset:13px;background:var(--panel);border-radius:50%"></div>
+        </div>
+        <div style="flex:1;min-width:0">${legenda}</div>
+      </div></div>`;
+  };
   const pesquisaCard=`<div class="card section-gap"><div class="card-h"><h3>😊 Satisfação dos clientes</h3><span class="subtle">pesquisa pós-venda · ${label}</span></div>
     <div class="card-b">${nPesquisas?`
-    <div class="grid g3" style="margin-bottom:16px;align-items:start">
+    <div class="grid g4" style="margin-bottom:18px;align-items:start">
       <div class="kpi" style="border:none;padding:0"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Nota média</div><div class="k-value num">${notaMedia.toFixed(1)} / 5</div><div class="k-foot">${nPesquisas} resposta(s)</div></div>
       <div class="kpi" style="border:none;padding:0"><div class="k-label"><span class="dot" style="background:var(--ok,#7FBF9B)"></span>Recomendariam a gente</div><div class="k-value num">${pctRecomenda}%</div></div>
-      <div><div class="k-label" style="margin-bottom:6px">Sabor/tempero</div>${barrasCategoria(contarCategoria('sabor'))}</div>
+      ${pizzaCategoria(contarCategoria('sabor'),'Sabor/tempero')}
+      ${pizzaCategoria(contarCategoria('pontualidade'),'Pontualidade')}
     </div>
-    <div class="k-label" style="margin-bottom:6px">Pontualidade da entrega/retirada</div>${barrasCategoria(contarCategoria('pontualidade'))}
-    ${comentariosRecentes.length?`<div class="k-label" style="margin:14px 0 6px">Últimos comentários</div>${comentariosRecentes.map(c=>
-      `<div style="border-left:3px solid var(--primary);padding:6px 10px;background:var(--soft);border-radius:6px;font-size:13px;margin-bottom:6px">“${esc(c.comentario)}”<div class="subtle" style="margin-top:2px">${dBR(c.respondido_em)}</div></div>`).join('')}`:''}
+    ${comentariosRecentes.length?`<div class="k-label" style="margin-bottom:6px">Últimos comentários</div>
+      <div class="grid g2">${comentariosRecentes.map(c=>
+      `<div style="border-left:3px solid var(--primary);padding:6px 10px;background:var(--soft);border-radius:6px;font-size:13px">“${esc(c.comentario)}”<div class="subtle" style="margin-top:2px">${dBR(c.respondido_em)}</div></div>`).join('')}</div>`:''}
     `:`<div class="empty"><b>Nenhuma resposta no período</b>As respostas do formulário de pesquisa de satisfação aparecem aqui automaticamente, assim que os clientes responderem.</div>`}
     </div></div>`;
 

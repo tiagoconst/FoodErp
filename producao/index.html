@@ -164,16 +164,16 @@ function renderLista(){
 function montarMensagemPronto(p){
   const cli=p.cliente_id?clienteById(p.cliente_id):null;
   const nome=nomeProprio(cli?cli.nome:(p.cliente||''))||'';
-  let msg=`Oi ${nome}! Aqui é da Sabores da Ana 💚\n\nSeu pedido #${p.numero} ficou pronto!`;
+  let msg=`Oi ${nome}! Aqui é do Sabores da Ana 💚\n\nSeu pedido #${p.numero} ficou pronto!`;
   if(p.tipo_entrega==='retirada'){
-    msg+=' Já pode vir retirar quando quiser 😊';
+    msg+='\n\nJá pode vir retirar quando quiser 😊';
   } else if(p.tipo_entrega==='entrega'){
-    msg+=' Vamos entregar hoje, após as 19h — pode ser?';
+    msg+='\n\nVamos entregar hoje, após as 19h — pode ser?';
   } else {
-    msg+=' Você prefere receber em casa (entrega após as 19h) ou vai retirar com a gente?';
+    msg+='\n\nVocê prefere receber em casa (entrega após as 19h) ou vai retirar com a gente?';
   }
   if(!p.pago){
-    msg+=`\n\nSobre o pagamento (${money(p.valor_total)}): prefere que eu te mande um link de pagamento (Pix, débito ou crédito) agora, ou prefere pagar na hora com a maquininha (débito, crédito ou Pix)?`;
+    msg+=`\n\nSobre o pagamento (${money(p.valor_total)}): prefere que eu te mande um link de pagamento (Pix, débito ou crédito) agora, ou prefere pagar na hora com a maquininha?`;
   }
   return msg;
 }

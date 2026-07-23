@@ -438,6 +438,7 @@ function totalCarrinho(){ return Math.max(0,brutoCarrinho()-descontoComboCarrinh
 function alterarQtd(id,delta){
   const atual=carrinho[id]||0; const nova=Math.max(0,atual+delta);
   if(nova<=0)delete carrinho[id]; else carrinho[id]=nova;
+  if(cupomAplicado){ cupomAplicado=null; cupomErro=null; } // o carrinho mudou, precisa validar o cupom de novo
   salvarCarrinho(); renderCardapio(); if($('#overlay').classList.contains('open'))renderCarrinho();
 }
 function atualizarBarra(){
@@ -691,6 +692,8 @@ async function sairConta(){ await sb.auth.signOut(); }
 /* ===== Entrega / retirada (checkout) ===== */
 let modalidadeEscolhida=null;
 let ckNome=null, ckTel=null, ckObs=null, ckEndereco=null;
+let cupomAplicado=null; // {codigo, tipo, valor, desconto, valor_final}
+let cupomErro=null; let cupomValidando=false; let cupomCodigoDigitado='';
 function custoEntregaSelecionada(){ const m=entregaById(modalidadeEscolhida); return m?(m.custo||0):0; }
 function salvarRascunhoCk(){
   const n=$('#ck-nome'); if(n)ckNome=n.value;
@@ -752,11 +755,22 @@ function renderCarrinho(){
     ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Desconto por quantidade (${qtdCarrinho()}+ un.)</span><span>−${money(descCombo)}</span></div>`
     :`<div class="sub" style="margin:6px 0 0">Faltam ${COMBO_MIN_UN-qtdCarrinho()} un. pro desconto de ${money(COMBO_DESCONTO_UN)}/un. (a partir de ${COMBO_MIN_UN} un.)</div>`;
   const custoEntrega=custoEntregaSelecionada();
-  const totalFinal=totalCarrinho()+custoEntrega;
+  const descontoCupom=cupomAplicado?cupomAplicado.desconto:0;
+  const totalFinal=Math.max(0,totalCarrinho()-descontoCupom)+custoEntrega;
+  const cupomHtml=cupomAplicado
+    ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Cupom ${esc(cupomAplicado.codigo)} aplicado</span><span>−${money(descontoCupom)} <a class="link" style="font-weight:400;font-size:12px" onclick="removerCupomAplicado()">remover</a></span></div>`
+    :`<div class="field" style="margin-top:10px"><label>Cupom de desconto</label>
+        <div style="display:flex;gap:8px">
+          <input id="ck-cupom" placeholder="ex.: PROMO10" style="text-transform:uppercase;flex:1" value="${esc(cupomCodigoDigitado||'')}" onkeydown="if(event.key==='Enter'){event.preventDefault();aplicarCupom();}">
+          <button class="btn sm" ${cupomValidando?'disabled':''} onclick="aplicarCupom()">${cupomValidando?'Verificando…':'Aplicar'}</button>
+        </div>
+        ${cupomErro?`<span class="err" style="display:block;margin-top:6px">${esc(cupomErro)}</span>`:''}
+      </div>`;
   $('#sheet').innerHTML=`<div class="sheet-h"><h3>Seu pedido</h3><button class="x" onclick="fecharCarrinho()">✕</button></div>
     ${linhas}
     ${comboHtml}
     ${modalidadesHtml()}
+    ${cupomHtml}
     ${custoEntrega>0?`<div class="line" style="border-bottom:none"><span class="sub-linha">Entrega</span><span class="sub-linha">${money(custoEntrega)}</span></div>`:''}
     <div class="tot"><span>Total</span><span>${money(totalFinal)}</span></div>
     ${loginHtml()}
@@ -766,6 +780,24 @@ function renderCarrinho(){
     <div id="ck-err" class="err" style="display:none"></div>
     <button class="btn" id="ck-btn" onclick="enviarPedido()">Confirmar pedido</button>`;
 }
+async function aplicarCupom(){
+  salvarRascunhoCk();
+  const input=$('#ck-cupom'); const codigo=(input?.value||'').trim();
+  cupomCodigoDigitado=codigo;
+  if(!codigo){ cupomErro='Digite um código de cupom.'; renderCarrinho(); return; }
+  cupomValidando=true; cupomErro=null; renderCarrinho();
+  const tel=(ckTel??telefoneSugerido())||'';
+  const {data,error}=await sb.rpc('erp_validar_cupom_publico',{
+    p_empresa_id:EMPRESA_ID, p_codigo:codigo, p_subtotal:totalCarrinho(), p_cliente_telefone:tel
+  });
+  cupomValidando=false;
+  if(error||!data){ cupomErro='Não foi possível verificar o cupom agora. Tente de novo.'; renderCarrinho(); return; }
+  if(!data.valido){ cupomErro=data.motivo||'Cupom inválido.'; renderCarrinho(); return; }
+  cupomAplicado={codigo:data.codigo,tipo:data.tipo,valor:data.valor,desconto:data.desconto};
+  cupomErro=null; cupomCodigoDigitado='';
+  renderCarrinho();
+}
+function removerCupomAplicado(){ salvarRascunhoCk(); cupomAplicado=null; cupomErro=null; cupomCodigoDigitado=''; renderCarrinho(); }
 async function enviarPedido(){
   const nome=$('#ck-nome').value.trim();
   const tel=$('#ck-tel').value.trim();
@@ -785,12 +817,14 @@ async function enviarPedido(){
   const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}));
   const {data,error}=await sb.rpc('erp_criar_pedido_publico',{
     p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
-    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:usuario?.email||null
+    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:usuario?.email||null,
+    p_cupom_codigo:cupomAplicado?cupomAplicado.codigo:null
   });
   if(error){
     btn.disabled=false; btn.textContent='Confirmar pedido';
     if(error.message.includes('Item indisponível'))err.textContent='Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.';
     else if(error.message.includes('Loja indisponível'))err.textContent='A loja não está recebendo pedidos no momento. Tente novamente mais tarde.';
+    else if(cupomAplicado){ err.textContent=error.message||'Não foi possível aplicar o cupom agora.'; cupomAplicado=null; renderCarrinho(); return; }
     else err.textContent='Não foi possível enviar seu pedido agora. Tente novamente em instantes.';
     err.style.display='block';
     return;
@@ -806,6 +840,7 @@ async function enviarPedido(){
   }
   carrinho={}; localStorage.removeItem(CART_KEY); localStorage.removeItem(SESSAO_KEY);
   modalidadeEscolhida=null; ckNome=null; ckTel=null; ckObs=null; ckEndereco=null;
+  cupomAplicado=null; cupomErro=null; cupomCodigoDigitado='';
   fecharCarrinho();
   await irParaPagamento(data.pedido_id,valorTotalFinal);
 }

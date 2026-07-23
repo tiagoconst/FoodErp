@@ -552,6 +552,65 @@ function removerEntregaCad(id){ const e=entregaById(id); if(!e)return;
   registrarEvento('ITEM_ATUALIZADO',`Modalidade de entrega "${e.nome}" removida`);
   scheduleSave(); render(); toast('Removida.');
 }
+function cupomById(id){ return (S.cupons||[]).find(c=>c.id===id); }
+function usosCupom(codigo){ return (S.pedidos||[]).filter(p=>p.cupom_codigo===codigo&&p.status!=='cancelado').length; }
+function modalCupom(id){
+  if(!S.cupons)S.cupons=[];
+  const c=id?cupomById(id):null;
+  openModal(`<div class="m-h"><h3>${c?'Editar cupom':'Novo cupom de desconto'}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <div class="frow c2">
+      <div class="field"><label>Código *</label><input id="cp-codigo" value="${c?esc(c.codigo):''}" placeholder="ex.: PROMO10" style="text-transform:uppercase" ${c?'readonly':''}>${c?'<span class="hint">o código não pode ser alterado depois de criado — remova e crie outro se precisar mudar</span>':''}</div>
+      <div class="field"><label>Descrição interna</label><input id="cp-desc" value="${c?esc(c.descricao||''):''}" placeholder="ex.: promo de aniversário"></div>
+    </div>
+    <div class="frow c2">
+      <div class="field"><label>Tipo de desconto *</label><select id="cp-tipo" onchange="$('#cp-max-hint').style.display=this.value==='percentual'?'block':'none'"><option value="percentual" ${!c||c.tipo==='percentual'?'selected':''}>Percentual (%)</option><option value="fixo" ${c&&c.tipo==='fixo'?'selected':''}>Valor fixo (R$)</option></select></div>
+      <div class="field"><label>Valor do desconto *</label><input id="cp-valor" type="number" step="0.01" min="0" value="${c?c.valor:''}" placeholder="ex.: 10"></div>
+    </div>
+    <div class="frow c2">
+      <div class="field"><label>Pedido mínimo (R$)</label><input id="cp-min" type="number" step="0.01" min="0" value="${c&&c.valor_minimo_pedido!=null?c.valor_minimo_pedido:''}" placeholder="opcional"></div>
+      <div class="field"><label>Desconto máximo (R$)</label><input id="cp-max" type="number" step="0.01" min="0" value="${c&&c.desconto_maximo!=null?c.desconto_maximo:''}" placeholder="opcional">
+        <span id="cp-max-hint" class="hint" style="display:${!c||c.tipo==='percentual'?'block':'none'}">recomendado pra cupons em %, pra limitar o valor máximo que a loja perde num pedido grande</span></div>
+    </div>
+    <div class="frow c2">
+      <div class="field"><label>Válido a partir de</label><input id="cp-inicio" type="date" value="${c&&c.data_inicio?c.data_inicio:''}"></div>
+      <div class="field"><label>Válido até</label><input id="cp-fim" type="date" value="${c&&c.data_fim?c.data_fim:''}"></div>
+    </div>
+    <div class="field"><label>Limite total de usos</label><input id="cp-limite" type="number" step="1" min="1" value="${c&&c.limite_uso_total!=null?c.limite_uso_total:''}" placeholder="opcional — deixe em branco para ilimitado">
+      <span class="hint">${c?`já usado ${usosCupom(c.codigo)} vez(es)`:''}</span></div>
+    <div class="field"><label class="check ${c&&c.limite_um_por_cliente?'on':''}"><input type="checkbox" id="cp-1cliente" ${c&&c.limite_um_por_cliente?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)"><span><b>Limitar a 1 uso por cliente</b><small>o mesmo cliente (telefone ou login) não consegue usar esse cupom de novo, mesmo que ele ainda esteja válido</small></span></label></div>
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarCupom('${id||''}')">Salvar</button></div>`);
+  setTimeout(()=>$('#cp-codigo').focus(),50);
+}
+function salvarCupom(id){
+  const codigo=$('#cp-codigo').value.trim().toUpperCase().replace(/\s+/g,'');
+  if(!codigo)return toast('Informe o código do cupom.',true);
+  const valor=parseFloat($('#cp-valor').value);
+  if(!valor||valor<=0)return toast('Informe um valor de desconto válido.',true);
+  if(!id&&(S.cupons||[]).some(c=>c.codigo===codigo))return toast('Já existe um cupom com esse código.',true);
+  const dados={
+    codigo, descricao:$('#cp-desc').value.trim(), tipo:$('#cp-tipo').value, valor,
+    valor_minimo_pedido:$('#cp-min').value?parseFloat($('#cp-min').value):null,
+    desconto_maximo:$('#cp-max').value?parseFloat($('#cp-max').value):null,
+    data_inicio:$('#cp-inicio').value||null, data_fim:$('#cp-fim').value||null,
+    limite_uso_total:$('#cp-limite').value?parseInt($('#cp-limite').value):null,
+    limite_um_por_cliente:$('#cp-1cliente').checked
+  };
+  if(!S.cupons)S.cupons=[];
+  if(id){ Object.assign(cupomById(id),dados); registrarEvento('ITEM_ATUALIZADO',`Cupom "${codigo}" atualizado`,id); }
+  else{ const nid=uid('CUP'); S.cupons.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},dados));
+    registrarEvento('ITEM_CRIADO',`Cupom "${codigo}" criado`,nid); }
+  closeModal(); scheduleSave(); render(); toast('Cupom salvo.');
+}
+function toggleCupom(id){ const c=cupomById(id); if(!c)return; c.ativo=c.ativo===false?true:false;
+  registrarEvento('ITEM_ATUALIZADO',`Cupom "${c.codigo}" ${c.ativo?'reativado':'inativado'}`,id); scheduleSave(); render(); }
+function removerCupom(id){ const c=cupomById(id); if(!c)return;
+  if(!confirm(`Remover o cupom "${c.codigo}"?`))return;
+  S.cupons=S.cupons.filter(x=>x.id!==id);
+  registrarEvento('ITEM_ATUALIZADO',`Cupom "${c.codigo}" removido`);
+  scheduleSave(); render(); toast('Removido.');
+}
 function getIdent(){ if(!S.config)S.config=[];
   return Object.assign({},IDENT_PADRAO,S.config.find(x=>x.id==='identidade')||{}); }
 function aplicarIdentidade(i){
@@ -1496,7 +1555,7 @@ VIEWS['pedido-detalhe']=function(){
   const linhas=(p.itens||[]).map(l=>`<tr><td>${l.quantidade}× ${esc(nomeLinha(l))}${mostrarEntrega?`<div class="subtle" style="font-size:11px">${l.quantidade_entregue||0} entregue(s)${qtdPendente(l)?' · '+qtdPendente(l)+' pendente(s)':''}</div>`:''}</td><td class="r num">${money(l.preco_unitario)}</td><td class="r num">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('')
     ||'<tr><td colspan="3" class="empty">Sem itens</td></tr>';
   const subtotal=p.valor_bruto!=null?p.valor_bruto:(p.itens||[]).reduce((a,l)=>a+l.quantidade*l.preco_unitario,0);
-  const descontoTotal=(p.desconto_combo||0)+(p.desconto_manual||0);
+  const descontoTotal=(p.desconto_combo||0)+(p.desconto_manual||0)+(p.desconto_cupom||0);
   const historico=S.eventos.filter(e=>e.ref===p.id).sort((a,b)=>a.data<b.data?1:-1);
   const historicoHtml=historico.map(e=>`<div class="ev"><span class="ev-dot" style="background:${EVENTO_CORES[e.tipo]||'#999'}"></span><div><b>${e.tipo.replaceAll('_',' ')}</b> — ${esc(e.descricao)}<div class="ev-t">${dtBR(e.data)}</div></div></div>`).join('')||'<div class="empty">Sem histórico ainda.</div>';
   const opcoesStatus=statusDisponiveis().map(s=>`<option value="${s.id}" ${p.status===s.id?'selected':''}>${esc(s.nome)}</option>`).join('');
@@ -1524,7 +1583,7 @@ VIEWS['pedido-detalhe']=function(){
         </div></div>
         <div class="card section-gap"><div class="card-h"><h3>Resumo</h3></div><div class="card-b">
           <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="subtle">Subtotal</span><span class="num">${money(subtotal)}</span></div>
-          ${descontoTotal?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--primary)"><span>Desconto</span><span class="num">−${money(descontoTotal)}</span></div>`:''}
+          ${descontoTotal?`<div style="display:flex;justify-content:space-between;margin-bottom:6px;color:var(--primary)"><span>Desconto${p.cupom_codigo?' (cupom '+esc(p.cupom_codigo)+')':''}</span><span class="num">−${money(descontoTotal)}</span></div>`:''}
           <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:1px solid var(--line);padding-top:8px"><span>Total</span><span class="num">${money(p.valor_total)}</span></div>
         </div></div>
         ${['entregue','finalizado'].includes(p.status)?`<div class="card section-gap"><div class="card-h"><h3>Pagamento</h3></div><div class="card-b">
@@ -3649,8 +3708,29 @@ VIEWS.dados=function(){
         </div>
       </div>
     </div></div>`;
+  const cuponsListaHtml=(S.cupons||[]).slice().sort((a,b)=>(a.codigo||'').localeCompare(b.codigo||'','pt')).map(c=>{
+    const usos=usosCupom(c.codigo);
+    const validade=c.data_inicio||c.data_fim?`${c.data_inicio?dBR(c.data_inicio):'—'} até ${c.data_fim?dBR(c.data_fim):'—'}`:'sem prazo';
+    return `<tr style="${c.ativo===false?'opacity:.45':''}">
+      <td><b>${esc(c.codigo)}</b>${c.descricao?`<div class="mono-id">${esc(c.descricao)}</div>`:''}</td>
+      <td>${c.tipo==='percentual'?c.valor+'%':money(c.valor)}${c.desconto_maximo?`<div class="mono-id">até ${money(c.desconto_maximo)}</div>`:''}</td>
+      <td>${c.valor_minimo_pedido?money(c.valor_minimo_pedido):'—'}</td>
+      <td class="subtle" style="font-size:12px">${validade}</td>
+      <td>${usos}${c.limite_uso_total?'/'+c.limite_uso_total:''}${c.limite_um_por_cliente?'<div class="mono-id">1 por cliente</div>':''}</td>
+      <td class="r"><button class="btn sm" onclick="modalCupom('${c.id}')">Editar</button>
+        <button class="btn sm ghost" onclick="toggleCupom('${c.id}')">${c.ativo===false?'Reativar':'Inativar'}</button>
+        <button class="btn sm ghost" onclick="removerCupom('${c.id}')">✕</button></td></tr>`;
+  }).join('')
+  ||`<tr><td colspan="6"><div class="empty"><b>Nenhum cupom cadastrado</b>Crie um cupom pra dar desconto no site — o cliente digita o código no checkout.</div></td></tr>`;
+  const cuponsCard=`<div class="card acc" style="grid-column:1/-1"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>🎟️ Cupons de desconto</h3>
+      <span class="tag mut">códigos que o cliente digita no checkout do site</span></div>
+    <div class="card-b">
+      <p class="subtle" style="margin-bottom:12px">O desconto incide só sobre o valor dos itens (a taxa de entrega é cobrada à parte, normalmente). A validação é sempre refeita no servidor na hora de fechar o pedido — o cupom nunca pode ser "enganado" pelo navegador do cliente.</p>
+      <table><thead><tr><th>Código</th><th>Desconto</th><th>Pedido mín.</th><th>Validade</th><th>Usos</th><th class="r"></th></tr></thead><tbody>${cuponsListaHtml}</tbody></table>
+      <button class="btn sm" style="margin-top:10px" onclick="modalCupom()">+ Novo cupom</button>
+    </div></div>`;
   return header('Dados & Backup','#6E7468','Modo nuvem: dados no Supabase, sincronizados em tempo real.')+
-  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${queridinhosCard}${producaoCard}${entregasCard}${imgAvulsaCard}
+  `<div class="grid g2">${cloudCard}${empresaCard}${operacaoCard}${identCard}${fotoPadraoCard}${bannerPromoCard}${queridinhosCard}${cuponsCard}${producaoCard}${entregasCard}${imgAvulsaCard}
     <div class="card acc"><div class="card-h" onclick="this.closest('.card').classList.toggle('open')"><h3>Backup</h3></div><div class="card-b">
       <p class="subtle" style="margin-bottom:12px">Baixa um arquivo JSON com todos os itens, composições, movimentações, pedidos, financeiro e eventos.</p>
       <button class="btn primary" onclick="exportarJSON()">⬇ Exportar backup (JSON)</button></div></div>
@@ -3807,7 +3887,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas','cupons'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
@@ -3940,7 +4020,7 @@ async function entrarNoSistema(){
         TABLES.forEach(t=>{ S[t]=p[t]||[]; }); await cloudPersist(); }
     }catch(e){} }
   }
-  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[];
+  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[]; if(!S.cupons)S.cupons=[];
   garantirCategoriasPadrao();
   aplicarIdentidade();
   if(!S.formas.length){ garantirFormasPadrao(); cloudPersist(); }

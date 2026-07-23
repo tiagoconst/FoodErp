@@ -90,8 +90,14 @@ function normalizarTelWhats(tel){ let d=(tel||'').replace(/\D/g,''); if(!d)retur
 function telefoneDoPedido(p){ const cli=p.cliente_id?clienteById(p.cliente_id):null; return p.telefone || (cli&&cli.telefone) || ''; }
 
 async function carregarTabela(nome){
-  const {data,error}=await sb.from('erp_'+nome).select('id,dados').eq('empresa_id',EMPRESA_ID).limit(5000);
-  if(error)throw error;
+  const cb=Date.now()+'_'+Math.random().toString(36).slice(2);
+  const url=`${SUPABASE_URL}/rest/v1/erp_${nome}?select=id,dados&empresa_id=eq.${encodeURIComponent(EMPRESA_ID)}&limit=5000&_cb=${cb}`;
+  const resp=await fetch(url,{
+    cache:'no-store',
+    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:'Bearer '+SUPABASE_ANON_KEY }
+  });
+  if(!resp.ok){ const txt=await resp.text().catch(()=>''); throw new Error('Erro '+resp.status+' ao buscar '+nome+(txt?': '+txt.slice(0,200):'')); }
+  const data=await resp.json();
   return data.map(r=>r.dados);
 }
 async function carregarTudo(){
@@ -138,8 +144,8 @@ function renderLista(){
     vazioHtml=`<div class="empty"><b>Nenhum pedido confirmado aguardando produção</b>Os pedidos aparecem aqui assim que forem confirmados no ERP.
       <div style="margin-top:22px;padding:12px;background:var(--soft);border-radius:10px;font-size:11.5px;text-align:left;color:var(--muted);line-height:1.6">
         <b style="color:var(--ink)">Diagnóstico</b><br>
-        Total de pedidos carregados: ${S.pedidos.length}<br>
-        Por status: ${resumoStatus}<br>
+        Pedidos: ${S.pedidos.length} · Itens: ${S.itens.length} · Clientes: ${S.clientes.length}<br>
+        Por status (pedidos): ${resumoStatus}<br>
         Empresa: ${esc(EMPRESA_ID)}<br>
         Carregado às: ${hora}
       </div>

@@ -3520,9 +3520,10 @@ function carteiraHtml(c){
     <div class="card-b" style="padding:0 6px 14px">
     <div style="display:flex;flex-wrap:wrap;gap:8px;padding:12px 6px 14px;border-bottom:1px solid var(--line);margin-bottom:6px">
       <button class="btn sm" style="width:auto" onclick="exportarClientesCSV('todos')">⬇️ Exportar todos em CSV (${c.total})</button>
-      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('ativo')">💬 Top 5 ativos (${c.contagem.ativo})</button>
-      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('risco')">💬 Top 5 em risco (${c.contagem.risco})</button>
-      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('inativo')">💬 Top 5 inativos (${c.contagem.inativo})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('ativo',5)">💬 Ativos (${c.contagem.ativo})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('atencao',5)">💬 Atenção (${c.contagem.atencao})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('risco',5)">💬 Em risco (${c.contagem.risco})</button>
+      <button class="btn sm" style="width:auto;background:var(--soft);color:var(--ink)" onclick="modalTopClientes('inativo',5)">💬 Inativos (${c.contagem.inativo})</button>
     </div>
     <table><thead><tr><th>Cliente</th><th class="r">Classe</th><th class="r">Total gasto</th><th class="r">Pedidos</th><th class="r">Ticket médio</th><th class="r">Dias sem comprar</th><th class="r">Status</th></tr></thead><tbody>${tabela}</tbody></table></div></div>
   </div>`;
@@ -3909,32 +3910,37 @@ function formatarTelExibicao(tel){
   if(d.length===10)return '('+d.slice(0,2)+') '+d.slice(2,6)+'-'+d.slice(6);
   return tel||'sem telefone';
 }
-function gerarTextoListaClientes(status,top){
-  const STATUS_LABEL={ativo:'Clientes ativos',risco:'Clientes em risco',inativo:'Clientes inativos'};
+const STATUS_LABEL_CLIENTE={ativo:'Clientes ativos',atencao:'Clientes em atenção',risco:'Clientes em risco',inativo:'Clientes inativos'};
+function gerarTextoListaClientes(status,top,qtd){
+  const tituloQtd=qtd==='tudo'?'Todos':'Top '+qtd;
   const linhas=top.map((cl,i)=>`${i+1}. *${nomeProprio(cl.nome)}* — ${formatarTelExibicao(cl.telefone)}\n   ${cl.diasSemComprar}d sem comprar · ${cl.n} pedido(s) · ticket médio ${money(cl.ticketMedio)} · total ${money(cl.receita)}`).join('\n\n');
-  return `📋 *Top 5 — ${STATUS_LABEL[status]}*\n_Sabores da Ana · gerado em ${dBR(hoje())}_\n\n${linhas||'(nenhum cliente nesse grupo no momento)'}`;
+  return `📋 *${tituloQtd} — ${STATUS_LABEL_CLIENTE[status]}*\n_Sabores da Ana · gerado em ${dBR(hoje())}_\n\n${linhas||'(nenhum cliente nesse grupo no momento)'}`;
 }
-function modalTopClientes(status){
-  const STATUS_LABEL={ativo:'Clientes ativos',risco:'Clientes em risco',inativo:'Clientes inativos'};
+function modalTopClientes(status,qtd){
+  qtd=qtd||5;
   const c=analisarCarteiraClientes();
-  const top=c.lista.filter(cl=>cl.status===status).sort((a,b)=>b.receita-a.receita).slice(0,5);
-  window._topClientesModal={status,top};
+  const doGrupo=c.lista.filter(cl=>cl.status===status).sort((a,b)=>b.receita-a.receita);
+  const top=qtd==='tudo'?doGrupo:doGrupo.slice(0,qtd);
+  window._topClientesModal={status,top,qtd};
+  const chipsQtd=[5,10,20,'tudo'].map(q=>
+    `<button class="cat-chip ${qtd==q?'active':''}" style="${qtd==q?'background:var(--primary)':''}" onclick="modalTopClientes('${status}','${q}')">${q==='tudo'?'Tudo ('+doGrupo.length+')':'Top '+q}</button>`).join('');
   const linhas=top.length?top.map(cl=>{
     const tel=cl.telefone;
     return `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
       <b>${esc(nomeProprio(cl.nome))}</b> <span class="subtle">${esc(formatarTelExibicao(tel))}</span>
       <div class="subtle">${cl.diasSemComprar}d sem comprar · ${cl.n} pedido(s) · ticket médio ${money(cl.ticketMedio)} · total ${money(cl.receita)}</div></div>`;
   }).join(''):'<div class="empty"><b>Nenhum cliente nesse grupo no momento</b></div>';
-  openModal(`<div class="m-h"><h3>💬 Top 5 — ${STATUS_LABEL[status]}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  openModal(`<div class="m-h"><h3>💬 ${STATUS_LABEL_CLIENTE[status]}</h3><button class="x" onclick="closeModal()">✕</button></div>
     <div class="m-b">
     <p class="subtle" style="margin-bottom:10px">Copie a lista abaixo e cole numa conversa do WhatsApp pro time de relacionamento entrar em contato com esses clientes.</p>
-    ${linhas}
+    <div class="cat-chips" style="margin-bottom:12px">${chipsQtd}</div>
+    <div style="max-height:340px;overflow:auto">${linhas}</div>
     </div>
     <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="copiarListaClientes()">📋 Copiar lista pro WhatsApp</button></div>`);
 }
 function copiarListaClientes(){
-  const ctx=window._topClientesModal||{status:'',top:[]};
-  const texto=gerarTextoListaClientes(ctx.status,ctx.top);
+  const ctx=window._topClientesModal||{status:'',top:[],qtd:5};
+  const texto=gerarTextoListaClientes(ctx.status,ctx.top,ctx.qtd);
   navigator.clipboard.writeText(texto).then(()=>toast('Lista copiada — cole numa conversa do WhatsApp.')).catch(()=>toast('Não foi possível copiar — tente novamente.',true));
 }
 function exportarJSON(){

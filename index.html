@@ -1724,12 +1724,12 @@ function abrirConstrutorMarmita(idxEdicao){
   } else {
     construtorComponentes = [];
   }
-  const disp=componentesDisponiveis();
   const perfis=S.perfis_marmita||[];
   const opcoesPerfil=perfis.map(p=>{ const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:'—';
     return `<option value="${p.id}">${esc(cli)} · ${esc(p.nome)}</option>`; }).join('');
   const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
-  const opcoesBase=disp.map(i=>`<option value="${i.id}">${esc(i.nome)}</option>`).join('');
+  const baseDisp=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  const opcoesBase=baseDisp.map(i=>`<option value="${i.id}">${esc(i.nome)}</option>`).join('');
   openModal(`<div class="m-h"><h3>🛠️ Marmita Sob Medida</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     ${perfis.length?`<div class="field"><label>Carregar perfil salvo</label>

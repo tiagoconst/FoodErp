@@ -179,7 +179,6 @@ td.r,th.r{text-align:right}
 .line{display:grid;grid-template-columns:1fr 110px 130px 34px;gap:8px;align-items:center}
 .cm-line{display:grid;grid-template-columns:1fr 90px 34px;gap:8px;align-items:center;margin-bottom:8px}
 @media(max-width:560px){.cm-line{grid-template-columns:1fr 74px 30px;gap:6px}}
-.cm-base-nome{padding:8px 11px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .line select,.line input{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--input-bg,#FDFCF9);font-size:13px;width:100%}
 .line .rm{border:none;background:var(--soft);border-radius:7px;height:32px;color:var(--muted)}
 .line .rm:hover{background:#F0DDD9;color:var(--danger)}
@@ -1713,15 +1712,21 @@ function componentesDisponiveis(){
   return S.itens.filter(i=>i.ativo!==false&&!temFuncao(i,'vendavel')&&(temFuncao(i,'compravel')||temFuncao(i,'composto')))
     .sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
 }
+function produtoBaseComponentesSugeridos(produtoId){
+  return componentesDe(produtoId)
+    .filter(c=>{ const it=itemById(c.item_filho_id); return it&&(it.categoria||'').trim()==='Pré-preparo'; })
+    .map(c=>({item_id:c.item_filho_id, quantidade:c.quantidade}));
+}
 function abrirConstrutorMarmita(idxEdicao){
   construtorEditandoIdx = idxEdicao!=null ? idxEdicao : null;
   if(construtorEditandoIdx!=null){
     const l = pedLinhas[construtorEditandoIdx];
-    construtorComponentes = l.componentes.map(c=>({...c}));
+    construtorComponentes = l.componentes.filter(c=>!c.base).map(c=>({...c}));
+    construtorProdutoBaseId = l.produtoBaseId || (S.itens.find(i=>temFuncao(i,'vendavel')&&i.nome===l.nomeCustom)||{}).id || '';
   } else {
     construtorComponentes = [];
+    construtorProdutoBaseId = '';
   }
-  construtorProdutoBaseId = (construtorComponentes.find(c=>c.base)||{}).item_id || '';
   const perfis=S.perfis_marmita||[];
   const opcoesPerfil=perfis.map(p=>{ const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:'—';
     return `<option value="${p.id}">${esc(cli)} · ${esc(p.nome)}</option>`; }).join('');
@@ -1734,7 +1739,7 @@ function abrirConstrutorMarmita(idxEdicao){
       <select id="cm-perfil" onchange="carregarPerfilMarmita(this.value)"><option value="">— montar do zero —</option>${opcoesPerfil}</select></div>`:''}
     <div class="field"><label>Produto — vira o nome do prato</label>
       <select id="cm-produto-base" onchange="cmProdutoBaseAlterado(this.value)"><option value="">— selecione —</option>${opcoesBase}</select></div>
-    <p class="subtle" style="margin-top:-6px;margin-bottom:10px">Ao escolher, o produto já entra na lista de componentes abaixo — só falta você preencher a quantidade dele. O nome do prato (pedido, etiqueta e lista de produção) vem direto daqui, assim pratos iguais sempre agrupam certinho.</p>
+    <p class="subtle" style="margin-top:-6px;margin-bottom:10px">Ao escolher, o(s) pré-preparo(s) da ficha técnica desse produto (ex.: a proteína) já entram na lista de componentes abaixo, prontos pra ajustar a quantidade. O nome do prato (pedido, etiqueta e lista de produção) sempre fica igual ao nome padrão do produto, pra agrupar certinho na lista de produção.</p>
     <div class="field"><label>Componentes</label><div id="cm-componentes"></div>
       <button class="btn sm" onclick="cmAddComponente()">+ Adicionar componente</button></div>
     <div class="frow c2" style="margin-top:14px">
@@ -1755,38 +1760,25 @@ function abrirConstrutorMarmita(idxEdicao){
 }
 function cmProdutoBaseAlterado(id){
   construtorProdutoBaseId=id;
-  const idx=construtorComponentes.findIndex(c=>c.base);
-  if(!id){ if(idx>=0)construtorComponentes.splice(idx,1); cmDesenharComponentes(); return; }
-  if(idx>=0){ construtorComponentes[idx].item_id=id; }
-  else { construtorComponentes.unshift({item_id:id,quantidade:'',base:true}); }
-  cmDesenharComponentes();
-}
-function cmRemoverBase(){
-  const idx=construtorComponentes.findIndex(c=>c.base);
-  if(idx>=0)construtorComponentes.splice(idx,1);
-  construtorProdutoBaseId='';
-  const sel=$('#cm-produto-base'); if(sel)sel.value='';
+  if(!id){ cmDesenharComponentes(); return; }
+  const sugeridos=produtoBaseComponentesSugeridos(id);
+  if(sugeridos.length){
+    construtorComponentes=sugeridos;
+  } else {
+    toast('Esse produto não tem pré-preparo vinculado na ficha técnica — adicione o componente manualmente.',true);
+  }
   cmDesenharComponentes();
 }
 function cmAddComponente(){ construtorComponentes.push({item_id:'',quantidade:100}); cmDesenharComponentes(); }
 function cmDesenharComponentes(){
   const disp=componentesDisponiveis();
   const opts=disp.map(i=>`<option value="${i.id}">${esc(i.nome)} (${money(custoItem(i.id)||0)}/${i.unidade_base})</option>`).join('');
-  $('#cm-componentes').innerHTML=construtorComponentes.map((c,k)=>{
-    if(c.base){
-      const it=itemById(c.item_id);
-      return `<div class="cm-line">
-        <div class="cm-base-nome">🍽️ ${esc(it?it.nome:c.item_id)} <span class="tag mut">prato</span></div>
-        <input type="number" min="0" step="any" placeholder="qtd" value="${c.quantidade}" oninput="construtorComponentes[${k}].quantidade=parseFloat(this.value)||0;cmRecalcular()">
-        <button class="rm" onclick="cmRemoverBase()">✕</button></div>`;
-    }
-    return `<div class="cm-line">
-      <select onchange="construtorComponentes[${k}].item_id=this.value;cmRecalcular()"><option value="">Escolha…</option>${opts}</select>
-      <input type="number" min="0" step="any" placeholder="qtd" value="${c.quantidade}" oninput="construtorComponentes[${k}].quantidade=parseFloat(this.value)||0;cmRecalcular()">
-      <button class="rm" onclick="construtorComponentes.splice(${k},1);cmDesenharComponentes()">✕</button></div>`;
-  }).join('')
-    ||'<p class="subtle">Selecione o produto acima pra começar.</p>';
-  construtorComponentes.forEach((c,k)=>{ if(c.base)return; const sel=$('#cm-componentes').children[k]?.querySelector('select'); if(sel&&c.item_id)sel.value=c.item_id; });
+  $('#cm-componentes').innerHTML=construtorComponentes.map((c,k)=>`<div class="cm-line">
+    <select onchange="construtorComponentes[${k}].item_id=this.value;cmRecalcular()"><option value="">Escolha…</option>${opts}</select>
+    <input type="number" min="0" step="any" placeholder="qtd" value="${c.quantidade}" oninput="construtorComponentes[${k}].quantidade=parseFloat(this.value)||0;cmRecalcular()">
+    <button class="rm" onclick="construtorComponentes.splice(${k},1);cmDesenharComponentes()">✕</button></div>`).join('')
+    ||'<p class="subtle">Selecione o produto acima (ou clique em "+ Adicionar componente") pra começar.</p>';
+  construtorComponentes.forEach((c,k)=>{ const sel=$('#cm-componentes').children[k]?.querySelector('select'); if(sel&&c.item_id)sel.value=c.item_id; });
   cmRecalcular();
 }
 function cmRecalcular(){
@@ -1801,29 +1793,29 @@ function cmRecalcular(){
 function carregarPerfilMarmita(perfilId){
   const p=(S.perfis_marmita||[]).find(x=>x.id===perfilId); if(!p)return;
   construtorComponentes=p.componentes.map(c=>({...c}));
-  construtorProdutoBaseId=(construtorComponentes.find(c=>c.base)||{}).item_id||'';
+  construtorProdutoBaseId=p.produtoBaseId||'';
   const sel=$('#cm-produto-base'); if(sel)sel.value=construtorProdutoBaseId;
   cmDesenharComponentes();
 }
 function confirmarMarmitaSobMedida(){
-  const baseEntry=construtorComponentes.find(c=>c.base);
-  if(!baseEntry||!baseEntry.item_id)return toast('Selecione o produto do prato.',true);
-  if(!(parseFloat(baseEntry.quantidade)>0))return toast('Informe a quantidade do produto selecionado.',true);
-  const baseItem=itemById(baseEntry.item_id);
+  const baseId=construtorProdutoBaseId||$('#cm-produto-base')?.value||'';
+  if(!baseId)return toast('Selecione o produto do prato.',true);
+  const baseItem=itemById(baseId);
   const nome=baseItem?baseItem.nome:'Marmita personalizada';
   const validos=construtorComponentes.filter(c=>c.item_id&&c.quantidade>0);
+  if(!validos.length)return toast('Adicione pelo menos 1 componente (ex.: o pré-preparo da proteína).',true);
   const preco=parseFloat($('#cm-preco').value)||0;
   const cmv=validos.reduce((a,c)=>a+(custoItem(c.item_id)||0)*c.quantidade,0);
   if($('#cm-salvar-perfil').checked){
     const cliId=$('#cm-cli').value||null;
     const nomePerfil=$('#cm-perfil-nome').value.trim()||nome;
-    S.perfis_marmita.push({id:uid('PFM'),cliente_id:cliId,nome:nomePerfil,componentes:validos.map(c=>({...c})),criado_em:new Date().toISOString()});
+    S.perfis_marmita.push({id:uid('PFM'),cliente_id:cliId,nome:nomePerfil,produtoBaseId:baseId,componentes:validos.map(c=>({...c})),criado_em:new Date().toISOString()});
   }
   if(construtorEditandoIdx!=null){
     const l=pedLinhas[construtorEditandoIdx];
-    l.nomeCustom=nome; l.preco=preco; l.componentes=validos.map(c=>({...c})); l.cmv=cmv;
+    l.nomeCustom=nome; l.produtoBaseId=baseId; l.preco=preco; l.componentes=validos.map(c=>({...c})); l.cmv=cmv;
   } else {
-    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,qtd:1,preco,componentes:validos.map(c=>({...c})),cmv});
+    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,produtoBaseId:baseId,qtd:1,preco,componentes:validos.map(c=>({...c})),cmv});
   }
   closeModal(); scheduleSave(); render(); toast('Marmita personalizada adicionada.');
 }

@@ -2102,36 +2102,14 @@ function binarizarCanvas(ctx,w,h){
   }
   ctx.putImageData(dados,0,0);
 }
-function gerarNomeCursivoImg(nome,cb){
-  // em vez de deixar o nome como texto ao vivo (fonte@font-face) na impressão — o que
-  // deixa o driver da térmica anti-aliasar e depois pontilhar o cinza, ficando grosseiro —
-  // desenha o nome num canvas em alta resolução com a fonte cursiva e binariza o resultado,
-  // igual já fazemos com a imagem do logo. Sai muito mais nítido no papel.
-  try{
-    const fonte=new FontFace('BrittanySignaturePrint','url(data:font/ttf;base64,'+FONTE_LOGO_B64+')');
-    fonte.load().then(function(carregada){
-      document.fonts.add(carregada);
-      const tam=180;
-      const medCanvas=document.createElement('canvas');
-      const medCtx=medCanvas.getContext('2d');
-      medCtx.font=tam+'px BrittanySignaturePrint';
-      const largura=Math.max(50,Math.ceil(medCtx.measureText(nome).width))+60;
-      const altura=Math.round(tam*1.5);
-      const canvas=document.createElement('canvas');
-      canvas.width=largura; canvas.height=altura;
-      const ctx=canvas.getContext('2d');
-      ctx.fillStyle='#fff'; ctx.fillRect(0,0,largura,altura);
-      ctx.font=tam+'px BrittanySignaturePrint';
-      ctx.fillStyle='#000'; ctx.textBaseline='alphabetic';
-      ctx.fillText(nome,30,Math.round(tam*1.02));
-      binarizarCanvas(ctx,largura,altura);
-      cb(canvas.toDataURL('image/png'));
-    }).catch(function(){ cb(null); });
-  }catch(e){ cb(null); }
-}
 function prepararLogoImpressao(nomeFallback,cb){
   const idn=getIdent();
-  if(!idn.logo_img||idn.imprimir_logo_texto){ gerarNomeCursivoImg(nomeFallback||'',cb); return; }
+  // testamos desenhar o nome com a fonte cursiva (ao vivo e depois pré-binarizada em imagem) e
+  // em ambos os casos o resultado saiu igual no papel — o calor do cabeçote da térmica "engrossa"
+  // e serrilha justamente os traços finos de uma fonte cursiva (dot gain), é físico, não dá pra
+  // corrigir por código. Então na impressão usamos texto em negrito comum (a fonte cursiva continua
+  // valendo no site/tela, só não na bobina).
+  if(!idn.logo_img||idn.imprimir_logo_texto){ cb(null); return; }
   const img=new Image();
   img.onload=function(){
     try{
@@ -2146,7 +2124,7 @@ function prepararLogoImpressao(nomeFallback,cb){
       cb(canvas.toDataURL('image/png'));
     }catch(e){ cb(idn.logo_img); } // se der erro (ex: imagem de outra origem), usa a original mesmo
   };
-  img.onerror=function(){ gerarNomeCursivoImg(nomeFallback||'',cb); };
+  img.onerror=function(){ cb(null); };
   img.src=idn.logo_img;
 }
 function imprimirEtiquetas(id){
@@ -2165,7 +2143,7 @@ function imprimirEtiquetas(id){
   p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
     for(let k=0;k<n;k++)etiquetas.push(nomeLinha(l)); });
   const blocos=etiquetas.map((nome,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
-    <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-cursivo">${esc(nomeEmp)}</span>`}</div>
+    <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
     ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
     <div class="et-sabor">${esc(nome)}</div>
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
@@ -2175,9 +2153,8 @@ function imprimirEtiquetas(id){
     *{box-sizing:border-box}
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
-    @font-face{font-family:'BrittanySignature';src:url(data:font/ttf;base64,${FONTE_LOGO_B64}) format('truetype')}
     .et{padding:3mm 0;text-align:center}
-    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo .nome-cursivo{font-family:'BrittanySignature',cursive;font-size:26px;line-height:1} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:15px;line-height:1.2;letter-spacing:.02em} .et-topo img{max-height:8mm;max-width:44mm}
     .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
     .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:2.5mm}
     .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
@@ -2308,11 +2285,10 @@ function imprimirPedido(id){
     *{box-sizing:border-box}
     html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
-    @font-face{font-family:'BrittanySignature';src:url(data:font/ttf;base64,${FONTE_LOGO_B64}) format('truetype')}
     .center{text-align:center}
     .logo{max-height:12mm;margin-bottom:1mm}
     h1{font-size:12px;margin:1mm 0}
-    .nome-cursivo{font-family:'BrittanySignature',cursive;font-size:30px;line-height:1;margin:1mm 0}
+    .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:17px;line-height:1.2;letter-spacing:.02em;margin:1mm 0}
     hr{border:none;border-top:1px dashed #000;margin:2.5mm 0}
     table{width:100%;border-collapse:collapse} td{padding:1mm 0;vertical-align:top;font-size:10px} .r{text-align:right;white-space:nowrap}
     .tot td{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm}
@@ -2323,7 +2299,7 @@ function imprimirPedido(id){
     .pesquisa small{display:block;font-size:8.5px;line-height:1.3}
   </style></head><body>
     <div class="center">
-      ${logoPB?`<img src="${logoPB}" class="logo">`:`<div class="nome-cursivo">${esc(nomeEmp)}</div>`}
+      ${logoPB?`<img src="${logoPB}" class="logo">`:`<div class="nome-loja">${esc(nomeEmp)}</div>`}
     </div>
     <div class="center small">RECIBO #${esc(p.id)}</div>
     <hr>
@@ -3629,8 +3605,8 @@ VIEWS.dados=function(){
           <span id="id-thumb">${idn.logo_img?`<img src="${idn.logo_img}" style="height:40px;border-radius:8px">`:''}</span>
           ${idn.logo_img?'<button class="btn sm" onclick="removerLogo()">Remover imagem</button>':''}
         </div><span class="hint">a imagem é reduzida para 96 px e aparece na barra lateral e no comprovante</span></div>
-      <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="id-logo-texto" ${idn.imprimir_logo_texto?'checked':''} style="width:auto"> Imprimir o nome da loja com a fonte cursiva na bobina, em vez da imagem do logo</label>
-        <span class="hint">recomendado se o logo tiver traços finos/cursivos — em impressoras térmicas pequenas, logos em imagem costumam sair borrados ou pixelizados; escrevendo o nome com a fonte de verdade (não uma imagem), ele sai sempre nítido, do mesmo jeito da sua marca</span></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="id-logo-texto" ${idn.imprimir_logo_texto?'checked':''} style="width:auto"> Imprimir o nome da loja em texto (negrito) na bobina, em vez da imagem do logo</label>
+        <span class="hint">recomendado se o logo tiver traços finos/cursivos — em impressoras térmicas pequenas, logos em imagem (ou fontes cursivas) costumam sair borrados/serrilhados por causa do calor do cabeçote no papel; um texto em negrito simples sai sempre nítido</span></div>
       <div class="field"><label>Link da pesquisa de satisfação</label><input id="id-link-pesquisa" value="${esc(idn.link_pesquisa_satisfacao||'')}" placeholder="ex.: https://forms.gle/xxxxxxx">
         <span class="hint">se preenchido, imprime um QR code no rodapé do recibo (bobina 54mm) convidando o cliente a responder. Deixe em branco pra não imprimir nada.</span></div>
       <div class="field"><label>Cores gerais — selecione livremente</label>

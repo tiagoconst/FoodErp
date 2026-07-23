@@ -72,10 +72,12 @@
 const SUPABASE_URL='https://jaytdbwaoduefrbragsw.supabase.co';
 const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY';
 const EMPRESA_ID='dd8275c9-e88f-4633-bfd0-bfa262eaf857';
-const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{
+  global:{ fetch:(url,opts)=>fetch(url,{...opts,cache:'no-store'}) }
+});
 
 let S={pedidos:[],itens:[],clientes:[]};
-let pedidoAtualId=null, buscaAtual='', enviando=false;
+let pedidoAtualId=null, buscaAtual='', enviando=false, ultimoCarregamento=null;
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>(v==null||isNaN(v))?'—':v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -88,7 +90,7 @@ function normalizarTelWhats(tel){ let d=(tel||'').replace(/\D/g,''); if(!d)retur
 function telefoneDoPedido(p){ const cli=p.cliente_id?clienteById(p.cliente_id):null; return p.telefone || (cli&&cli.telefone) || ''; }
 
 async function carregarTabela(nome){
-  const {data,error}=await sb.from('erp_'+nome).select('id,dados').eq('empresa_id',EMPRESA_ID);
+  const {data,error}=await sb.from('erp_'+nome).select('id,dados').eq('empresa_id',EMPRESA_ID).limit(5000);
   if(error)throw error;
   return data.map(r=>r.dados);
 }
@@ -97,6 +99,7 @@ async function carregarTudo(){
   try{
     const [pedidos,itens,clientes]=await Promise.all([carregarTabela('pedidos'),carregarTabela('itens'),carregarTabela('clientes')]);
     S={pedidos,itens,clientes};
+    ultimoCarregamento=new Date();
     mostrarLista();
   }catch(e){
     document.getElementById('main').innerHTML=`<div class="empty"><b>Não foi possível carregar</b>${esc(e.message||'Verifique sua internet e tente de novo.')}<br><br><button class="btn primary" onclick="carregarTudo()" style="width:auto;display:inline-block;padding:12px 22px">Tentar de novo</button></div>`;

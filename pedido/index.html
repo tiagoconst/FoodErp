@@ -217,6 +217,12 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   .legal-card .legal-head{padding:22px 20px 14px}
   .legal-body{padding:16px 20px 28px}
 }
+.preparo-intro{font-family:var(--font-menu);font-size:13.5px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+.preparo-step{display:flex;gap:14px;margin-bottom:18px}
+.preparo-step .num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
+.preparo-step .txt b{display:block;font-family:var(--font-menu);font-weight:800;font-size:14px;color:var(--ink);margin-bottom:3px}
+.preparo-step .txt p{margin:0;font-family:var(--font-menu);font-size:13.5px;color:var(--ink);line-height:1.55}
+.preparo-fim{margin-top:6px;padding-top:16px;border-top:1px dashed var(--line);font-family:var(--font-menu);font-size:13.5px;color:var(--primary-dark);font-weight:700;text-align:center}
 </style>
 </head>
 <body>
@@ -225,6 +231,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   <div class="brand" id="brand-box"><img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXF7V4NZ.png" alt="Sabores da Ana"></div>
   <div class="navlinks">
     <a onclick="document.getElementById('cardapio').scrollIntoView({behavior:'smooth'})">Produtos</a>
+    <a onclick="abrirPreparo()">Modo de Preparar</a>
     <a onclick="abrirSobre()">Sobre Nós</a>
     <a onclick="abrirContato()">Contato</a>
   </div>
@@ -254,6 +261,25 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 
 <div class="overlay" id="overlay">
   <div class="sheet" id="sheet"></div>
+</div>
+
+<div class="sobre-overlay" id="preparo-overlay" onclick="if(event.target===this)fecharPreparo()">
+  <button class="sobre-close" onclick="fecharPreparo()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>Modo de Preparar</h2>
+      <div class="muted">Pequenos detalhes fazem toda diferença no sabor</div>
+    </div>
+    <div class="legal-body">
+      <p class="preparo-intro">Sua marmita chega pronta pra ir do freezer direto até a sua mesa — só seguir esse passo a passo simples.</p>
+      <div class="preparo-step"><span class="num">1</span><div class="txt"><b>Do freezer para o micro-ondas</b><p>Pode levar direto do freezer pro micro-ondas — isso preserva a qualidade da refeição. Se preferir descongelar antes, deixe na geladeira, nunca em temperatura ambiente.</p></div></div>
+      <div class="preparo-step"><span class="num">2</span><div class="txt"><b>Retire a tampa</b><p>A embalagem foi pensada pra ir ao micro-ondas, mas retire a tampa antes de aquecer — assim o calor é absorvido melhor.</p></div></div>
+      <div class="preparo-step"><span class="num">3</span><div class="txt"><b>Aqueça aos poucos</b><p>Comece com 3 a 5 minutos, verifique e complete o tempo se precisar. Cada micro-ondas tem uma potência diferente, então ajuste como for melhor pro seu.</p></div></div>
+      <div class="preparo-step"><span class="num">4</span><div class="txt"><b>Purês e cremes merecem mais tempo</b><p>Depois de aquecer por alguns minutos, retire, mexa bem e volte ao micro-ondas — isso garante que voltem à textura cremosa.</p></div></div>
+      <div class="preparo-step"><span class="num">5</span><div class="txt"><b>Os legumes soltaram um pouco de líquido?</b><p>Isso é completamente normal — é uma característica natural dos alimentos. Basta misturar e aproveitar todos os nutrientes.</p></div></div>
+      <div class="preparo-fim">Sua refeição merece esse cuidado — bom apetite! 💚</div>
+    </div>
+  </div>
 </div>
 
 <div class="sobre-overlay" id="sobre-overlay" onclick="if(event.target===this)fecharSobre()">
@@ -384,6 +410,8 @@ const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 document.title=LOJA_NOME+' — Faça seu pedido';
 
 /* ===== Sobre nós ===== */
+function abrirPreparo(){ $('#preparo-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function fecharPreparo(){ $('#preparo-overlay').classList.remove('open'); document.body.style.overflow=''; }
 function abrirSobre(){ $('#sobre-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
 function fecharSobre(){ $('#sobre-overlay').classList.remove('open'); document.body.style.overflow=''; }
 

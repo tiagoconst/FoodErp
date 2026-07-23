@@ -737,13 +737,15 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape')closeModal(); });
 'use strict';
 /* ================= ITENS ================= */
 let filtroItens='';
-let filtroCategoriaItens='';
+let filtroCategoriaItens='', filtroTipoItens='';
+const TIPOS_ITEM=[['MAT','Matéria-prima'],['PRE','Pré-preparo'],['PRD','Produto']];
 VIEWS.itens=function(){
   garantirCategoriasPadrao();
   const lista=S.itens.filter(i=>{
     if(filtroCategoriaItens&&i.categoria!==filtroCategoriaItens)return false;
+    if(filtroTipoItens&&!i.id.startsWith(filtroTipoItens+'-'))return false;
     return !filtroItens||i.nome.toLowerCase().includes(filtroItens)||(i.categoria||'').toLowerCase().includes(filtroItens);
-  });
+  }).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
   const rows=lista.map(i=>{
     const fs=(i.funcoes||[]).map(f=>{const F=FUNCOES.find(x=>x.id===f);return `<span class="tag f">${F?F.nome:f}</span>`;}).join(' ');
     const s=temFuncao(i,'estocavel')?qty(saldo(i.id),i.unidade_base):'—';
@@ -762,12 +764,16 @@ VIEWS.itens=function(){
   const catsItens=S.categorias.filter(c=>c.ativo!==false&&catNomesItens.has(c.nome));
   const catChips=`<button class="cat-chip ${!filtroCategoriaItens?'active':''}" style="${!filtroCategoriaItens?'background:var(--primary)':''}" onclick='filtroCategoriaItens="";render()'>Todas</button>`+
     catsItens.map(c=>`<button class="cat-chip ${filtroCategoriaItens===c.nome?'active':''}" style="${filtroCategoriaItens===c.nome?'background:'+corCategoria(c.nome):''}" onclick='filtroCategoriaItens=${JSON.stringify(c.nome)};render()'>${esc(c.nome)}</button>`).join('');
+  const tipoChips=`<button class="cat-chip ${!filtroTipoItens?'active':''}" style="${!filtroTipoItens?'background:var(--primary)':''}" onclick='filtroTipoItens="";render()'>Todos os tipos</button>`+
+    TIPOS_ITEM.map(([pref,label])=>{ const n=S.itens.filter(i=>i.id.startsWith(pref+'-')).length;
+      return `<button class="cat-chip ${filtroTipoItens===pref?'active':''}" style="${filtroTipoItens===pref?'background:var(--primary)':''}" onclick='filtroTipoItens=${JSON.stringify(pref)};render()'>${label} (${n})</button>`; }).join('');
 
   return header('Itens','var(--m-itens)','Um item nunca muda de identidade — apenas ganha funções.',
     `<input class="search" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();this.focus();this.setSelectionRange(99,99)">
      <button class="btn" onclick="modalCategorias()">🏷️ Categorias</button>
      <button class="btn primary" onclick="modalItem()">+ Novo item</button>`)+
-  `<div class="cat-chips">${catChips}</div>`+
+  `<div class="cat-chips">${tipoChips}</div>`+
+  `<div class="cat-chips" style="margin-top:6px">${catChips}</div>`+
   `<div class="card"><table><thead><tr><th>Item</th><th>Funções</th><th class="r">Saldo</th><th class="r">Custo</th><th class="r">Preço venda</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 

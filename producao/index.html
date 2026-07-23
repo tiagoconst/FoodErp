@@ -129,9 +129,25 @@ function renderLista(){
       ${tipo?`<span class="tag ${tipo}">${tipo==='entrega'?'Entrega':'Retirada'}</span>`:'<span class="tag">A combinar</span>'}
     </div>`;
   }).join('');
+  let vazioHtml='';
+  if(!lista.length){
+    const porStatus={};
+    S.pedidos.forEach(p=>{ const k=p.status||'(sem status)'; porStatus[k]=(porStatus[k]||0)+1; });
+    const resumoStatus=Object.entries(porStatus).map(([k,n])=>`${esc(k)}: ${n}`).join(' · ')||'nenhum pedido retornado';
+    const hora=ultimoCarregamento?ultimoCarregamento.toLocaleTimeString('pt-BR'):'—';
+    vazioHtml=`<div class="empty"><b>Nenhum pedido confirmado aguardando produção</b>Os pedidos aparecem aqui assim que forem confirmados no ERP.
+      <div style="margin-top:22px;padding:12px;background:var(--soft);border-radius:10px;font-size:11.5px;text-align:left;color:var(--muted);line-height:1.6">
+        <b style="color:var(--ink)">Diagnóstico</b><br>
+        Total de pedidos carregados: ${S.pedidos.length}<br>
+        Por status: ${resumoStatus}<br>
+        Empresa: ${esc(EMPRESA_ID)}<br>
+        Carregado às: ${hora}
+      </div>
+    </div>`;
+  }
   document.getElementById('main').innerHTML=`
     <input class="search" placeholder="Buscar por número ou nome…" value="${esc(buscaAtual)}" oninput="buscaAtual=this.value;renderLista()">
-    ${lista.length?linhas:'<div class="empty"><b>Nenhum pedido confirmado aguardando produção</b>Os pedidos aparecem aqui assim que forem confirmados no ERP.</div>'}
+    ${lista.length?linhas:vazioHtml}
   `;
 }
 

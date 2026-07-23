@@ -760,9 +760,9 @@ function renderCarrinho(){
   const cupomHtml=cupomAplicado
     ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Cupom ${esc(cupomAplicado.codigo)} aplicado</span><span>−${money(descontoCupom)} <a class="link" style="font-weight:400;font-size:12px" onclick="removerCupomAplicado()">remover</a></span></div>`
     :`<div class="field" style="margin-top:10px"><label>Cupom de desconto</label>
-        <div style="display:flex;gap:8px">
-          <input id="ck-cupom" placeholder="ex.: PROMO10" style="text-transform:uppercase;flex:1" value="${esc(cupomCodigoDigitado||'')}" onkeydown="if(event.key==='Enter'){event.preventDefault();aplicarCupom();}">
-          <button class="btn sm" ${cupomValidando?'disabled':''} onclick="aplicarCupom()">${cupomValidando?'Verificando…':'Aplicar'}</button>
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <input id="ck-cupom" placeholder="ex.: PROMO10" style="text-transform:uppercase;flex:1 1 0;min-width:0;width:auto" value="${esc(cupomCodigoDigitado||'')}" onkeydown="if(event.key==='Enter'){event.preventDefault();aplicarCupom();}">
+          <button class="btn sm" style="flex:none;width:auto;margin-top:0;white-space:nowrap" ${cupomValidando?'disabled':''} onclick="aplicarCupom()">${cupomValidando?'Verificando…':'Aplicar'}</button>
         </div>
         ${cupomErro?`<span class="err" style="display:block;margin-top:6px">${esc(cupomErro)}</span>`:''}
       </div>`;

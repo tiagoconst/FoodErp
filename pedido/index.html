@@ -30,16 +30,13 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .navbar .navlinks{display:flex;gap:24px;font-family:var(--font-menu);font-size:14px;font-weight:700}
 .navbar .navlinks a{color:#fff;opacity:.95;text-decoration:none;cursor:pointer}
 .navbar .navlinks a:hover{opacity:1;text-decoration:underline}
-.navbar .navlinks a.nav-destaque{background:var(--accent);padding:6px 14px;border-radius:999px;opacity:1;font-weight:800}
+.navbar .navlinks a.nav-destaque{display:inline-flex;align-items:center;background:var(--accent);padding:7px 16px;border-radius:999px;opacity:1;font-weight:800;white-space:nowrap;line-height:1.3}
 .navbar .navlinks a.nav-destaque:hover{filter:brightness(1.08);text-decoration:none}
-.montar-grupo-h{font-family:var(--font-menu);font-weight:800;font-size:13px;color:var(--primary-dark);text-transform:uppercase;letter-spacing:.03em;margin:16px 0 8px}
-.montar-grupo-h:first-child{margin-top:0}
-.montar-item-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
-.montar-item-info{display:flex;flex-direction:column;gap:2px}
-.montar-item-info b{font-size:13.5px}
-.montar-item-info .sub{font-size:11.5px;color:var(--muted)}
-.montar-item-row .stepper{flex:none}
-.montar-item-row .stepper span{min-width:38px}
+.cm-line{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.cm-line select{flex:1;min-width:0;padding:10px 8px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13.5px;font-family:inherit;color:var(--ink)}
+.cm-line input{width:64px;flex:none;padding:10px 6px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13.5px;font-family:inherit;text-align:center}
+.cm-line .rm{flex:none;background:none;border:none;color:var(--danger);font-size:17px;cursor:pointer;padding:0 2px}
+.btn-add-componente{width:100%;padding:9px;border-radius:8px;border:1.5px dashed var(--line);background:transparent;color:var(--primary-dark);font-weight:700;font-size:13px;cursor:pointer;margin-top:2px}
 .navbar .cart-btn{position:relative;display:flex;align-items:center;gap:9px;background:transparent;color:#fff;border:none;padding:6px 4px;font-family:var(--font-menu);font-weight:700;font-size:14px;cursor:pointer;margin-left:auto}
 .navbar .cart-btn img{height:34px;display:block}
 .navbar .cart-btn .cart-badge{position:absolute;top:-4px;left:20px;background:var(--primary-dark);color:#fff;border-radius:999px;min-width:16px;height:16px;padding:0 4px;font-size:10px;line-height:16px;text-align:center;font-weight:700;display:none}
@@ -243,8 +240,8 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
     <a onclick="document.getElementById('cardapio').scrollIntoView({behavior:'smooth'})">Produtos</a>
     <a onclick="abrirPreparo()">Modo de Preparar</a>
     <a onclick="abrirSobre()">Sobre Nós</a>
-    <a class="nav-destaque" onclick="abrirMontarMarmita()">🛠️ Monte a Sua</a>
     <a onclick="abrirContato()">Contato</a>
+    <a class="nav-destaque" onclick="abrirMontarMarmita()">🍱&nbsp;Monte a Sua</a>
   </div>
   <button class="cart-btn" onclick="abrirCarrinho()">
     <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXDMZRJI.png" alt="Meu Pedido">
@@ -501,7 +498,7 @@ function alterarQtd(id,delta){
 
 /* ===== Marmita Personalizada (monte a sua) ===== */
 let catalogoSobMedida=null; // {margem, preco_minimo_unitario, preco_minimo_combo, combo_min_unidades, grupos:{Categoria:[{item_id,nome,preco_100g_estimado}]}}
-let montarSelecao={}; // {item_id: gramas} sendo montada agora, antes de ir pro carrinho
+let montarLinhas=[]; // [{item_id, gramas}] sendo montada agora, antes de ir pro carrinho
 const GRUPOS_SOB_MEDIDA=['Proteína','Carboidratos','Legumes/Verduras','Molho','Adicionais'];
 async function carregarCatalogoSobMedida(){
   if(catalogoSobMedida)return catalogoSobMedida;
@@ -531,21 +528,28 @@ function brutoCarrinhoCustom(){ return carrinhoCustom.reduce((a,l)=>a+precoUnita
 async function abrirMontarMarmita(){
   await carregarCatalogoSobMedida();
   if(!catalogoSobMedida){ toast('Não foi possível carregar as opções agora. Tente de novo em instantes.',true); return; }
-  montarSelecao={};
+  montarLinhas=[{item_id:'',gramas:100}];
   renderMontarMarmita();
   $('#montar-overlay').classList.add('open'); document.body.style.overflow='hidden';
 }
 function fecharMontarMarmita(){ $('#montar-overlay').classList.remove('open'); document.body.style.overflow=''; }
-function montarAlterarGramas(itemId,delta){
-  const atual=montarSelecao[itemId]||0;
-  const novo=Math.max(0,atual+delta*50);
-  if(novo<=0)delete montarSelecao[itemId]; else montarSelecao[itemId]=novo;
-  renderMontarMarmita();
+function montarOpcoesHtml(itemIdSelecionado){
+  const cfg=catalogoSobMedida;
+  return '<option value="">Escolha o componente…</option>'+GRUPOS_SOB_MEDIDA.map(g=>{
+    const itens=(cfg.grupos[g]||[]);
+    if(!itens.length)return'';
+    const opts=itens.map(it=>`<option value="${esc(it.item_id)}" ${it.item_id===itemIdSelecionado?'selected':''}>${esc(it.nome)} — ${money(it.preco_100g_estimado)}/100g</option>`).join('');
+    return `<optgroup label="${esc(g)}">${opts}</optgroup>`;
+  }).join('');
 }
+function montarAddComponente(){ montarLinhas.push({item_id:'',gramas:100}); renderMontarMarmita(); }
+function montarAtualizarItem(idx,val){ montarLinhas[idx].item_id=val; renderMontarMarmita(); }
+function montarAtualizarGramas(idx,val){ montarLinhas[idx].gramas=parseFloat(val)||0; renderMontarMarmita(); }
+function montarRemoverComponente(idx){ montarLinhas.splice(idx,1); renderMontarMarmita(); }
 function montarItensSelecionados(){
-  return Object.entries(montarSelecao).filter(([,g])=>g>0).map(([item_id,gramas])=>{
-    const info=acharItemCatalogoSM(item_id);
-    return {item_id,gramas,nome:info?info.nome:item_id};
+  return montarLinhas.filter(l=>l.item_id&&l.gramas>0).map(l=>{
+    const info=acharItemCatalogoSM(l.item_id);
+    return {item_id:l.item_id,gramas:l.gramas,nome:info?info.nome:l.item_id};
   });
 }
 function renderMontarMarmita(){
@@ -554,25 +558,15 @@ function renderMontarMarmita(){
   const subtotal=precoBaseEstimadoSM(itensSel);
   const minimo=minimoAplicavelSM();
   const precoFinal=Math.max(subtotal,minimo);
-  const gruposHtml=GRUPOS_SOB_MEDIDA.map(g=>{
-    const itens=(cfg.grupos[g]||[]);
-    if(!itens.length)return'';
-    const linhas=itens.map(it=>{
-      const g_=montarSelecao[it.item_id]||0;
-      return `<div class="montar-item-row">
-        <div class="montar-item-info"><b>${esc(it.nome)}</b><span class="sub">${money(it.preco_100g_estimado)}/100g</span></div>
-        <div class="stepper" style="background:var(--soft)">
-          <button style="color:var(--primary-dark)" onclick="montarAlterarGramas('${it.item_id}',-1)">−</button>
-          <span style="color:var(--ink)">${g_}g</span>
-          <button class="add" onclick="montarAlterarGramas('${it.item_id}',1)">+</button>
-        </div>
-      </div>`;
-    }).join('');
-    return `<div class="montar-grupo-h">${esc(g)}</div>${linhas}`;
-  }).join('');
+  const linhasHtml=montarLinhas.map((l,k)=>`<div class="cm-line">
+      <select onchange="montarAtualizarItem(${k},this.value)">${montarOpcoesHtml(l.item_id)}</select>
+      <input type="number" min="0" step="10" placeholder="g" value="${l.gramas||''}" oninput="montarAtualizarGramas(${k},this.value)">
+      <button class="rm" onclick="montarRemoverComponente(${k})">✕</button>
+    </div>`).join('');
   $('#montar-body').innerHTML=`
-    <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5">Escolha os componentes e a quantidade (em gramas) de cada um — o preço é calculado pelo que você montar. Toda marmita personalizada custa no mínimo ${money(cfg.preco_minimo_unitario??17)} (ou ${money(cfg.preco_minimo_combo??15)} se o seu pedido tiver ${cfg.combo_min_unidades??5} ou mais marmitas no total).</p>
-    ${gruposHtml}
+    <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5">Escolha o componente e digite a quantidade em gramas — o preço é calculado pelo que você montar. Toda marmita personalizada custa no mínimo ${money(cfg.preco_minimo_unitario??17)} (ou ${money(cfg.preco_minimo_combo??15)} se o seu pedido tiver ${cfg.combo_min_unidades??5} ou mais marmitas no total).</p>
+    ${linhasHtml}
+    <button class="btn-add-componente" onclick="montarAddComponente()">+ Adicionar componente</button>
     <div class="tot" style="margin-top:16px"><span>Total estimado</span><span>${money(precoFinal)}</span></div>
     <button class="btn" ${itensSel.length?'':'disabled'} onclick="montarAdicionarAoCarrinho()">Adicionar à sacola</button>
   `;

@@ -30,6 +30,16 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .navbar .navlinks{display:flex;gap:24px;font-family:var(--font-menu);font-size:14px;font-weight:700}
 .navbar .navlinks a{color:#fff;opacity:.95;text-decoration:none;cursor:pointer}
 .navbar .navlinks a:hover{opacity:1;text-decoration:underline}
+.navbar .navlinks a.nav-destaque{background:var(--accent);padding:6px 14px;border-radius:999px;opacity:1;font-weight:800}
+.navbar .navlinks a.nav-destaque:hover{filter:brightness(1.08);text-decoration:none}
+.montar-grupo-h{font-family:var(--font-menu);font-weight:800;font-size:13px;color:var(--primary-dark);text-transform:uppercase;letter-spacing:.03em;margin:16px 0 8px}
+.montar-grupo-h:first-child{margin-top:0}
+.montar-item-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.montar-item-info{display:flex;flex-direction:column;gap:2px}
+.montar-item-info b{font-size:13.5px}
+.montar-item-info .sub{font-size:11.5px;color:var(--muted)}
+.montar-item-row .stepper{flex:none}
+.montar-item-row .stepper span{min-width:38px}
 .navbar .cart-btn{position:relative;display:flex;align-items:center;gap:9px;background:transparent;color:#fff;border:none;padding:6px 4px;font-family:var(--font-menu);font-weight:700;font-size:14px;cursor:pointer;margin-left:auto}
 .navbar .cart-btn img{height:34px;display:block}
 .navbar .cart-btn .cart-badge{position:absolute;top:-4px;left:20px;background:var(--primary-dark);color:#fff;border-radius:999px;min-width:16px;height:16px;padding:0 4px;font-size:10px;line-height:16px;text-align:center;font-weight:700;display:none}
@@ -233,6 +243,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
     <a onclick="document.getElementById('cardapio').scrollIntoView({behavior:'smooth'})">Produtos</a>
     <a onclick="abrirPreparo()">Modo de Preparar</a>
     <a onclick="abrirSobre()">Sobre Nós</a>
+    <a class="nav-destaque" onclick="abrirMontarMarmita()">🛠️ Monte a Sua</a>
     <a onclick="abrirContato()">Contato</a>
   </div>
   <button class="cart-btn" onclick="abrirCarrinho()">
@@ -295,6 +306,17 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
     <div class="sobre-foto">
       <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-WDP1H9NA.jpg" alt="Ana, fundadora da Sabores da Ana">
     </div>
+  </div>
+</div>
+
+<div class="sobre-overlay" id="montar-overlay" onclick="if(event.target===this)fecharMontarMarmita()">
+  <button class="sobre-close" onclick="fecharMontarMarmita()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>🛠️ Monte a Sua Marmita</h2>
+      <div class="muted">Escolha os componentes e a quantidade — o preço é calculado na hora</div>
+    </div>
+    <div class="legal-body" id="montar-body"></div>
   </div>
 </div>
 
@@ -427,8 +449,10 @@ function fecharTermos(){ $('#termos-overlay').classList.remove('open'); document
 
 /* ===== Carrinho (persistido no navegador do cliente) ===== */
 const CART_KEY='pedido_carrinho_v1';
+const CART_CUSTOM_KEY='pedido_carrinho_custom_v1';
 const SESSAO_KEY='pedido_sessao_v1';
 let carrinho=JSON.parse(localStorage.getItem(CART_KEY)||'{}'); // {item_id: qtd}
+let carrinhoCustom=JSON.parse(localStorage.getItem(CART_CUSTOM_KEY)||'[]'); // [{id, itens:[{item_id,nome,gramas}], qtd}]
 let cardapio=[];
 
 function idSessao(){
@@ -437,6 +461,7 @@ function idSessao(){
   return id;
 }
 function salvarCarrinho(){ localStorage.setItem(CART_KEY,JSON.stringify(carrinho)); atualizarBarra(); }
+function salvarCarrinhoCustom(){ localStorage.setItem(CART_CUSTOM_KEY,JSON.stringify(carrinhoCustom)); atualizarBarra(); }
 function itemPorId(id){ return cardapio.find(i=>i.id===id); }
 const COMBO_MIN_UN=5, COMBO_DESCONTO_UN=2;
 function renderPromoBanner(desktopUrl,mobileUrl){
@@ -458,16 +483,120 @@ function renderPromoBanner(desktopUrl,mobileUrl){
     <div class="promo-txt promo-t3">Válido em<br>qualquer categoria</div>`;
 }
 renderPromoBanner();
-function brutoCarrinho(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
-function qtdCarrinho(){ return Object.values(carrinho).reduce((a,q)=>a+q,0); }
+function brutoCarrinhoNormal(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
+function qtdCarrinhoNormal(){ return Object.values(carrinho).reduce((a,q)=>a+q,0); }
+function brutoCarrinho(){ return brutoCarrinhoNormal()+brutoCarrinhoCustom(); }
+function qtdCarrinho(){ return qtdCarrinhoNormal()+qtdCarrinhoCustom(); }
 function comboAtivoCarrinho(){ return qtdCarrinho()>=COMBO_MIN_UN; }
-function descontoComboCarrinho(){ return comboAtivoCarrinho()?qtdCarrinho()*COMBO_DESCONTO_UN:0; }
+/* o desconto por quantidade só se aplica aos itens normais — a marmita personalizada já troca
+   o mínimo de R$17 pra R$15 sozinha quando o pedido bate esse mesmo total, então não soma os dois */
+function descontoComboCarrinho(){ return comboAtivoCarrinho()?qtdCarrinhoNormal()*COMBO_DESCONTO_UN:0; }
 function totalCarrinho(){ return Math.max(0,brutoCarrinho()-descontoComboCarrinho()); }
 function alterarQtd(id,delta){
   const atual=carrinho[id]||0; const nova=Math.max(0,atual+delta);
   if(nova<=0)delete carrinho[id]; else carrinho[id]=nova;
   if(cupomAplicado){ cupomAplicado=null; cupomErro=null; } // o carrinho mudou, precisa validar o cupom de novo
   salvarCarrinho(); renderCardapio(); if($('#overlay').classList.contains('open'))renderCarrinho();
+}
+
+/* ===== Marmita Personalizada (monte a sua) ===== */
+let catalogoSobMedida=null; // {margem, preco_minimo_unitario, preco_minimo_combo, combo_min_unidades, grupos:{Categoria:[{item_id,nome,preco_100g_estimado}]}}
+let montarSelecao={}; // {item_id: gramas} sendo montada agora, antes de ir pro carrinho
+const GRUPOS_SOB_MEDIDA=['Proteína','Carboidratos','Legumes/Verduras','Molho','Adicionais'];
+async function carregarCatalogoSobMedida(){
+  if(catalogoSobMedida)return catalogoSobMedida;
+  const {data,error}=await sb.rpc('erp_catalogo_sob_medida_publico',{p_empresa_id:EMPRESA_ID});
+  if(!error&&data)catalogoSobMedida=data;
+  return catalogoSobMedida;
+}
+function acharItemCatalogoSM(itemId){
+  if(!catalogoSobMedida)return null;
+  for(const g of GRUPOS_SOB_MEDIDA){
+    const found=(catalogoSobMedida.grupos[g]||[]).find(x=>x.item_id===itemId);
+    if(found)return found;
+  }
+  return null;
+}
+function qtdCarrinhoCustom(){ return carrinhoCustom.reduce((a,l)=>a+l.qtd,0); }
+function minimoAplicavelSM(){
+  const cfg=catalogoSobMedida||{};
+  const minUn=cfg.preco_minimo_unitario??17, minCombo=cfg.preco_minimo_combo??15, comboMinUn=cfg.combo_min_unidades??5;
+  return qtdCarrinho()>=comboMinUn?minCombo:minUn;
+}
+function precoBaseEstimadoSM(itensSel){
+  return itensSel.reduce((a,s)=>{ const info=acharItemCatalogoSM(s.item_id); return a+(info?info.preco_100g_estimado/100*s.gramas:0); },0);
+}
+function precoUnitarioCustom(l){ return Math.max(precoBaseEstimadoSM(l.itens),minimoAplicavelSM()); }
+function brutoCarrinhoCustom(){ return carrinhoCustom.reduce((a,l)=>a+precoUnitarioCustom(l)*l.qtd,0); }
+async function abrirMontarMarmita(){
+  await carregarCatalogoSobMedida();
+  if(!catalogoSobMedida){ toast('Não foi possível carregar as opções agora. Tente de novo em instantes.',true); return; }
+  montarSelecao={};
+  renderMontarMarmita();
+  $('#montar-overlay').classList.add('open'); document.body.style.overflow='hidden';
+}
+function fecharMontarMarmita(){ $('#montar-overlay').classList.remove('open'); document.body.style.overflow=''; }
+function montarAlterarGramas(itemId,delta){
+  const atual=montarSelecao[itemId]||0;
+  const novo=Math.max(0,atual+delta*50);
+  if(novo<=0)delete montarSelecao[itemId]; else montarSelecao[itemId]=novo;
+  renderMontarMarmita();
+}
+function montarItensSelecionados(){
+  return Object.entries(montarSelecao).filter(([,g])=>g>0).map(([item_id,gramas])=>{
+    const info=acharItemCatalogoSM(item_id);
+    return {item_id,gramas,nome:info?info.nome:item_id};
+  });
+}
+function renderMontarMarmita(){
+  const cfg=catalogoSobMedida;
+  const itensSel=montarItensSelecionados();
+  const subtotal=precoBaseEstimadoSM(itensSel);
+  const minimo=minimoAplicavelSM();
+  const precoFinal=Math.max(subtotal,minimo);
+  const gruposHtml=GRUPOS_SOB_MEDIDA.map(g=>{
+    const itens=(cfg.grupos[g]||[]);
+    if(!itens.length)return'';
+    const linhas=itens.map(it=>{
+      const g_=montarSelecao[it.item_id]||0;
+      return `<div class="montar-item-row">
+        <div class="montar-item-info"><b>${esc(it.nome)}</b><span class="sub">${money(it.preco_100g_estimado)}/100g</span></div>
+        <div class="stepper" style="background:var(--soft)">
+          <button style="color:var(--primary-dark)" onclick="montarAlterarGramas('${it.item_id}',-1)">−</button>
+          <span style="color:var(--ink)">${g_}g</span>
+          <button class="add" onclick="montarAlterarGramas('${it.item_id}',1)">+</button>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="montar-grupo-h">${esc(g)}</div>${linhas}`;
+  }).join('');
+  $('#montar-body').innerHTML=`
+    <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5">Escolha os componentes e a quantidade (em gramas) de cada um — o preço é calculado pelo que você montar. Toda marmita personalizada custa no mínimo ${money(cfg.preco_minimo_unitario??17)} (ou ${money(cfg.preco_minimo_combo??15)} se o seu pedido tiver ${cfg.combo_min_unidades??5} ou mais marmitas no total).</p>
+    ${gruposHtml}
+    <div class="tot" style="margin-top:16px"><span>Total estimado</span><span>${money(precoFinal)}</span></div>
+    <button class="btn" ${itensSel.length?'':'disabled'} onclick="montarAdicionarAoCarrinho()">Adicionar à sacola</button>
+  `;
+}
+function montarAdicionarAoCarrinho(){
+  const itensSel=montarItensSelecionados();
+  if(!itensSel.length)return toast('Selecione pelo menos um componente.',true);
+  carrinhoCustom.push({id:(crypto.randomUUID?crypto.randomUUID():'cm-'+Date.now()+'-'+Math.random().toString(36).slice(2)),itens:itensSel,qtd:1});
+  if(cupomAplicado){ cupomAplicado=null; cupomErro=null; }
+  salvarCarrinhoCustom();
+  fecharMontarMarmita();
+  toast('Marmita personalizada adicionada à sacola!');
+}
+function alterarQtdCustom(id,delta){
+  const l=carrinhoCustom.find(x=>x.id===id); if(!l)return;
+  l.qtd=Math.max(0,l.qtd+delta);
+  if(l.qtd<=0)carrinhoCustom=carrinhoCustom.filter(x=>x.id!==id);
+  if(cupomAplicado){ cupomAplicado=null; cupomErro=null; }
+  salvarCarrinhoCustom(); if($('#overlay').classList.contains('open'))renderCarrinho();
+}
+function removerCustom(id){
+  carrinhoCustom=carrinhoCustom.filter(x=>x.id!==id);
+  if(cupomAplicado){ cupomAplicado=null; cupomErro=null; }
+  salvarCarrinhoCustom(); if($('#overlay').classList.contains('open'))renderCarrinho();
 }
 function atualizarBarra(){
   const n=qtdCarrinho();
@@ -769,12 +898,18 @@ function abrirCarrinho(){
 function fecharCarrinho(){ $('#overlay').classList.remove('open'); }
 function renderCarrinho(){
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
-  if(!ids.length){ fecharCarrinho(); return; }
+  if(!ids.length&&!carrinhoCustom.length){ fecharCarrinho(); return; }
   const linhas=ids.map(id=>{
     const it=itemPorId(id); if(!it)return'';
     return `<div class="line">
       <div><div class="nome">${esc(it.nome)}</div><div class="sub">${money(it.preco_venda)} un.</div></div>
       <div class="stepper"><button onclick="alterarQtd('${id}',-1)">−</button><span>${carrinho[id]}</span><button class="add" onclick="alterarQtd('${id}',1)">+</button></div>
+    </div>`;
+  }).join('')+carrinhoCustom.map(l=>{
+    const desc=l.itens.map(x=>`${esc(x.nome)} ${x.gramas}g`).join(', ');
+    return `<div class="line">
+      <div><div class="nome">🛠️ Marmita Personalizada</div><div class="sub">${desc} · ${money(precoUnitarioCustom(l))} un.</div></div>
+      <div class="stepper"><button onclick="alterarQtdCustom('${l.id}',-1)">−</button><span>${l.qtd}</span><button class="add" onclick="alterarQtdCustom('${l.id}',1)">+</button></div>
     </div>`;
   }).join('');
   const combo=comboAtivoCarrinho();
@@ -842,20 +977,23 @@ async function enviarPedido(formaPagamento){
     if(!endereco){ err.textContent='Informe o endereço para entrega.'; err.style.display='block'; return; }
   }
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
-  if(!ids.length)return;
+  if(!ids.length&&!carrinhoCustom.length)return;
   const btnOnline=$('#ck-btn-online'), btnEntrega=$('#ck-btn-entrega');
   const btnClicado=formaPagamento==='entrega'?btnEntrega:btnOnline;
   const textoOriginal=btnClicado.textContent;
   btnOnline.disabled=true; btnEntrega.disabled=true; btnClicado.textContent='Enviando…';
   const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}));
+  const itensCustom=carrinhoCustom.map(l=>({quantidade:l.qtd,componentes:l.itens.map(x=>({item_id:x.item_id,gramas:x.gramas}))}));
   const {data,error}=await sb.rpc('erp_criar_pedido_publico',{
     p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
     p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:usuario?.email||null,
-    p_cupom_codigo:cupomAplicado?cupomAplicado.codigo:null, p_forma_pagamento:formaPagamento
+    p_cupom_codigo:cupomAplicado?cupomAplicado.codigo:null, p_forma_pagamento:formaPagamento,
+    p_itens_custom:itensCustom
   });
   if(error){
     btnOnline.disabled=false; btnEntrega.disabled=false; btnClicado.textContent=textoOriginal;
     if(error.message.includes('Item indisponível'))err.textContent='Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.';
+    else if(error.message.includes('marmita personalizada')||error.message.includes('montagem'))err.textContent='Algo na sua marmita personalizada ficou indisponível — refaça a montagem e tente de novo.';
     else if(error.message.includes('Loja indisponível'))err.textContent='A loja não está recebendo pedidos no momento. Tente novamente mais tarde.';
     else if(cupomAplicado){ err.textContent=error.message||'Não foi possível aplicar o cupom agora.'; cupomAplicado=null; renderCarrinho(); return; }
     else err.textContent='Não foi possível enviar seu pedido agora. Tente novamente em instantes.';
@@ -872,7 +1010,7 @@ async function enviarPedido(formaPagamento){
     if(!eEnt&&dEnt&&dEnt.valor_total!=null)valorTotalFinal=dEnt.valor_total;
   }
   const numeroPedido=data.numero;
-  carrinho={}; localStorage.removeItem(CART_KEY); localStorage.removeItem(SESSAO_KEY);
+  carrinho={}; carrinhoCustom=[]; localStorage.removeItem(CART_KEY); localStorage.removeItem(CART_CUSTOM_KEY); localStorage.removeItem(SESSAO_KEY);
   modalidadeEscolhida=null; ckNome=null; ckTel=null; ckObs=null; ckEndereco=null;
   cupomAplicado=null; cupomErro=null; cupomCodigoDigitado='';
   fecharCarrinho();

@@ -535,7 +535,16 @@ function minimoPratoSM(itensSel){
 function precoBaseEstimadoSM(itensSel){
   return itensSel.reduce((a,s)=>{ const info=acharItemCatalogoSM(s.item_id); return a+(info?info.preco_100g_estimado/100*s.gramas:0); },0);
 }
-function precoUnitarioCustom(l){ return Math.max(precoBaseEstimadoSM(l.itens),minimoPratoSM(l.itens)); }
+function pesoTotalSelecaoSM(itensSel){ return itensSel.reduce((a,s)=>a+(s.gramas||0),0); }
+function marmitaGAtivaSM(itensSel){
+  const cfg=catalogoSobMedida||{};
+  return pesoTotalSelecaoSM(itensSel)>(cfg.peso_padrao_g??400);
+}
+function precoUnitarioCustom(l){
+  const cfg=catalogoSobMedida||{};
+  const base=Math.max(precoBaseEstimadoSM(l.itens),minimoPratoSM(l.itens));
+  return base+(marmitaGAtivaSM(l.itens)?(cfg.preco_adicional_g??1.2):0);
+}
 function brutoCarrinhoCustom(){ return carrinhoCustom.reduce((a,l)=>a+precoUnitarioCustom(l)*l.qtd,0); }
 async function abrirMontarMarmita(){
   await carregarCatalogoSobMedida();
@@ -565,7 +574,10 @@ function montarItensSelecionados(){
   });
 }
 function renderMontarMarmita(){
+  const cfg=catalogoSobMedida||{};
   const itensSel=montarItensSelecionados();
+  const peso=pesoTotalSelecaoSM(itensSel);
+  const ehG=marmitaGAtivaSM(itensSel);
   const precoFinal=precoUnitarioCustom({itens:itensSel});
   const linhasHtml=montarLinhas.map((l,k)=>`<div class="cm-line">
       <select onchange="montarAtualizarItem(${k},this.value)">${montarOpcoesHtml(l.item_id)}</select>
@@ -576,6 +588,7 @@ function renderMontarMarmita(){
     <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5">Escolha o componente e digite a quantidade em gramas — o preço final é calculado pelo que você montar, nunca abaixo do valor do prato pronto equivalente.</p>
     ${linhasHtml}
     <button class="btn-add-componente" onclick="montarAddComponente()">+ Adicionar componente</button>
+    ${peso>0?`<p class="subtle" style="font-family:var(--font-menu);font-size:12px;color:var(--muted);margin-top:10px">Peso total: ${peso}g${ehG?` — marmita G (acima de ${cfg.peso_padrao_g??400}g): +${money(cfg.preco_adicional_g??1.2)}`:''}</p>`:''}
     <div class="tot" style="margin-top:16px"><span>Total estimado</span><span>${money(precoFinal)}</span></div>
     <button class="btn" ${itensSel.length?'':'disabled'} onclick="montarAdicionarAoCarrinho()">Adicionar à sacola</button>
   `;

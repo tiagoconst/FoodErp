@@ -553,7 +553,7 @@ function removerEntregaCad(id){ const e=entregaById(id); if(!e)return;
   scheduleSave(); render(); toast('Removida.');
 }
 function cupomById(id){ return (S.cupons||[]).find(c=>c.id===id); }
-function usosCupom(codigo){ return (S.pedidos||[]).filter(p=>p.cupom_codigo===codigo&&p.status!=='cancelado').length; }
+function usosCupom(codigo){ return (S.pedidos||[]).filter(p=>p.cupom_codigo===codigo&&p.status!=='cancelado'&&p.status!=='rascunho').length; }
 function modalCupom(id){
   if(!S.cupons)S.cupons=[];
   const c=id?cupomById(id):null;
@@ -1476,8 +1476,14 @@ let filtroStatusPedido='';
 let filtroBuscaPedido='';
 VIEWS.pedidos=function(){
   garantirFormasPadrao();
-  const abertos=S.pedidos.filter(p=>!['pedido','finalizado','cancelado'].includes(p.status)).length;
-  let pedidosFiltrados=S.pedidos.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
+  // "rascunho" = pedido do site criado ao ir pro Mercado Pago, mas cujo pagamento nunca foi
+  // confirmado e o cliente nunca escolheu conscientemente seguir com ele — enquanto isso, não
+  // conta como pedido de verdade em nenhuma tela (fica de fora daqui, do dashboard e dos
+  // relatórios), só existe de fato quando o pagamento é aprovado ou o cliente confirma que quer
+  // pagar na entrega/retirada.
+  const pedidosReais=S.pedidos.filter(p=>p.status!=='rascunho');
+  const abertos=pedidosReais.filter(p=>!['pedido','finalizado','cancelado'].includes(p.status)).length;
+  let pedidosFiltrados=pedidosReais.filter(p=>!filtroStatusPedido||p.status===filtroStatusPedido);
   if(filtroBuscaPedido){
     const q=filtroBuscaPedido.toLowerCase();
     pedidosFiltrados=pedidosFiltrados.filter(p=>{
@@ -1507,9 +1513,9 @@ VIEWS.pedidos=function(){
       <td><span class="tag ${st.tag}">${st.label}</span>${pedidoPago(p)?' 💰':''}</td>
       <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button> <button class="btn sm ghost" title="Imprimir etiquetas" onclick="imprimirEtiquetas('${p.id}')">🏷️</button></td></tr>`;
   }).join('')||`<tr><td colspan="7"><div class="empty"><b>Nenhum pedido${filtroStatusPedido?' com esse status':''}</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
-  const statusChips=`<button class="cat-chip ${!filtroStatusPedido?'active':''}" style="${!filtroStatusPedido?'background:var(--primary)':''}" onclick="filtroStatusPedido='';render()">Todos (${S.pedidos.length})</button>`+
+  const statusChips=`<button class="cat-chip ${!filtroStatusPedido?'active':''}" style="${!filtroStatusPedido?'background:var(--primary)':''}" onclick="filtroStatusPedido='';render()">Todos (${pedidosReais.length})</button>`+
     statusDisponiveis().map(s=>{
-      const n=S.pedidos.filter(p=>p.status===s.id).length;
+      const n=pedidosReais.filter(p=>p.status===s.id).length;
       return `<button class="cat-chip ${filtroStatusPedido===s.id?'active':''}" style="${filtroStatusPedido===s.id?'background:var(--primary)':''}" onclick='filtroStatusPedido=${JSON.stringify(s.id)};render()'>${esc(s.nome)} (${n})</button>`;
     }).join('');
 
@@ -1536,8 +1542,8 @@ VIEWS.pedidos=function(){
     return `<div class="ped-day"><div class="ped-day-h">${dBR(g.data)}</div><div class="ped-day-sub subtle">${g.itens.length} pedido(s) · ${money(totalDia)}</div>${cards}</div>`;
   }).join('')||`<div class="card"><div class="empty"><b>Nenhum pedido${filtroStatusPedido||filtroBuscaPedido?' com esse filtro':''}</b></div></div>`;
   const statusSelectMobile=`<select class="status-pill-select" onchange="filtroStatusPedido=this.value;render()">
-    <option value="" ${!filtroStatusPedido?'selected':''}>Todos os status (${S.pedidos.length})</option>
-    ${statusDisponiveis().map(s=>{ const n=S.pedidos.filter(p=>p.status===s.id).length;
+    <option value="" ${!filtroStatusPedido?'selected':''}>Todos os status (${pedidosReais.length})</option>
+    ${statusDisponiveis().map(s=>{ const n=pedidosReais.filter(p=>p.status===s.id).length;
       return `<option value="${s.id}" ${filtroStatusPedido===s.id?'selected':''}>${esc(s.nome)} (${n})</option>`; }).join('')}
     </select>`;
 
@@ -3449,14 +3455,14 @@ VIEWS.relatorios=function(){
       <div class="field"><label>De</label><input type="date" value="${relDataIni}" onchange="relDataIni=this.value;render()"></div>
       <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
 
-  const pedidosAbertos=S.pedidos.filter(p=>!['pedido','finalizado','cancelado'].includes(p.status));
+  const pedidosAbertos=S.pedidos.filter(p=>p.status!=='rascunho'&&!['pedido','finalizado','cancelado'].includes(p.status));
   const abertosPorStatus={};
   pedidosAbertos.forEach(p=>{ abertosPorStatus[p.status]=(abertosPorStatus[p.status]||0)+1; });
   const abertosLista=Object.entries(abertosPorStatus).sort((a,b)=>b[1]-a[1]).map(([st,n])=>{
     const info=statusInfo(st);
     return `<button class="cat-chip" style="cursor:pointer" onclick="filtroStatusPedido='${st}';nav('pedidos')"><span class="tag ${info.tag}">${info.label}</span> <b>${n}</b></button>`;
   }).join('')||'<span class="subtle">Nenhum pedido em aberto 👍</span>';
-  const naoPagos=S.pedidos.filter(p=>p.status!=='cancelado'&&!pedidoPago(p));
+  const naoPagos=S.pedidos.filter(p=>p.status!=='cancelado'&&p.status!=='rascunho'&&!pedidoPago(p));
   const valorNaoPago=naoPagos.reduce((a,p)=>a+(p.valor_total||0),0);
 
   // Pesquisa de satisfação (respostas chegam automaticamente do Google Forms)

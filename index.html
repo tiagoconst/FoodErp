@@ -310,6 +310,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
       <div id="sync-status"></div>
       <div id="user-line" style="word-break:break-all"></div>
       <div id="trial-line" style="margin-top:4px;font-weight:600"></div>
+      <button class="btn sm" id="btn-atualizar-dados" style="margin-top:6px;background:transparent;color:var(--sb-text,#D7D6CB);border-color:var(--sb-hover,rgba(255,255,255,.2))" onclick="atualizarDadosAgora()">🔄 Atualizar dados</button>
       <button class="btn sm" style="margin-top:6px;background:transparent;color:var(--sb-text,#D7D6CB);border-color:var(--sb-hover,rgba(255,255,255,.2))" onclick="sairConta()">Sair da conta</button>
     </div>
     <div class="foot">Item nunca muda de identidade — apenas ganha funções. Todo saldo nasce de um evento.</div>
@@ -4274,7 +4275,41 @@ async function entrarNoSistema(){
   setSync('sincronizado','#7FBF9B');
   nav('dashboard');
 }
-async function cloudLoad(){
+// Cache local (no navegador) da última carga completa — evita baixar TODAS as tabelas de novo
+// toda vez que a página é recarregada/reaberta ao longo do dia, o que estava pesando muito no
+// consumo de banda do Supabase. Enquanto o cache estiver "fresco" (menos de CACHE_TTL_MS de
+// idade), usamos ele direto; o tempo real (subscribeRealtime) mantém os dados vivos depois disso.
+// Passado esse prazo, ou quando o usuário clica em "Atualizar dados", busca tudo de novo do banco
+// (igual sempre foi) e regrava o cache.
+const CACHE_TTL_MS=2*60*60*1000; // 2 horas
+function cacheKeyEmpresa(){ return 'erp_cache_v1_'+(empresa&&empresa.empresa_id); }
+function salvarCacheLocal(){
+  try{
+    const payload={ts:Date.now(),S:{}};
+    TABLES.forEach(t=>{ payload.S[t]=S[t]; });
+    localStorage.setItem(cacheKeyEmpresa(),JSON.stringify(payload));
+  }catch(e){ try{localStorage.removeItem(cacheKeyEmpresa());}catch(_e){} }
+}
+function carregarCacheLocal(){
+  try{
+    const raw=localStorage.getItem(cacheKeyEmpresa());
+    if(!raw)return null;
+    const p=JSON.parse(raw);
+    if(!p||!p.ts||(Date.now()-p.ts)>CACHE_TTL_MS)return null;
+    return p;
+  }catch(e){ return null; }
+}
+async function cloudLoad(usarCache){
+  if(usarCache!==false){
+    const cache=carregarCacheLocal();
+    if(cache){
+      snapshot={};
+      TABLES.forEach(t=>{ S[t]=cache.S[t]||[]; snapshot[t]=new Map((S[t]||[]).map(r=>[r.id,JSON.stringify(r)])); });
+      S.eventos.sort((a,b)=>a.data<b.data?1:-1);
+      S.empresa={nome:empresa.nome};
+      return;
+    }
+  }
   snapshot={};
   for(const t of TABLES){
     let q=sb.from('erp_'+t).select('id,dados').eq('empresa_id',empresa.empresa_id);
@@ -4285,6 +4320,20 @@ async function cloudLoad(){
   }
   S.eventos.sort((a,b)=>a.data<b.data?1:-1);
   S.empresa={nome:empresa.nome};
+  salvarCacheLocal();
+}
+async function atualizarDadosAgora(){
+  const btn=$('#btn-atualizar-dados');
+  if(btn){ btn.disabled=true; btn.textContent='Atualizando…'; }
+  setSync('atualizando…','#E0A63C');
+  try{
+    await cloudLoad(false);
+    subscribeRealtime();
+    render();
+    setSync('sincronizado','#7FBF9B');
+    toast('Dados atualizados.');
+  }catch(e){ console.error(e); setSync('erro ao atualizar','#E08A7E'); toast('Erro ao atualizar: '+(e.message||e),true); }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='🔄 Atualizar dados'; } }
 }
 async function cloudPersist(){
   if(!sb||!empresa||!snapshot)return;
@@ -4301,6 +4350,7 @@ async function cloudPersist(){
       if(dels.length){ const {error}=await sb.from('erp_'+t).delete().in('id',dels); if(error)throw error; }
       snapshot[t]=cur;
     }
+    salvarCacheLocal();
     setSync('sincronizado','#7FBF9B');
   }catch(e){ console.error(e); setSync('erro — tentando de novo…','#E08A7E');
     toast('Erro de sincronização: '+(e.message||e),true); setTimeout(()=>{syncPendente=true; if(!syncing)cloudPersist();},4000); }

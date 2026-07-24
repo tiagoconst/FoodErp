@@ -1572,7 +1572,7 @@ VIEWS['pedido-detalhe']=function(){
       <div>
         <div class="card"><div class="card-h"><h3>Cliente</h3></div><div class="card-b">
           <p><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>'+esc(cli.telefone):''}${cli&&cli.endereco?'<br>'+esc(cli.endereco):''}</p>
-          ${p.forma_pagamento_desejada==='entrega'?'<span class="tag warn" style="margin-top:8px;display:inline-block">💵 Cliente vai pagar na entrega/retirada</span>':(p.origem_externa?.canal==='site'?'<span class="tag f" style="margin-top:8px;display:inline-block">💳 Pago online (Mercado Pago)</span>':'')}</div></div>
+          ${p.forma_pagamento_desejada==='entrega'?'<span class="tag warn" style="margin-top:8px;display:inline-block">💵 Cliente vai pagar na entrega/retirada</span>':(p.origem_externa?.canal==='site'?(jaPago?'<span class="tag f" style="margin-top:8px;display:inline-block">✅ Pago online (Mercado Pago)</span>':'<span class="tag warn" style="margin-top:8px;display:inline-block">⏳ Pagamento online pendente (Mercado Pago) — cliente ainda não pagou</span>'):'')}</div></div>
         ${p.observacao?`<div class="card section-gap"><div class="card-h"><h3>Observação</h3></div><div class="card-b"><p>${esc(p.observacao)}</p></div></div>`:''}
         <div class="card section-gap"><div class="card-h"><h3>Itens</h3></div><div class="card-b" style="padding:0 6px">
           <table><thead><tr><th>Item</th><th class="r">Unitário</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table></div></div>

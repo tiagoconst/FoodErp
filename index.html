@@ -854,6 +854,39 @@ function modalItem(id){
   <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarItem('${id||''}')">Salvar item</button></div>`);
   setTimeout(()=>$('#it-nome').focus(),50);
 }
+// Reduz o tamanho da imagem antes de enviar pro Storage — diminui muito o consumo de banda
+// (egress) do Supabase, já que fotos direto do celular costumam vir enormes (3-5MB) sem
+// necessidade nenhuma pra exibir num cardápio na tela. Redimensiona pro máximo de largura/altura
+// informado e comprime como JPEG. Se por algum motivo a compressão falhar, usa o arquivo original
+// (nunca trava o envio da foto por causa disso).
+function comprimirImagem(file,maxDim,qualidade){
+  maxDim=maxDim||1000; qualidade=qualidade||0.78;
+  return new Promise((resolve)=>{
+    if(!file||!file.type||!file.type.startsWith('image/')||file.type==='image/gif'){ resolve(file); return; }
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      try{
+        let w=img.width,h=img.height;
+        if(w>maxDim||h>maxDim){
+          if(w>=h){ h=Math.round(h*(maxDim/w)); w=maxDim; }
+          else{ w=Math.round(w*(maxDim/h)); h=maxDim; }
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        canvas.toBlob((blob)=>{
+          URL.revokeObjectURL(url);
+          if(!blob){ resolve(file); return; }
+          const nomeBase=(file.name||'foto').replace(/\.[a-zA-Z0-9]+$/,'');
+          resolve(new File([blob],nomeBase+'.jpg',{type:'image/jpeg'}));
+        },'image/jpeg',qualidade);
+      }catch(e){ URL.revokeObjectURL(url); resolve(file); }
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); resolve(file); };
+    img.src=url;
+  });
+}
 async function uploadFotoItem(evt,prefixo){
   prefixo=prefixo||'it';
   const file=evt.target.files&&evt.target.files[0]; if(!file)return;
@@ -862,9 +895,10 @@ async function uploadFotoItem(evt,prefixo){
   if(file.size>5*1024*1024){ status.textContent='Foto muito grande (máx. 5MB).'; return; }
   status.textContent='Enviando…';
   try{
-    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const arq=await comprimirImagem(file);
+    const ext=(arq.name.split('.').pop()||'jpg').toLowerCase();
     const path=`${empresa.empresa_id}/${uid('IMG')}.${ext}`;
-    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,arq,{cacheControl:'31536000',upsert:false,contentType:arq.type});
     if(upErr)throw upErr;
     const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
     $('#'+prefixo+'-foto').value=data.publicUrl;
@@ -880,9 +914,10 @@ async function uploadFotoPadrao(evt){
   if(file.size>5*1024*1024){ status.textContent='Imagem muito grande (máx. 5MB).'; return; }
   status.textContent='Enviando…';
   try{
-    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const arq=await comprimirImagem(file);
+    const ext=(arq.name.split('.').pop()||'jpg').toLowerCase();
     const path=`${empresa.empresa_id}/site/${uid('IMG')}.${ext}`;
-    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,arq,{cacheControl:'31536000',upsert:false,contentType:arq.type});
     if(upErr)throw upErr;
     const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
     const i=Object.assign({id:'identidade',atualizado_em:new Date().toISOString()},getIdent(),{foto_padrao:data.publicUrl});
@@ -908,9 +943,10 @@ async function uploadBannerPromo(evt,qual){
   if(file.size>5*1024*1024){ status.textContent='Imagem muito grande (máx. 5MB).'; return; }
   status.textContent='Enviando…';
   try{
-    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const arq=await comprimirImagem(file,1600,0.8);
+    const ext=(arq.name.split('.').pop()||'jpg').toLowerCase();
     const path=`${empresa.empresa_id}/site/${uid('IMG')}.${ext}`;
-    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,arq,{cacheControl:'31536000',upsert:false,contentType:arq.type});
     if(upErr)throw upErr;
     const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
     const i=Object.assign({id:'identidade',atualizado_em:new Date().toISOString()},getIdent(),{[campo]:data.publicUrl});
@@ -935,9 +971,10 @@ async function uploadImagemAvulsa(evt){
   if(file.size>5*1024*1024){ status.textContent='Imagem muito grande (máx. 5MB).'; return; }
   status.textContent='Enviando…';
   try{
-    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const arq=await comprimirImagem(file,1600,0.8);
+    const ext=(arq.name.split('.').pop()||'jpg').toLowerCase();
     const path=`${empresa.empresa_id}/site/${uid('IMG')}.${ext}`;
-    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,file,{cacheControl:'3600',upsert:false,contentType:file.type});
+    const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,arq,{cacheControl:'31536000',upsert:false,contentType:arq.type});
     if(upErr)throw upErr;
     const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
     $('#ia-url').value=data.publicUrl;
@@ -1096,9 +1133,10 @@ async function enviarFotosMassa(){
     btn.textContent=`Enviando ${i+1}/${validos.length}…`;
     if(m.file.size>5*1024*1024){ falhas.push(m.nomeArquivo+' (muito grande)'); continue; }
     try{
-      const ext=(m.file.name.split('.').pop()||'jpg').toLowerCase();
+      const arq=await comprimirImagem(m.file);
+      const ext=(arq.name.split('.').pop()||'jpg').toLowerCase();
       const path=`${empresa.empresa_id}/${uid('IMG')}.${ext}`;
-      const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,m.file,{cacheControl:'3600',upsert:false,contentType:m.file.type});
+      const {error:upErr}=await sb.storage.from('fotos-produtos').upload(path,arq,{cacheControl:'31536000',upsert:false,contentType:arq.type});
       if(upErr)throw upErr;
       const {data}=sb.storage.from('fotos-produtos').getPublicUrl(path);
       const item=itemById(m.itemId);

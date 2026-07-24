@@ -858,12 +858,16 @@ function modalItem(id){
 // Reduz o tamanho da imagem antes de enviar pro Storage — diminui muito o consumo de banda
 // (egress) do Supabase, já que fotos direto do celular costumam vir enormes (3-5MB) sem
 // necessidade nenhuma pra exibir num cardápio na tela. Redimensiona pro máximo de largura/altura
-// informado e comprime como JPEG. Se por algum motivo a compressão falhar, usa o arquivo original
-// (nunca trava o envio da foto por causa disso).
+// informado. Fotos comuns (JPEG) viram JPEG comprimido; imagens com transparência (PNG/WebP —
+// logos, ícones) continuam no formato original, senão a transparência vira fundo preto sólido.
+// Se por algum motivo a compressão falhar, usa o arquivo original (nunca trava o envio da foto).
 function comprimirImagem(file,maxDim,qualidade){
   maxDim=maxDim||1000; qualidade=qualidade||0.78;
   return new Promise((resolve)=>{
     if(!file||!file.type||!file.type.startsWith('image/')||file.type==='image/gif'){ resolve(file); return; }
+    const manterTransparencia=file.type==='image/png'||file.type==='image/webp';
+    const tipoSaida=manterTransparencia?file.type:'image/jpeg';
+    const extSaida=manterTransparencia?(file.type==='image/png'?'png':'webp'):'jpg';
     const img=new Image();
     const url=URL.createObjectURL(file);
     img.onload=()=>{
@@ -880,8 +884,8 @@ function comprimirImagem(file,maxDim,qualidade){
           URL.revokeObjectURL(url);
           if(!blob){ resolve(file); return; }
           const nomeBase=(file.name||'foto').replace(/\.[a-zA-Z0-9]+$/,'');
-          resolve(new File([blob],nomeBase+'.jpg',{type:'image/jpeg'}));
-        },'image/jpeg',qualidade);
+          resolve(new File([blob],nomeBase+'.'+extSaida,{type:tipoSaida}));
+        },tipoSaida,manterTransparencia?undefined:qualidade);
       }catch(e){ URL.revokeObjectURL(url); resolve(file); }
     };
     img.onerror=()=>{ URL.revokeObjectURL(url); resolve(file); };

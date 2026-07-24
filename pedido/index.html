@@ -1067,10 +1067,11 @@ function telaErroPagamento(pedidoId,valorTotal){
   $('#cardapio').innerHTML=`<div class="ok-screen">
     <div class="em">⚠️</div>
     <h2>Pedido registrado, mas o pagamento não abriu</h2>
-    <p>Seu pedido <b>${esc(pedidoId)}</b> (${money(valorTotal)}) já está salvo. Tenta de novo pra ser levado(a) ao pagamento, ou entra em contato com a loja informando esse número do pedido.</p>
+    <p>Seu pedido <b>${esc(pedidoId)}</b> (${money(valorTotal)}) já está salvo, mas ainda não foi confirmado. O que você quer fazer?</p>
     <div style="margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       <button class="btn" style="width:auto" onclick="irParaPagamento('${esc(pedidoId)}',${valorTotal})">Tentar pagamento de novo</button>
-      <button class="btn" style="width:auto;background:var(--muted)" onclick="location.reload()">Fazer novo pedido</button>
+      <button class="btn" style="width:auto;background:var(--accent)" onclick="continuarPedidoEntrega('${esc(pedidoId)}')">Continuar e pagar na entrega/retirada</button>
+      <button class="btn" style="width:auto;background:var(--muted)" onclick="cancelarPedidoPendente('${esc(pedidoId)}')">Cancelar pedido</button>
     </div>
   </div>`;
   atualizarBarra();
@@ -1102,11 +1103,32 @@ function telaPagamentoFalhou(pedidoId,valorTotal){
   $('#cardapio').innerHTML=`<div class="ok-screen">
     <div class="em">❌</div>
     <h2>Pagamento não foi concluído</h2>
-    <p>Seu pedido <b>${esc(pedidoId)}</b> (${money(valorTotal)}) continua salvo — você pode tentar pagar de novo.</p>
+    <p>Seu pedido <b>${esc(pedidoId)}</b> (${money(valorTotal)}) ainda não foi pago. Você quer continuar com ele e pagar na entrega/retirada, tentar pagar de novo, ou prefere cancelar?</p>
     <div style="margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       <button class="btn" style="width:auto" onclick="irParaPagamento('${esc(pedidoId)}',${valorTotal})">Tentar pagamento de novo</button>
-      <button class="btn" style="width:auto;background:var(--muted)" onclick="location.href=location.pathname">Voltar à loja</button>
+      <button class="btn" style="width:auto;background:var(--accent)" onclick="continuarPedidoEntrega('${esc(pedidoId)}')">Continuar e pagar na entrega/retirada</button>
+      <button class="btn" style="width:auto;background:var(--muted)" onclick="cancelarPedidoPendente('${esc(pedidoId)}')">Cancelar pedido</button>
     </div>
+  </div>`;
+  atualizarBarra();
+}
+async function continuarPedidoEntrega(pedidoId){
+  const {data,error}=await sb.rpc('erp_continuar_pedido_entrega_publico',{p_empresa_id:EMPRESA_ID,p_pedido_id:pedidoId});
+  if(error||!data||data.erro){ toast((data&&data.erro)||'Não foi possível continuar o pedido agora. Tente de novo.',true); return; }
+  telaPedidoConfirmadoSemPagamento(data.numero||pedidoId,data.valor_total);
+}
+async function cancelarPedidoPendente(pedidoId){
+  if(!confirm('Cancelar esse pedido? Essa ação não pode ser desfeita.'))return;
+  const {data,error}=await sb.rpc('erp_cancelar_pedido_pendente_publico',{p_empresa_id:EMPRESA_ID,p_pedido_id:pedidoId});
+  if(error||!data||data.erro){ toast((data&&data.erro)||'Não foi possível cancelar agora. Tente de novo.',true); return; }
+  telaPedidoCancelado(data.numero||pedidoId);
+}
+function telaPedidoCancelado(numero){
+  $('#cardapio').innerHTML=`<div class="ok-screen">
+    <div class="em">🗑️</div>
+    <h2>Pedido cancelado</h2>
+    <p>O pedido <b>${esc(numero)}</b> foi cancelado. Quando quiser, é só montar um novo pedido.</p>
+    <div style="margin-top:26px"><button class="btn" onclick="location.href=location.pathname">Fazer novo pedido</button></div>
   </div>`;
   atualizarBarra();
 }

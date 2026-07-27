@@ -3491,6 +3491,34 @@ VIEWS.relatorios=function(){
   const nomesDia=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
   const barrasDia=porDiaSemana.map((v,i)=>`<div class="bar" title="${nomesDia[i]}: ${money(v)}"><div class="b ${v?'':'zero'}" style="height:${Math.max(3,Math.round(v/maxDia*130))}px"></div><small>${nomesDia[i]}</small></div>`).join('');
 
+  // Vendas por mês (últimos 12 meses, sempre — independe do período escolhido acima) com uma
+  // linha de média, pra dar pra comparar o mês atual com o histórico recente de um jeito rápido.
+  const hojeMes=new Date();
+  const chavesMes=[];
+  for(let i=11;i>=0;i--){ const d=new Date(hojeMes.getFullYear(),hojeMes.getMonth()-i,1); chavesMes.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); }
+  const porMes={}; chavesMes.forEach(k=>porMes[k]=0);
+  S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega).forEach(p=>{
+    const chave=p.data_entrega.slice(0,7);
+    if(chave in porMes)porMes[chave]+=p.valor_total||0;
+  });
+  const valoresMes=chavesMes.map(k=>porMes[k]);
+  const mediaMes=valoresMes.reduce((a,v)=>a+v,0)/(valoresMes.length||1);
+  const maxMes=Math.max(...valoresMes,mediaMes,1);
+  const nomesMesCurto=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const labelMes=(chave)=>{ const [y,m]=chave.split('-'); return nomesMesCurto[parseInt(m,10)-1]+'/'+y.slice(2); };
+  const barrasMes=chavesMes.map((k,i)=>{
+    const v=valoresMes[i], ehAtual=i===chavesMes.length-1;
+    return `<div class="bar" title="${labelMes(k)}: ${money(v)}"><div class="b ${v?'':'zero'}" style="height:${Math.max(3,Math.round(v/maxMes*130))}px${ehAtual?';background:var(--m-margens,#C97B3D)':''}"></div><small>${labelMes(k)}</small></div>`;
+  }).join('');
+  const linhaMediaMesPx=Math.round(mediaMes/maxMes*130);
+  const vendasMesCard=`<div class="card section-gap"><div class="card-h"><h3>Vendas por mês</h3><span class="subtle">últimos 12 meses · média mensal: ${money(mediaMes)}</span></div>
+    <div class="card-b"><div style="position:relative">
+      <div style="position:absolute;left:0;right:0;bottom:${linhaMediaMesPx+8}px;border-top:2px dashed var(--m-clientes,#8B6FB3);pointer-events:none">
+        <span style="position:absolute;right:0;top:-18px;font-size:10.5px;font-weight:700;color:var(--m-clientes,#8B6FB3);background:var(--panel);padding:0 4px">média ${money(mediaMes)}</span>
+      </div>
+      <div class="bars">${barrasMes}</div>
+    </div></div></div>`;
+
   const periodos=[['7d','7 dias'],['30d','30 dias'],['90d','90 dias'],['mes','Este mês'],['mespassado','Mês passado'],['ano','Este ano'],['tudo','Tudo']];
   const chipsPeriodo=periodos.map(([v,l])=>`<button class="cat-chip ${relPeriodo===v?'active':''}" style="${relPeriodo===v?'background:var(--primary)':''}" onclick="relPeriodo='${v}';render()">${l}</button>`).join('')+
     `<button class="cat-chip ${relPeriodo==='custom'?'active':''}" style="${relPeriodo==='custom'?'background:var(--primary)':''}" onclick="relPeriodo='custom';render()">Personalizado</button>`;
@@ -3566,6 +3594,7 @@ VIEWS.relatorios=function(){
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Clientes atendidos</div><div class="k-value num">${clientesAtendidos}</div><div class="k-foot">${inativos.length} compraram só 1x (${money(inativosValor)})</div></div>
   </div>
   <div class="card section-gap"><div class="card-h"><h3>Vendas por dia da semana</h3></div><div class="card-b"><div class="bars">${barrasDia}</div></div></div>
+  ${vendasMesCard}
   ${pesquisaCard}
   <div class="grid g2 section-gap">
     <div class="card"><div class="card-h"><h3>Produtos mais vendidos</h3><span class="subtle">top 15 por receita</span></div>

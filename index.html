@@ -1453,6 +1453,13 @@ function salvarProducao(){
 }
 
 /* ================= PEDIDOS ================= */
+const URL_LOJA_PUBLICA='https://saboresdaanairati.com.br';
+function linkAcompanhamentoPedido(p){ return URL_LOJA_PUBLICA+'/?pedido='+encodeURIComponent(p.id); }
+function copiarLinkAcompanhamento(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  const link=linkAcompanhamentoPedido(p);
+  navigator.clipboard.writeText(link).then(()=>toast('Link copiado!')).catch(()=>toast('Não consegui copiar automaticamente — copie manualmente.',true));
+}
 const STATUS_PED={
   pedido:{label:'Pedido',tag:'mut'}, confirmado:{label:'Confirmado',tag:'warn'},
   em_producao:{label:'Em produção',tag:'warn'}, disponivel:{label:'Disponível p/ entrega',tag:'info'},
@@ -1622,6 +1629,12 @@ VIEWS['pedido-detalhe']=function(){
         <div class="card"><div class="card-h"><h3>Cliente</h3></div><div class="card-b">
           <p><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>'+esc(cli.telefone):''}${cli&&cli.endereco?'<br>'+esc(cli.endereco):''}</p>
           ${p.forma_pagamento_desejada==='entrega'?'<span class="tag warn" style="margin-top:8px;display:inline-block">💵 Cliente vai pagar na entrega/retirada</span>':(p.origem_externa?.canal==='site'?(jaPago?'<span class="tag f" style="margin-top:8px;display:inline-block">✅ Pago online (Mercado Pago)</span>':'<span class="tag warn" style="margin-top:8px;display:inline-block">⏳ Pagamento online pendente (Mercado Pago) — cliente ainda não pagou</span>'):'')}</div></div>
+        ${!['rascunho'].includes(p.status)?`<div class="card section-gap"><div class="card-h"><h3>Link pro cliente acompanhar</h3></div><div class="card-b">
+          <p class="subtle" style="margin-bottom:8px">O cliente já recebe esse link por e-mail se informou o e-mail dele — mas você pode copiar e mandar por WhatsApp também.</p>
+          <div style="display:flex;gap:8px;align-items:stretch">
+            <input readonly value="${esc(linkAcompanhamentoPedido(p))}" style="flex:1 1 0;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-family:monospace;font-size:12px;background:var(--soft)" onclick="this.select()">
+            <button class="btn sm" style="flex:none;width:auto;margin-top:0" onclick="copiarLinkAcompanhamento('${p.id}')">📋 Copiar</button>
+          </div></div></div>`:''}
         ${p.observacao?`<div class="card section-gap"><div class="card-h"><h3>Observação</h3></div><div class="card-b"><p>${esc(p.observacao)}</p></div></div>`:''}
         <div class="card section-gap"><div class="card-h"><h3>Itens</h3></div><div class="card-b" style="padding:0 6px">
           <table><thead><tr><th>Item</th><th class="r">Unitário</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table></div></div>
@@ -2286,6 +2299,7 @@ function compartilharPedidoTexto(id){
   (p.itens||[]).forEach(l=>{ txt+=`${l.quantidade}x ${nomeLinha(l)}\n`; });
   txt+=`\n*Total: ${money(p.valor_total)}*\nStatus: ${st.label}`;
   if(p.data_entrega)txt+=`\nEntrega: ${dBR(p.data_entrega)}`;
+  if(p.status!=='rascunho')txt+=`\n\n📍 Acompanhe seu pedido: ${linkAcompanhamentoPedido(p)}`;
   txt+=`\n\nQualquer coisa é só chamar 💚`;
   const fone=cli&&cli.telefone?cli.telefone.replace(/\D/g,''):'';
   const foneCompleto=fone?(fone.length<=11?'55'+fone:fone):'';
@@ -2967,8 +2981,9 @@ function modalCliente(id){
     <div class="field"><label>Nome *</label><input id="cl-nome" value="${c?esc(c.nome):''}"></div>
     <div class="frow c2">
       <div class="field"><label>Telefone</label><input id="cl-tel" value="${c?esc(c.telefone||''):''}" placeholder="(48) 9…"></div>
-      <div class="field"><label>Endereço</label><input id="cl-end" value="${c?esc(c.endereco||''):''}"></div>
+      <div class="field"><label>E-mail</label><input id="cl-email" type="email" value="${c?esc(c.email||''):''}" placeholder="pra confirmação de pedido"></div>
     </div>
+    <div class="field"><label>Endereço</label><input id="cl-end" value="${c?esc(c.endereco||''):''}"></div>
     <div class="field"><label>Observação</label><textarea id="cl-obs" rows="2">${c?esc(c.observacao||''):''}</textarea></div>
   </div>
   <div class="m-f">${c?`<button class="btn ghost" onclick="toggleCliente('${id}')">${c.ativo===false?'Reativar':'Inativar'}</button>`:''}
@@ -2977,7 +2992,7 @@ function modalCliente(id){
 }
 function salvarCliente(id){
   const nome=$('#cl-nome').value.trim(); if(!nome)return toast('Informe o nome.',true);
-  const d={nome,telefone:$('#cl-tel').value.trim(),endereco:$('#cl-end').value.trim(),observacao:$('#cl-obs').value.trim(),atualizado_em:new Date().toISOString()};
+  const d={nome,telefone:$('#cl-tel').value.trim(),email:$('#cl-email').value.trim(),endereco:$('#cl-end').value.trim(),observacao:$('#cl-obs').value.trim(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(clienteById(id),d); registrarEvento('CLIENTE_ATUALIZADO',nome+' atualizado',id); }
   else{ const nid=uid('CLI'); S.clientes.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},d));
     registrarEvento('CLIENTE_CRIADO',nome+' cadastrado',nid); }

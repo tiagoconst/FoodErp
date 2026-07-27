@@ -153,6 +153,27 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .ok-screen .pid{font-family:monospace;background:var(--soft);padding:6px 10px;border-radius:8px;display:inline-block;margin-top:10px;font-size:13px}
 .btn-google{display:inline-flex;align-items:center;gap:8px;background:#fff;color:#3c4043;border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-size:13.5px;font-weight:600;cursor:pointer}
 .btn-google svg{width:16px;height:16px;flex:none}
+.acomp{max-width:480px;margin:0 auto;padding:28px 16px 60px}
+.acomp-topo{text-align:center;margin-bottom:22px}
+.acomp-topo .em{font-size:40px}
+.acomp-topo h2{margin:10px 0 4px}
+.acomp-topo .pid{font-family:monospace;background:var(--soft);padding:6px 10px;border-radius:8px;display:inline-block;margin-top:6px;font-size:13px}
+.acomp-banner{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13.5px;color:var(--ink);margin-bottom:18px;text-align:center}
+.acomp-steps{display:flex;justify-content:space-between;position:relative;margin:18px 0 26px}
+.acomp-steps::before{content:'';position:absolute;top:14px;left:20px;right:20px;height:3px;background:var(--line);z-index:0}
+.acomp-step{position:relative;z-index:1;flex:1;text-align:center;font-size:11.5px;color:var(--muted)}
+.acomp-step .dot{width:28px;height:28px;border-radius:50%;background:var(--panel);border:3px solid var(--line);margin:0 auto 6px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.acomp-step.done .dot{background:var(--accent);border-color:var(--accent);color:#fff}
+.acomp-step.atual .dot{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 0 0 4px var(--soft)}
+.acomp-step.atual{color:var(--ink);font-weight:700}
+.acomp-steps.cancelado .dot{background:var(--danger)!important;border-color:var(--danger)!important;color:#fff}
+.acomp-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.acomp-card h4{margin:0 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.acomp-item-linha{display:flex;justify-content:space-between;font-size:14px;padding:4px 0}
+.acomp-tot{display:flex;justify-content:space-between;font-weight:700;font-size:15px;border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
+.acomp-live{text-align:center;font-size:12px;color:var(--muted);margin-top:6px}
+.acomp-live .dotlive{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:5px;animation:pulse 1.6s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .sheet-login{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--soft);border-radius:10px;padding:10px 12px;margin-bottom:14px}
 .sheet-login .sub{color:var(--muted);font-size:12px}
 .sheet-login .user-box{display:flex;align-items:center;gap:8px;font-size:13.5px}
@@ -863,6 +884,7 @@ async function aplicarSessao(session){
 }
 function nomeSugerido(){ return cadastroSalvo?.nome||usuario?.user_metadata?.full_name||usuario?.user_metadata?.name||''; }
 function telefoneSugerido(){ return cadastroSalvo?.telefone||''; }
+function emailSugerido(){ return cadastroSalvo?.email||usuario?.email||''; }
 function loginHtml(){
   if(usuario){
     const nome=usuario.user_metadata?.full_name||usuario.user_metadata?.name||usuario.email||'Você';
@@ -878,13 +900,14 @@ async function sairConta(){ await sb.auth.signOut(); }
 
 /* ===== Entrega / retirada (checkout) ===== */
 let modalidadeEscolhida=null;
-let ckNome=null, ckTel=null, ckObs=null, ckEndereco=null;
+let ckNome=null, ckTel=null, ckEmail=null, ckObs=null, ckEndereco=null;
 let cupomAplicado=null; // {codigo, tipo, valor, desconto, valor_final}
 let cupomErro=null; let cupomValidando=false; let cupomCodigoDigitado='';
 function custoEntregaSelecionada(){ const m=entregaById(modalidadeEscolhida); return m?(m.custo||0):0; }
 function salvarRascunhoCk(){
   const n=$('#ck-nome'); if(n)ckNome=n.value;
   const t=$('#ck-tel'); if(t)ckTel=t.value;
+  const em=$('#ck-email'); if(em)ckEmail=em.value;
   const o=$('#ck-obs'); if(o)ckObs=o.value;
   const e=$('#ck-endereco'); if(e)ckEndereco=e.value;
 }
@@ -969,6 +992,7 @@ function renderCarrinho(){
     ${loginHtml()}
     <div class="field"><label>Seu nome *</label><input id="ck-nome" placeholder="ex.: Maria Silva" value="${esc(ckNome??nomeSugerido())}"></div>
     <div class="field"><label>Telefone / WhatsApp *</label><input id="ck-tel" placeholder="ex.: (42) 99999-0000" value="${esc(ckTel??telefoneSugerido())}"></div>
+    <div class="field"><label>E-mail (opcional)</label><input id="ck-email" type="email" placeholder="pra receber a confirmação do pedido" value="${esc(ckEmail??emailSugerido())}"></div>
     <div class="field"><label>Observação (opcional)</label><textarea id="ck-obs" placeholder="ex.: sem cebola, retirar às 12h">${esc(ckObs??'')}</textarea></div>
     <div id="ck-err" class="err" style="display:none"></div>
     <div class="field"><label>Como você quer pagar? *</label></div>
@@ -1012,11 +1036,12 @@ async function enviarPedido(formaPagamento){
   const btnClicado=formaPagamento==='entrega'?btnEntrega:btnOnline;
   const textoOriginal=btnClicado.textContent;
   btnOnline.disabled=true; btnEntrega.disabled=true; btnClicado.textContent='Enviando…';
+  const email=($('#ck-email')?.value||'').trim();
   const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}));
   const itensCustom=carrinhoCustom.map(l=>({quantidade:l.qtd,componentes:l.itens.map(x=>({item_id:x.item_id,gramas:x.gramas}))}));
   const {data,error}=await sb.rpc('erp_criar_pedido_publico',{
     p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
-    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:usuario?.email||null,
+    p_observacao:$('#ck-obs').value.trim(), p_id_externo:idSessao(), p_cliente_email:email||usuario?.email||null,
     p_cupom_codigo:cupomAplicado?cupomAplicado.codigo:null, p_forma_pagamento:formaPagamento,
     p_itens_custom:itensCustom
   });
@@ -1040,11 +1065,16 @@ async function enviarPedido(formaPagamento){
     if(!eEnt&&dEnt&&dEnt.valor_total!=null)valorTotalFinal=dEnt.valor_total;
   }
   const numeroPedido=data.numero;
+  const pedidoIdCriado=data.pedido_id;
   carrinho={}; carrinhoCustom=[]; localStorage.removeItem(CART_KEY); localStorage.removeItem(CART_CUSTOM_KEY); localStorage.removeItem(SESSAO_KEY);
-  modalidadeEscolhida=null; ckNome=null; ckTel=null; ckObs=null; ckEndereco=null;
+  modalidadeEscolhida=null; ckNome=null; ckTel=null; ckEmail=null; ckObs=null; ckEndereco=null;
   cupomAplicado=null; cupomErro=null; cupomCodigoDigitado='';
   fecharCarrinho();
-  if(formaPagamento==='entrega'){ telaPedidoConfirmadoSemPagamento(numeroPedido,valorTotalFinal); return; }
+  if(formaPagamento==='entrega'){
+    history.replaceState(null,'',location.pathname+'?pedido='+encodeURIComponent(pedidoIdCriado));
+    telaAcompanhamento(pedidoIdCriado,{mensagemTopo:email?'Pedido confirmado! Mandamos a confirmação pro seu e-mail também.':'Pedido confirmado! Guarde esse link (ou a página) pra acompanhar o preparo.'});
+    return;
+  }
   await irParaPagamento(data.pedido_id,valorTotalFinal);
 }
 function telaPedidoConfirmadoSemPagamento(numero,valorTotal){
@@ -1146,16 +1176,97 @@ function telaPedidoCancelado(numero){
   </div>`;
   atualizarBarra();
 }
+/* ===== Acompanhamento do pedido (tela persistente, atualiza sozinha) ===== */
+const ETAPAS_ACOMPANHAMENTO=[
+  {chave:'recebido',label:'Recebido',emoji:'📝'},
+  {chave:'preparo',label:'Em preparo',emoji:'👩‍🍳'},
+  {chave:'pronto',label:'Pronto',emoji:'📦'},
+  {chave:'entregue',label:'Entregue',emoji:'✅'},
+];
+function etapaIndiceDoStatus(status){
+  if(['pedido','confirmado'].includes(status))return 0;
+  if(status==='disponivel')return 2;
+  if(['entrega_parcial','entregue','finalizado'].includes(status))return 3;
+  if(status==='em_producao')return 1;
+  return 1; // status personalizado (organizacional) — tratado como "em preparo", mostra o nome real embaixo
+}
+let acompanhamentoTimer=null;
+async function telaAcompanhamento(pedidoId,opts){
+  opts=opts||{};
+  clearInterval(acompanhamentoTimer);
+  const {data}=await sb.rpc('erp_pedido_status_publico',{p_empresa_id:EMPRESA_ID,p_pedido_id:pedidoId});
+  if(!data||!data.encontrado){
+    $('#cardapio').innerHTML=`<div class="ok-screen"><div class="em">🔍</div><h2>Pedido não encontrado</h2>
+      <p>Não achamos esse pedido. Confira o link ou fale com a gente.</p>
+      <div style="margin-top:26px"><button class="btn" onclick="location.href=location.pathname">Voltar à loja</button></div></div>`;
+    atualizarBarra(); return;
+  }
+
+  // pedido ainda 'rascunho' com forma online = acabou de voltar do Mercado Pago e o webhook
+  // ainda não confirmou (normalmente questão de segundos — em Pix é quase instantâneo).
+  if(data.status==='rascunho'&&!data.pago){
+    $('#cardapio').innerHTML=`<div class="ok-screen">
+      <div class="em">🕓</div><h2>Pagamento em processamento</h2>
+      <p>Assim que o Mercado Pago confirmar (geralmente leva só alguns instantes — no Pix pode ser na hora, em boleto pode levar até 2 dias úteis), seu pedido é liberado automaticamente.<br>Valor: <b>${money(data.valor_total)}</b></p>
+      <div class="pid">Pedido ${esc(data.numero||pedidoId)}</div>
+      <div style="margin-top:26px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn" style="width:auto" onclick="telaAcompanhamento('${esc(pedidoId)}')">Atualizar status</button>
+        <button class="btn" style="width:auto;background:var(--muted)" onclick="location.href=location.pathname">Voltar à loja</button>
+      </div></div>`;
+    atualizarBarra();
+    acompanhamentoTimer=setInterval(()=>telaAcompanhamento(pedidoId),8000);
+    return;
+  }
+
+  const cancelado=data.status==='cancelado';
+  const idx=etapaIndiceDoStatus(data.status);
+  const stepsHtml=ETAPAS_ACOMPANHAMENTO.map((e,i)=>{
+    const cls=cancelado?'':(i<idx?'done':(i===idx?'atual':''));
+    return `<div class="acomp-step ${cls}"><div class="dot">${i<idx&&!cancelado?'✓':e.emoji}</div>${e.label}</div>`;
+  }).join('');
+  const itensHtml=(data.itens||[]).map(it=>`<div class="acomp-item-linha"><span>${it.quantidade}x ${esc(it.nome)}</span></div>`).join('');
+  const entregaInfo=data.tipo_entrega==='entrega'
+    ?`<div class="acomp-card"><h4>Entrega</h4><div>${esc(data.modalidade_entrega_nome||'Entrega')}</div>${data.endereco_entrega?`<div class="sub" style="margin-top:4px">${esc(data.endereco_entrega)}</div>`:''}</div>`
+    :(data.tipo_entrega?`<div class="acomp-card"><h4>Retirada</h4><div>${esc(data.modalidade_entrega_nome||'Retirada no local')}</div></div>`:'');
+  const mostrarNomeCustom=!cancelado&&!['pedido','confirmado','disponivel','entrega_parcial','entregue','finalizado','em_producao'].includes(data.status);
+
+  $('#cardapio').innerHTML=`<div class="acomp">
+    <div class="acomp-topo">
+      <div class="em">${cancelado?'🗑️':'🍱'}</div>
+      <h2>${cancelado?'Pedido cancelado':'Acompanhe seu pedido'}</h2>
+      <div class="pid">Pedido ${esc(data.numero||pedidoId)}</div>
+    </div>
+    ${opts.mensagemTopo?`<div class="acomp-banner">${esc(opts.mensagemTopo)}</div>`:''}
+    ${!cancelado?`<div class="acomp-steps${cancelado?' cancelado':''}">${stepsHtml}</div>
+      ${mostrarNomeCustom?`<p style="text-align:center;color:var(--muted);font-size:13px;margin-top:-14px">Status atual: <b>${esc(data.status_label)}</b></p>`:''}`
+      :`<p style="text-align:center;color:var(--muted)">Esse pedido foi cancelado.</p>`}
+    <div class="acomp-card">
+      <h4>Itens</h4>
+      ${itensHtml}
+      <div class="acomp-tot"><span>Total</span><span>${money(data.valor_total)}</span></div>
+    </div>
+    ${entregaInfo}
+    ${data.observacao?`<div class="acomp-card"><h4>Observação</h4><div>${esc(data.observacao)}</div></div>`:''}
+    <div style="margin-top:20px;text-align:center"><button class="btn" style="width:auto" onclick="location.href=location.pathname">Fazer novo pedido</button></div>
+    ${!cancelado&&idx<3?`<div class="acomp-live"><span class="dotlive"></span>atualiza sozinho</div>`:''}
+  </div>`;
+  atualizarBarra();
+
+  if(!cancelado&&idx<3){
+    acompanhamentoTimer=setInterval(()=>telaAcompanhamento(pedidoId),8000);
+  }
+}
 async function verificarRetornoPagamento(){
   const p=new URLSearchParams(location.search);
   const pedidoId=p.get('pedido');
   if(!pedidoId)return;
-  history.replaceState(null,'',location.pathname);
-  const {data}=await sb.rpc('erp_pedido_status_publico',{p_empresa_id:EMPRESA_ID,p_pedido_id:pedidoId});
-  if(!data||!data.encontrado)return;
-  if(data.pago)telaSucessoPagamento(data.numero||pedidoId,data.valor_total);
-  else if(p.get('pg')==='falha')telaPagamentoFalhou(pedidoId,data.valor_total);
-  else telaPagamentoPendente(pedidoId,data.numero,data.valor_total);
+  if(p.get('pg')==='falha'){
+    history.replaceState(null,'',location.pathname+'?pedido='+encodeURIComponent(pedidoId));
+    const {data}=await sb.rpc('erp_pedido_status_publico',{p_empresa_id:EMPRESA_ID,p_pedido_id:pedidoId});
+    if(data&&data.encontrado&&!data.pago){ telaPagamentoFalhou(pedidoId,data.valor_total); return; }
+  }
+  history.replaceState(null,'',location.pathname+'?pedido='+encodeURIComponent(pedidoId));
+  await telaAcompanhamento(pedidoId);
 }
 
 carregarCardapio().then(verificarRetornoPagamento);

@@ -2969,6 +2969,14 @@ function explodirConsumoMat(itemId,mult,acc,visitados){
     else explodirConsumoMat(c.item_filho_id,necessidade,acc,ns);
   });
 }
+let diasProducaoConsumo=3;
+// Exibe em kg/L quando a unidade-base é g/ml (mais legível pra compra/produção); "un" fica como está.
+function qtyGrande(v,un){
+  if(v==null||isNaN(v))return'—';
+  if(un==='g')return (v/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:3})+' kg';
+  if(un==='ml')return (v/1000).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:3})+' L';
+  return qty(v,un);
+}
 function calcularConsumoMedioMat(semanas){
   const dias=semanas*7;
   const corte=new Date(Date.now()-dias*86400000).toISOString().slice(0,10);
@@ -2997,17 +3005,19 @@ function imprimirConsumoMat(){
   if(!linhas.length)return toast('Nenhum consumo no período.',true);
   const emp=getEmpresaInfo();const idn=getIdent();const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const agora=new Date();
-  const corpo=linhas.map(r=>`<div class="item"><div class="item-txt">${esc(r.item.nome)}</div><b class="num">${qty(r.semanal,r.item.unidade_base)}/sem</b></div>`).join('');
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Consumo médio semanal</title><style>
+  const dp=Math.max(1,diasProducaoConsumo);
+  const corpo=linhas.map(r=>`<div class="item"><div class="item-txt">${esc(r.item.nome)}</div><b class="num">${qtyGrande(r.semanal/dp,r.item.unidade_base)}/dia de produção</b></div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Consumo médio</title><style>
     @page{margin:3mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto}
     h1{font-size:12px;margin:1mm 0}.center{text-align:center}.small{font-size:9px;color:#333}
     .item{display:flex;justify-content:space-between;gap:6px;padding:1.2mm 0;border-bottom:1px dashed #ccc}.num{white-space:nowrap}</style></head>
-    <body><div class="center"><h1>${esc(nomeEmp)}</h1><div class="small">Consumo médio semanal de matéria-prima<br>últimas ${filtroSemanasConsumo} semanas · ${agora.toLocaleDateString('pt-BR')}</div></div>
+    <body><div class="center"><h1>${esc(nomeEmp)}</h1><div class="small">Consumo médio de matéria-prima por dia de produção (${dp}x/semana)<br>base: últimas ${filtroSemanasConsumo} semanas · ${agora.toLocaleDateString('pt-BR')}</div></div>
     ${corpo}</body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
 VIEWS.consumo=function(){
   const linhas=calcularConsumoMedioMat(filtroSemanasConsumo);
+  const dp=Math.max(1,diasProducaoConsumo);
   const catsUsadas=[...new Set(linhas.filter(r=>r.total>0).map(r=>r.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
   const filtradas=linhas.filter(r=>!filtroCategoriaConsumo||r.item.categoria===filtroCategoriaConsumo);
   const semVenda=filtradas.filter(r=>r.total<=0).length;
@@ -3018,23 +3028,28 @@ VIEWS.consumo=function(){
   const periodoBtns=[4,8,12,26].map(n=>`<button class="cat-chip ${filtroSemanasConsumo===n?'active':''}" style="${filtroSemanasConsumo===n?'background:var(--primary)':''}" onclick="filtroSemanasConsumo=${n};render()">${n} semanas</button>`).join('');
   const rows=filtradas.map(r=>`<tr style="${r.total>0?'':'opacity:.4'}">
     <td><b>${esc(r.item.nome)}</b>${r.item.categoria?`<div class="subtle" style="font-size:11px">${esc(r.item.categoria)}</div>`:''}</td>
-    <td class="r num">${r.total>0?qty(r.total,r.item.unidade_base):'—'}</td>
-    <td class="r num"><b>${r.total>0?qty(r.semanal,r.item.unidade_base):'—'}</b></td></tr>`).join('')
-    ||'<tr><td colspan="3" class="empty">Nenhuma matéria-prima cadastrada</td></tr>';
+    <td class="r num">${r.total>0?qtyGrande(r.total,r.item.unidade_base):'—'}</td>
+    <td class="r num">${r.total>0?qtyGrande(r.semanal,r.item.unidade_base):'—'}</td>
+    <td class="r num"><b>${r.total>0?qtyGrande(r.semanal/dp,r.item.unidade_base):'—'}</b></td></tr>`).join('')
+    ||'<tr><td colspan="4" class="empty">Nenhuma matéria-prima cadastrada</td></tr>';
   const cards=filtradas.map(r=>`<div class="pln-card" style="${r.total>0?'':'opacity:.4'}">
     <div class="pln-card-tit">${esc(r.item.nome)}</div>
-    <div class="pln-card-stats"><span>Total no período <b class="num">${r.total>0?qty(r.total,r.item.unidade_base):'—'}</b></span>
-      <span>Média semanal <b class="num">${r.total>0?qty(r.semanal,r.item.unidade_base):'—'}</b></span></div></div>`).join('')
+    <div class="pln-card-stats"><span>Total no período <b class="num">${r.total>0?qtyGrande(r.total,r.item.unidade_base):'—'}</b></span>
+      <span>Média semanal <b class="num">${r.total>0?qtyGrande(r.semanal,r.item.unidade_base):'—'}</b></span>
+      <span>Por dia de produção <b class="num">${r.total>0?qtyGrande(r.semanal/dp,r.item.unidade_base):'—'}</b></span></div></div>`).join('')
     ||'<div class="empty"><b>Nenhuma matéria-prima cadastrada</b></div>';
   return header('Consumo','var(--m-planejamento)',
-      'Consumo médio de matéria-prima com base nas vendas dos últimos '+filtroSemanasConsumo+' semanas, explodindo a ficha técnica de cada item vendido (pedidos cancelados/rascunho não entram na conta).',
+      'Consumo médio de matéria-prima com base nas vendas dos últimos '+filtroSemanasConsumo+' semanas, explodindo a ficha técnica de cada item vendido (pedidos cancelados/rascunho não entram na conta). A média semanal é espalhada pelos 7 dias — se você produz só alguns dias por semana, use a coluna "por dia de produção" pra comparar com o que você de fato usa num dia de preparo.',
       `<button class="btn sm" onclick="imprimirConsumoMat()">🖨 Imprimir</button>`)+
     `<div class="card"><div class="card-b" style="padding-bottom:0">
         <div class="subtle" style="margin-bottom:6px">Período</div>${periodoBtns}
         <div class="subtle" style="margin:10px 0 6px">Categoria</div>${chips}
-        ${semVenda?`<div class="subtle" style="margin-bottom:6px">${semVenda} insumo(s) sem consumo no período (cinza)</div>`:''}
+        <div class="subtle" style="margin:10px 0 6px">Dias de produção por semana</div>
+        <input type="number" min="1" max="7" step="1" style="width:80px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg,#FDFCF9)"
+          value="${diasProducaoConsumo}" oninput="diasProducaoConsumo=parseInt(this.value)||1;render()">
+        ${semVenda?`<div class="subtle" style="margin:10px 0 6px">${semVenda} insumo(s) sem consumo no período (cinza)</div>`:''}
       </div>
-      <div class="only-desktop"><table><thead><tr><th>Matéria-prima</th><th class="r">Total no período</th><th class="r">Média semanal</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="only-desktop"><table><thead><tr><th>Matéria-prima</th><th class="r">Total no período</th><th class="r">Média semanal</th><th class="r">Por dia de produção</th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="only-mobile card-b" style="padding-top:0">${cards}</div></div>`;
 };
 

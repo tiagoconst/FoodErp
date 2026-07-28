@@ -3015,6 +3015,34 @@ function imprimirConsumoMat(){
     ${corpo}</body></html>`;
   const w=window.open('','_blank');w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300);
 }
+// Converte pra kg/L (igual a tela mostra) e devolve valor numérico + unidade separados, prontos pro Excel.
+function valorGrande(v,un){
+  if(v==null||isNaN(v))return{v:null,u:un||''};
+  if(un==='g')return{v:v/1000,u:'kg'};
+  if(un==='ml')return{v:v/1000,u:'L'};
+  return{v:v,u:un||''};
+}
+function numBR(v){ return v==null?'':v.toFixed(3).replace('.',','); }
+function csvCampo(v){ return '"'+String(v??'').replace(/"/g,'""')+'"'; }
+function exportarConsumoExcel(){
+  const dp=Math.max(1,diasProducaoConsumo);
+  const linhas=calcularConsumoMedioMat(filtroSemanasConsumo).filter(r=>!filtroCategoriaConsumo||r.item.categoria===filtroCategoriaConsumo);
+  if(!linhas.length)return toast('Nenhuma matéria-prima pra exportar.',true);
+  const cab=['Matéria-prima','Categoria','Unidade','Total no período','Média semanal',`Por dia de produção (${dp}x/sem)`];
+  const linhasCsv=linhas.map(r=>{
+    const tot=valorGrande(r.total,r.item.unidade_base);
+    const sem=valorGrande(r.semanal,r.item.unidade_base);
+    const dia=valorGrande(r.semanal/dp,r.item.unidade_base);
+    return [r.item.nome,r.item.categoria||'',tot.u,numBR(r.total>0?tot.v:0),numBR(r.total>0?sem.v:0),numBR(r.total>0?dia.v:0)];
+  });
+  const linhasTxt=[cab,...linhasCsv].map(l=>l.map(csvCampo).join(';')).join('\r\n');
+  const blob=new Blob(['﻿'+linhasTxt],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='consumo-materia-prima-'+hoje()+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 VIEWS.consumo=function(){
   const linhas=calcularConsumoMedioMat(filtroSemanasConsumo);
   const dp=Math.max(1,diasProducaoConsumo);
@@ -3040,7 +3068,8 @@ VIEWS.consumo=function(){
     ||'<div class="empty"><b>Nenhuma matéria-prima cadastrada</b></div>';
   return header('Consumo','var(--m-planejamento)',
       'Consumo médio de matéria-prima com base nas vendas dos últimos '+filtroSemanasConsumo+' semanas, explodindo a ficha técnica de cada item vendido (pedidos cancelados/rascunho não entram na conta). A média semanal é espalhada pelos 7 dias — se você produz só alguns dias por semana, use a coluna "por dia de produção" pra comparar com o que você de fato usa num dia de preparo.',
-      `<button class="btn sm" onclick="imprimirConsumoMat()">🖨 Imprimir</button>`)+
+      `<button class="btn sm" onclick="imprimirConsumoMat()">🖨 Imprimir</button>
+       <button class="btn sm" onclick="exportarConsumoExcel()">📊 Exportar Excel</button>`)+
     `<div class="card"><div class="card-b" style="padding-bottom:0">
         <div class="subtle" style="margin-bottom:6px">Período</div>${periodoBtns}
         <div class="subtle" style="margin:10px 0 6px">Categoria</div>${chips}

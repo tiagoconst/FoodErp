@@ -299,6 +299,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <button class="nav-btn" data-view="estoque"><span class="nav-dot" style="background:var(--m-estoque)"></span>Estoque</button>
     <button class="nav-btn" data-view="producao"><span class="nav-dot" style="background:var(--m-producao)"></span>Produção</button>
     <button class="nav-btn" data-view="planejamento"><span class="nav-dot" style="background:var(--m-planejamento)"></span>Planejamento</button>
+    <button class="nav-btn" data-view="consumo"><span class="nav-dot" style="background:var(--m-planejamento)"></span>Consumo</button>
     <button class="nav-btn" data-view="pedidos"><span class="nav-dot" style="background:var(--m-pedidos)"></span>Pedidos<span class="count" id="cnt-pedidos"></span></button>
     <div class="nav-label">Gestão</div>
     <button class="nav-btn" data-view="financeiro"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Financeiro</button>
@@ -2950,6 +2951,91 @@ VIEWS.planejamento=function(){
       <button class="btn sm" onclick="enviarMarmitasSobMedidaWhatsapp()">💬 Sob medida</button></div></div>
     <div class="only-desktop"><table><thead><tr><th>Produto vendável</th><th class="r">Pedidos em aberto</th><th class="r">Em estoque</th><th class="r">Planejar a mais</th></tr></thead><tbody>${demRows}</tbody></table></div>
     <div class="only-mobile card-b">${demCards}</div></div>`+resultado;
+};
+
+/* ================= CONSUMO MÉDIO DE MATÉRIA-PRIMA (por vendas × ficha técnica) ================= */
+let filtroSemanasConsumo=12, filtroCategoriaConsumo='';
+// Explode um item vendido (mult = quantidade vendida) recursivamente pela ficha técnica
+// até chegar nas matérias-primas (MAT-...), acumulando gramas/unidades necessárias em `acc`.
+function explodirConsumoMat(itemId,mult,acc,visitados){
+  if(visitados.has(itemId)||!(mult>0))return;
+  const comps=componentesDe(itemId);
+  if(!comps.length)return; // folha sem ficha técnica — não tem como descer mais
+  const rend=rendimentoDe(itemId);
+  const ns=new Set(visitados); ns.add(itemId);
+  comps.forEach(c=>{
+    const necessidade=mult*c.quantidade*(1+((c.perda_percentual||0)/100))/(rend||1);
+    if(c.item_filho_id.startsWith('MAT-')) acc[c.item_filho_id]=(acc[c.item_filho_id]||0)+necessidade;
+    else explodirConsumoMat(c.item_filho_id,necessidade,acc,ns);
+  });
+}
+function calcularConsumoMedioMat(semanas){
+  const dias=semanas*7;
+  const corte=new Date(Date.now()-dias*86400000).toISOString().slice(0,10);
+  const acc={};
+  S.pedidos.filter(p=>!['cancelado','rascunho'].includes(p.status)&&(p.data_pedido||'')>=corte)
+    .forEach(p=>p.itens.forEach(l=>{
+      if(l.componentes&&l.componentes.length){
+        // marmita sob medida: componentes já vêm em gramas por unidade, direto no pedido
+        l.componentes.forEach(c=>{
+          const it=itemById(c.item_id);
+          if(it&&it.id.startsWith('MAT-'))acc[it.id]=(acc[it.id]||0)+c.quantidade*l.quantidade;
+          else explodirConsumoMat(c.item_id,c.quantidade*l.quantidade,acc,new Set());
+        });
+      } else {
+        const it=itemById(l.item_id);
+        if(it&&it.id.startsWith('MAT-'))acc[it.id]=(acc[it.id]||0)+l.quantidade;
+        else explodirConsumoMat(l.item_id,l.quantidade,acc,new Set());
+      }
+    }));
+  return S.itens.filter(i=>i.id.startsWith('MAT-')&&i.ativo!==false).map(i=>({
+    item:i, total:acc[i.id]||0, semanal:(acc[i.id]||0)/semanas
+  })).sort((a,b)=>b.semanal-a.semanal);
+}
+function imprimirConsumoMat(){
+  const linhas=calcularConsumoMedioMat(filtroSemanasConsumo).filter(r=>r.total>0);
+  if(!linhas.length)return toast('Nenhum consumo no período.',true);
+  const emp=getEmpresaInfo();const idn=getIdent();const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const agora=new Date();
+  const corpo=linhas.map(r=>`<div class="item"><div class="item-txt">${esc(r.item.nome)}</div><b class="num">${qty(r.semanal,r.item.unidade_base)}/sem</b></div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Consumo médio semanal</title><style>
+    @page{margin:3mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto}
+    h1{font-size:12px;margin:1mm 0}.center{text-align:center}.small{font-size:9px;color:#333}
+    .item{display:flex;justify-content:space-between;gap:6px;padding:1.2mm 0;border-bottom:1px dashed #ccc}.num{white-space:nowrap}</style></head>
+    <body><div class="center"><h1>${esc(nomeEmp)}</h1><div class="small">Consumo médio semanal de matéria-prima<br>últimas ${filtroSemanasConsumo} semanas · ${agora.toLocaleDateString('pt-BR')}</div></div>
+    ${corpo}</body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300);
+}
+VIEWS.consumo=function(){
+  const linhas=calcularConsumoMedioMat(filtroSemanasConsumo);
+  const catsUsadas=[...new Set(linhas.filter(r=>r.total>0).map(r=>r.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
+  const filtradas=linhas.filter(r=>!filtroCategoriaConsumo||r.item.categoria===filtroCategoriaConsumo);
+  const semVenda=filtradas.filter(r=>r.total<=0).length;
+  const chips=`<div class="cat-chips" style="margin-bottom:6px">
+    <button class="cat-chip ${!filtroCategoriaConsumo?'active':''}" style="${!filtroCategoriaConsumo?'background:var(--primary)':''}" onclick="filtroCategoriaConsumo='';render()">Todas</button>
+    ${catsUsadas.map(c=>`<button class="cat-chip ${filtroCategoriaConsumo===c?'active':''}" style="${filtroCategoriaConsumo===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaConsumo=${JSON.stringify(c)};render()'>${esc(c)}</button>`).join('')}
+  </div>`;
+  const periodoBtns=[4,8,12,26].map(n=>`<button class="cat-chip ${filtroSemanasConsumo===n?'active':''}" style="${filtroSemanasConsumo===n?'background:var(--primary)':''}" onclick="filtroSemanasConsumo=${n};render()">${n} semanas</button>`).join('');
+  const rows=filtradas.map(r=>`<tr style="${r.total>0?'':'opacity:.4'}">
+    <td><b>${esc(r.item.nome)}</b>${r.item.categoria?`<div class="subtle" style="font-size:11px">${esc(r.item.categoria)}</div>`:''}</td>
+    <td class="r num">${r.total>0?qty(r.total,r.item.unidade_base):'—'}</td>
+    <td class="r num"><b>${r.total>0?qty(r.semanal,r.item.unidade_base):'—'}</b></td></tr>`).join('')
+    ||'<tr><td colspan="3" class="empty">Nenhuma matéria-prima cadastrada</td></tr>';
+  const cards=filtradas.map(r=>`<div class="pln-card" style="${r.total>0?'':'opacity:.4'}">
+    <div class="pln-card-tit">${esc(r.item.nome)}</div>
+    <div class="pln-card-stats"><span>Total no período <b class="num">${r.total>0?qty(r.total,r.item.unidade_base):'—'}</b></span>
+      <span>Média semanal <b class="num">${r.total>0?qty(r.semanal,r.item.unidade_base):'—'}</b></span></div></div>`).join('')
+    ||'<div class="empty"><b>Nenhuma matéria-prima cadastrada</b></div>';
+  return header('Consumo','var(--m-planejamento)',
+      'Consumo médio de matéria-prima com base nas vendas dos últimos '+filtroSemanasConsumo+' semanas, explodindo a ficha técnica de cada item vendido (pedidos cancelados/rascunho não entram na conta).',
+      `<button class="btn sm" onclick="imprimirConsumoMat()">🖨 Imprimir</button>`)+
+    `<div class="card"><div class="card-b" style="padding-bottom:0">
+        <div class="subtle" style="margin-bottom:6px">Período</div>${periodoBtns}
+        <div class="subtle" style="margin:10px 0 6px">Categoria</div>${chips}
+        ${semVenda?`<div class="subtle" style="margin-bottom:6px">${semVenda} insumo(s) sem consumo no período (cinza)</div>`:''}
+      </div>
+      <div class="only-desktop"><table><thead><tr><th>Matéria-prima</th><th class="r">Total no período</th><th class="r">Média semanal</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="only-mobile card-b" style="padding-top:0">${cards}</div></div>`;
 };
 
 /* ================= CLIENTES ================= */

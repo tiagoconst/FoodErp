@@ -66,9 +66,10 @@ main{padding:26px 32px 64px;max-width:1240px;width:100%;overflow-x:hidden}
 .card.acc:not(.open) .card-h::after{transform:rotate(-90deg)}
 .card.acc:not(.open) .card-b{display:none}
 .grid{display:grid;gap:16px}
-.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
-@media(max-width:1020px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
-@media(max-width:640px){.g2,.g3,.g4{grid-template-columns:1fr}}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:1200px){.g5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:1020px){.g4,.g5{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.g2,.g3,.g4,.g5{grid-template-columns:1fr}}
 
 .kpi{padding:15px 17px}
 .kpi .k-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:7px}
@@ -3607,21 +3608,21 @@ VIEWS.custos=function(){
 VIEWS.margens=function(){
   const vend=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   const cfPorUnidade=custoFixoPorUnidade();
-  const ini=Date.now()-30*864e5;
-  let totRec=0, totCmv=0, totFixo=0;
+  const {ini,fim,label}=relIntervalo(); // mesmo filtro de período do Dashboard (relPeriodo é global, compartilhado)
+  let totRec=0, totCmv=0, totMarmitas=0;
   const rows=vend.map(i=>{
     const cmv=custoItem(i.id), pv=i.preco_venda;
     const cf=cfPorUnidade*(i.unidades_equivalentes||1);
     const custoTotal=cmv!=null?cmv+cf:null;
     const margem=(pv!=null&&custoTotal!=null)?pv-custoTotal:null;
     const mp=(margem!=null&&pv)?margem/pv*100:null;
-    let q30=0, rec30=0, cmv30=0, temCmv=false;
-    S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&new Date(p.data_entrega+'T12:00:00').getTime()>=ini)
+    let qP=0, recP=0, cmvP=0, temCmv=false;
+    S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim)
       .forEach(p=>p.itens.filter(l=>l.item_id===i.id).forEach(l=>{
-        q30+=l.quantidade; rec30+=l.quantidade*l.preco_unitario;
+        qP+=l.quantidade; recP+=l.quantidade*l.preco_unitario;
         const cu=(l.cmv_unitario!=null)?l.cmv_unitario:cmv;
-        if(cu!=null){ temCmv=true; cmv30+=(cu+cf)*l.quantidade; } }));
-    totRec+=rec30; totCmv+=temCmv?cmv30:0; totFixo+=q30*cf;
+        if(cu!=null){ temCmv=true; cmvP+=(cu+cf)*l.quantidade; } }));
+    totRec+=recP; totCmv+=temCmv?cmvP:0; totMarmitas+=qP*(i.unidades_equivalentes||1);
     const mtag=mp==null?'':(mp<0?'<span class="tag bad">'+Math.round(mp)+'%</span>':(mp<30?'<span class="tag warn">'+Math.round(mp)+'%</span>':'<span class="tag f">'+Math.round(mp)+'%</span>'));
     return `<tr><td><b>${esc(i.nome)}</b></td>
       <td class="r num">${pv!=null?money(pv):'—'}</td>
@@ -3629,14 +3630,25 @@ VIEWS.margens=function(){
       <td class="r num">${cf?money(cf):'—'}</td>
       <td class="r num ${margem!=null&&margem<0?'neg':'pos'}">${margem!=null?money(margem):'—'}</td>
       <td class="r">${mtag||'—'}</td>
-      <td class="r num">${q30?q30.toLocaleString('pt-BR'):'—'}</td>
-      <td class="r num">${q30?money(rec30):'—'}</td>
-      <td class="r num">${q30&&temCmv?money(rec30-cmv30):'—'}</td></tr>`;
+      <td class="r num">${qP?qP.toLocaleString('pt-BR'):'—'}</td>
+      <td class="r num">${qP?money(recP):'—'}</td>
+      <td class="r num">${qP&&temCmv?money(recP-cmvP):'—'}</td></tr>`;
   }).join('')||`<tr><td colspan="9"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
-  const resumo=totRec?`Receita 30 d: <b class="num">${money(totRec)}</b> · CMV+fixo: <b class="num">${money(totCmv)}</b> · Margem: <b class="num">${money(totRec-totCmv)} (${Math.round((totRec-totCmv)/totRec*100)}%)</b>`:'Sem vendas nos últimos 30 dias.';
-  return header('Margens por produto','var(--m-margens)','Custo total = CMV (matéria-prima, fotografado na entrega) + custo fixo rateado (definido em Custos Fixos).')+
-  `<div class="card"><div class="card-h"><h3>Margem por item vendável</h3><span class="subtle">${resumo}</span></div>
-    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Vendidos 30 d</th><th class="r">Receita 30 d</th><th class="r">Margem 30 d</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const resumo=totRec?`Receita: <b class="num">${money(totRec)}</b> · CMV+fixo: <b class="num">${money(totCmv)}</b> · Margem: <b class="num">${money(totRec-totCmv)} (${Math.round((totRec-totCmv)/totRec*100)}%)</b>`:`Sem vendas no período (${label}).`;
+  const periodos=[['7d','7 dias'],['30d','30 dias'],['90d','90 dias'],['mes','Este mês'],['mespassado','Mês passado'],['ano','Este ano'],['tudo','Tudo']];
+  const chipsPeriodo=periodos.map(([v,l])=>`<button class="cat-chip ${relPeriodo===v?'active':''}" style="${relPeriodo===v?'background:var(--primary)':''}" onclick="relPeriodo='${v}';render()">${l}</button>`).join('')+
+    `<button class="cat-chip ${relPeriodo==='custom'?'active':''}" style="${relPeriodo==='custom'?'background:var(--primary)':''}" onclick="relPeriodo='custom';render()">Personalizado</button>`;
+  const customFields=relPeriodo==='custom'?`<div class="frow c2" style="margin-top:10px;max-width:420px">
+      <div class="field"><label>De</label><input type="date" value="${relDataIni}" onchange="relDataIni=this.value;render()"></div>
+      <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
+  return header('Margens por produto','var(--m-margens)',`Custo total = CMV (matéria-prima, fotografado na entrega) + custo fixo rateado (definido em Custos Fixos). Período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
+  `<div class="cat-chips" style="margin-top:6px">${chipsPeriodo}</div>${customFields}`+
+  `<div class="grid g2 section-gap">
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-producao)"></span>Marmitas vendidas no período</div><div class="k-value num">${totMarmitas.toLocaleString('pt-BR')}</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-margens)"></span>Margem total do período</div><div class="k-value num">${money(totRec-totCmv)}</div><div class="k-foot">${totRec?Math.round((totRec-totCmv)/totRec*100)+'% da receita':''}</div></div>
+  </div>`+
+  `<div class="card section-gap"><div class="card-h"><h3>Margem por item vendável</h3><span class="subtle">${resumo}</span></div>
+    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Vendidos</th><th class="r">Receita</th><th class="r">Margem</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 
 /* ================= RELATÓRIOS ================= */
@@ -3718,6 +3730,7 @@ VIEWS.relatorios=function(){
   // custo por linha (usa cmv fotografado; se não tiver, calcula no custo atual)
   const custoLinha=(l)=> (l.cmv_unitario!=null?l.cmv_unitario:custoItem(l.item_id))||0;
   let custoTotal=0;
+  let marmitasVendidas=0; // quantidade de linha × unidades equivalentes (combo de 5 marmitas conta 5)
   const porProduto={}; // item_id -> {nome,qtd,receita,custo}
   const porCliente={}; // chave -> {nome,qtd,receita,ultima}
   const porDiaSemana=[0,0,0,0,0,0,0];
@@ -3729,7 +3742,9 @@ VIEWS.relatorios=function(){
     pc.qtd++; pc.receita+=p.valor_total||0; if(p.data_entrega>pc.ultima)pc.ultima=p.data_entrega;
     (p.itens||[]).forEach(l=>{
       const cu=custoLinha(l); custoTotal+=cu*l.quantidade;
-      const pp=porProduto[l.item_id]||(porProduto[l.item_id]={nome:(itemById(l.item_id)||{}).nome||l.item_id,qtd:0,receita:0,custo:0});
+      const it=itemById(l.item_id);
+      marmitasVendidas+=l.quantidade*((it&&it.unidades_equivalentes)||1);
+      const pp=porProduto[l.item_id]||(porProduto[l.item_id]={nome:(it||{}).nome||l.item_id,qtd:0,receita:0,custo:0});
       pp.qtd+=l.quantidade; pp.receita+=l.quantidade*l.preco_unitario; pp.custo+=cu*l.quantidade;
     });
   });
@@ -3851,8 +3866,9 @@ VIEWS.relatorios=function(){
   return header('Dashboard','var(--m-dashboard)',`Vendas entregues no período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
   abertosCard+
   `<div class="cat-chips" style="margin-top:26px">${chipsPeriodo}</div>${customFields}
-  <div class="grid g4 section-gap">
+  <div class="grid g5 section-gap">
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-pedidos)"></span>Receita</div><div class="k-value num">${money(receita)}</div><div class="k-foot">${nPedidos} pedidos</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-producao)"></span>Marmitas vendidas</div><div class="k-value num">${marmitasVendidas.toLocaleString('pt-BR')}</div><div class="k-foot">${nPedidos?(marmitasVendidas/nPedidos).toFixed(1)+' por pedido':''}</div></div>
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--primary)"></span>Ticket médio</div><div class="k-value num">${money(ticket)}</div></div>
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-margens)"></span>Margem (CMV)</div><div class="k-value num">${money(margemTotal)}</div><div class="k-foot">${receita?Math.round(margemTotal/receita*100):0}% da receita</div></div>
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Clientes atendidos</div><div class="k-value num">${clientesAtendidos}</div><div class="k-foot">${inativos.length} compraram só 1x (${money(inativosValor)})</div></div>

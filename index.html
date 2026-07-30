@@ -776,6 +776,10 @@ VIEWS.itens=function(){
     const fs=(i.funcoes||[]).map(f=>{const F=FUNCOES.find(x=>x.id===f);return `<span class="tag f">${F?F.nome:f}</span>`;}).join(' ');
     const s=temFuncao(i,'estocavel')?qty(saldo(i.id),i.unidade_base):'—';
     const c=custoItem(i.id);
+    // Excluir de vez só existe pra pré-preparo/produto (produzível) e só quando não deixa
+    // rastro nenhum pra trás (sem movimento, sem pedido, sem ser componente de outra receita).
+    // Matéria-prima nunca ganha esse botão — pra ela o caminho é sempre Inativar.
+    const podeExcluir=temFuncao(i,'produzivel')&&itemPodeSerExcluido(i.id);
     return `<tr>
       <td><b>${esc(i.nome)}</b><div class="mono-id">${i.id}${i.categoria?' · '+esc(i.categoria):''}</div></td>
       <td>${fs||'<span class="tag mut">sem função</span>'}</td>
@@ -783,7 +787,8 @@ VIEWS.itens=function(){
       <td class="r num">${c!=null?money(c)+'/'+i.unidade_base:'—'}</td>
       <td class="r num">${temFuncao(i,'vendavel')&&i.preco_venda?money(i.preco_venda):'—'}</td>
       <td class="r"><button class="btn sm" onclick="modalItem('${i.id}')">Editar</button>
-        <button class="btn sm ghost" onclick="toggleItem('${i.id}')">${i.ativo===false?'Reativar':'Inativar'}</button></td></tr>`;
+        <button class="btn sm ghost" onclick="toggleItem('${i.id}')">${i.ativo===false?'Reativar':'Inativar'}</button>
+        ${podeExcluir?`<button class="btn sm ghost" style="color:var(--danger,#B3372C)" title="Sem histórico algum — pode excluir de vez" onclick="excluirItemDefinitivo('${i.id}')">Excluir</button>`:''}</td></tr>`;
   };
   const ativos=S.itens.filter(i=>i.ativo!==false&&passaFiltro(i)).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
   const inativos=S.itens.filter(i=>i.ativo===false).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
@@ -1058,6 +1063,41 @@ function toggleComposicao(paiId){
   registrarEvento('COMPOSICAO_DEFINIDA',`${it?it.nome:paiId}: composição ${ativa?'inativada':'reativada'}`,paiId);
   scheduleSave(); render(); toast(ativa?'Composição inativada.':'Composição reativada.');
 }
+/* ---------- Exclusão definitiva (só pré-preparo/produto, e só quando 100% seguro) ----------
+   Matéria-prima nunca tem exclusão — só Inativar. Pré-preparo/produto só pode ser excluído de
+   verdade quando não deixa nenhum rastro pra trás: sem movimento de estoque, sem aparecer em
+   nenhum pedido (nem como componente de marmita sob medida), sem ser componente da ficha técnica
+   de outro item, e sem estar em nenhum perfil de marmita sob medida salvo. Isso evita apagar por
+   engano algo que já tem histórico real — pra esses casos o caminho continua sendo Inativar. */
+function referenciasDoItem(id){
+  const refs=[];
+  const nMov=S.movimentos.filter(m=>m.item_id===id).length;
+  if(nMov)refs.push(`${nMov} movimento(s) de estoque (compra/produção/ajuste)`);
+  const nPed=S.pedidos.filter(p=>(p.itens||[]).some(l=>l.item_id===id||(l.componentes||[]).some(c=>c.item_id===id))).length;
+  if(nPed)refs.push(`${nPed} pedido(s)`);
+  const composFilho=S.composicoes.filter(c=>c.item_filho_id===id);
+  if(composFilho.length){
+    const paisNomes=[...new Set(composFilho.map(c=>nomeItem(c.item_pai_id)))];
+    refs.push(`componente da ficha técnica de: ${paisNomes.join(', ')}`);
+  }
+  const nPerfil=(S.perfis_marmita||[]).filter(p=>p.produtoBaseId===id||(p.componentes||[]).some(c=>c.item_id===id)).length;
+  if(nPerfil)refs.push(`${nPerfil} perfil(is) de marmita sob medida salvos`);
+  return refs;
+}
+function itemPodeSerExcluido(id){ return id!==ITEM_ID_SOB_MEDIDA && referenciasDoItem(id).length===0; }
+function excluirItemDefinitivo(id){
+  const it=itemById(id); if(!it)return;
+  const refs=referenciasDoItem(id);
+  if(id===ITEM_ID_SOB_MEDIDA||refs.length){
+    toast('Não dá pra excluir — esse item tem histórico ou é usado em outro lugar. Use Inativar.',true);
+    return;
+  }
+  if(!confirm(`Excluir definitivamente "${it.nome}"? Diferente de inativar, isso não pode ser desfeito — o item some do cadastro.`))return;
+  S.itens=S.itens.filter(i=>i.id!==id);
+  S.composicoes=S.composicoes.filter(c=>c.item_pai_id!==id); // remove a própria ficha técnica dele
+  registrarEvento('ITEM_ATUALIZADO',`${it.nome} excluído definitivamente do cadastro`,id);
+  scheduleSave(); render(); toast('Item excluído.');
+}
 function blocoComposicao(pid,mostrarPreco){
   const it=itemById(pid); if(!it)return'';
   const ativa=composicaoAtiva(pid);
@@ -1079,8 +1119,9 @@ function blocoComposicao(pid,mostrarPreco){
     if(cf)extra+=` &nbsp;<span class="subtle">+ fixo ${money(cf)}</span>`;
     if(it.preco_venda&&custoTotal!=null)extra+=` &nbsp;<span class="subtle">margem ${(((it.preco_venda-custoTotal)/it.preco_venda)*100).toFixed(0)}%</span>`;
   }
+  const podeExcluir=itemPodeSerExcluido(pid);
   return `<details class="comp-tree" style="${ativa?'':'opacity:.55'}"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)}${ativa?'':' <span class="tag mut">inativa</span>'} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span></span>
-    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleComposicao('${pid}')">${ativa?'inativar':'reativar'}</a></span></summary>
+    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleComposicao('${pid}')">${ativa?'inativar':'reativar'}</a>${podeExcluir?` &nbsp;<a class="link" style="color:var(--danger,#B3372C)" onclick="event.preventDefault();excluirItemDefinitivo('${pid}')" title="Sem histórico algum — pode excluir de vez">excluir</a>`:''}</span></summary>
     <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
 }
 let filtroCategoriaComposicoes='';

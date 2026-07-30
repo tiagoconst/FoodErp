@@ -3612,11 +3612,9 @@ VIEWS.margens=function(){
   const {ini,fim,label}=relIntervalo(); // mesmo filtro de período do Dashboard (relPeriodo é global, compartilhado)
   let totRec=0, totCmv=0, totMarmitas=0;
   const dados=vend.map(i=>{
-    const cmv=custoItem(i.id), pv=i.preco_venda;
+    let cmv=custoItem(i.id), pv=i.preco_venda;
     const cf=cfPorUnidade*(i.unidades_equivalentes||1);
-    const custoTotal=cmv!=null?cmv+cf:null;
-    const margem=(pv!=null&&custoTotal!=null)?pv-custoTotal:null;
-    const mp=(margem!=null&&pv)?margem/pv*100:null;
+    const ehSobMedida=i.id===ITEM_ID_SOB_MEDIDA;
     let qP=0, recP=0, cmvP=0, temCmv=false;
     S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim)
       .forEach(p=>p.itens.filter(l=>l.item_id===i.id).forEach(l=>{
@@ -3624,7 +3622,18 @@ VIEWS.margens=function(){
         const cu=(l.cmv_unitario!=null)?l.cmv_unitario:cmv;
         if(cu!=null){ temCmv=true; cmvP+=(cu+cf)*l.quantidade; } }));
     totRec+=recP; totCmv+=temCmv?cmvP:0; totMarmitas+=qP*(i.unidades_equivalentes||1);
-    return {i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv};
+    // Marmita Sob Medida não tem ficha técnica fixa (é montada componente a componente em cada pedido),
+    // então custoItem() nunca acha nada pra ela — sem isso a linha ficava sempre com custo/preço vazios
+    // mesmo com os componentes preenchidos certinho em cada marmita. Aqui usamos a média real do que
+    // foi montado e vendido no período (fotografada em cmv_unitario/preco_unitario de cada pedido).
+    if(ehSobMedida&&qP>0){
+      if(cmv==null&&temCmv)cmv=(cmvP/qP)-cf;
+      if(!pv)pv=recP/qP;
+    }
+    const custoTotal=cmv!=null?cmv+cf:null;
+    const margem=(pv!=null&&custoTotal!=null)?pv-custoTotal:null;
+    const mp=(margem!=null&&pv)?margem/pv*100:null;
+    return {i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida};
   });
   const ORDENACOES={
     nome:(a,b)=>a.i.nome.localeCompare(b.i.nome,'pt'),
@@ -3633,9 +3642,9 @@ VIEWS.margens=function(){
     receita:(a,b)=>b.recP-a.recP||a.i.nome.localeCompare(b.i.nome,'pt')
   };
   const dadosOrdenados=dados.slice().sort(ORDENACOES[margensOrdenacao]||ORDENACOES.nome);
-  const rows=dadosOrdenados.map(({i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv})=>{
+  const rows=dadosOrdenados.map(({i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida})=>{
     const mtag=mp==null?'':(mp<0?'<span class="tag bad">'+Math.round(mp)+'%</span>':(mp<30?'<span class="tag warn">'+Math.round(mp)+'%</span>':'<span class="tag f">'+Math.round(mp)+'%</span>'));
-    return `<tr><td><b>${esc(i.nome)}</b></td>
+    return `<tr><td><b>${esc(i.nome)}</b>${ehSobMedida?`<div class="subtle" style="font-size:11px">${qP?'médias do período (varia por marmita montada)':'sem marmitas montadas no período'}</div>`:''}</td>
       <td class="r num">${pv!=null?money(pv):'—'}</td>
       <td class="r num">${cmv!=null?money(cmv):'—'}</td>
       <td class="r num">${cf?money(cf):'—'}</td>

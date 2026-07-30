@@ -12,7 +12,7 @@
   --bg:#F6F4EE; --panel:#FFFFFF; --ink:#22271F; --muted:#6F7568; --line:#E4E1D6; --soft:#EFEDE4;
   --primary:#2E6E4E; --primary-dark:#20523A; --accent:#E0A63C; --danger:#B3372C; --ok:#2E6E4E;
   --m-dashboard:#5B3A8C; --m-itens:#1F4E79; --m-composicao:#0F6E6E; --m-produtos:#9C4221; --m-compras:#7A4A12; --m-relatorios:#3E5F8A;
-  --m-estoque:#5F6B1B; --m-producao:#C05E10; --m-pedidos:#1F6FB2; --m-financeiro:#9E2B25; --m-eventos:#8C1D3F; --m-clientes:#7A3E6B; --m-margens:#A87718; --m-planejamento:#2F6B7A; --m-fornecedores:#8A6642; --m-integracoes:#4A5FA5; --m-funcionarios:#3D7A6E;
+  --m-estoque:#5F6B1B; --m-producao:#C05E10; --m-pedidos:#1F6FB2; --m-financeiro:#9E2B25; --m-eventos:#8C1D3F; --m-clientes:#7A3E6B; --m-margens:#A87718; --m-planejamento:#2F6B7A; --m-fornecedores:#8A6642; --m-integracoes:#4A5FA5; --m-funcionarios:#3D7A6E; --m-custos:#7A2E2E;
   --radius:10px; --shadow:0 1px 2px rgba(30,35,25,.06),0 4px 14px rgba(30,35,25,.05);
   font-size:15px;
 }
@@ -304,6 +304,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <div class="nav-label">Gestão</div>
     <button class="nav-btn" data-view="financeiro"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Financeiro</button>
     <button class="nav-btn" data-view="custosfixos"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Custos Fixos</button>
+    <button class="nav-btn" data-view="custos"><span class="nav-dot" style="background:var(--m-custos)"></span>Auditoria de Custos<span class="count" id="cnt-custos"></span></button>
     <button class="nav-btn" data-view="margens"><span class="nav-dot" style="background:var(--m-margens)"></span>Margens</button>
     <button class="nav-btn" data-view="integracoes"><span class="nav-dot" style="background:var(--m-integracoes)"></span>Integrações</button>
     <button class="nav-btn" data-view="dados"><span class="nav-dot" style="background:#6E7468"></span>Dados &amp; Backup</button>
@@ -723,6 +724,7 @@ function render(){
   $('#cnt-itens').textContent=S.itens.filter(i=>i.ativo!==false).length||'';
   $('#cnt-pedidos').textContent=S.pedidos.filter(p=>p.status==='confirmado').length||'';
   $('#cnt-eventos').textContent=S.eventos.length>99?'99+':(S.eventos.length||'');
+  $('#cnt-custos').textContent=auditoriaCustos().semCusto.length||'';
 }
 function header(titulo,corVar,sub,acoesHtml){
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:${corVar}"></span>${titulo}</h1>
@@ -3483,6 +3485,71 @@ function modalHistFornecedor(id){
   <div class="m-b"><table><thead><tr><th>Data</th><th>Itens</th><th class="r">Total</th></tr></thead><tbody>${rows}</tbody></table></div>
   <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button></div>`,true);
 }
+
+/* ================= AUDITORIA DE CUSTOS ================= */
+// Item comprável ou produzível sem custo calculado maquia o CMV de tudo que depende dele
+// (composição, produto final, margem). Esta tela existe pra caçar isso antes que vire preço errado.
+function auditoriaCustos(){
+  const itensAud=S.itens.filter(i=>i.ativo!==false&&(temFuncao(i,'compravel')||temFuncao(i,'produzivel')));
+  const semCusto=[], zerados=[];
+  itensAud.forEach(i=>{
+    const c=custoItem(i.id);
+    if(c==null){
+      const comps=componentesDe(i.id);
+      let motivo;
+      if(comps.length){
+        const quebrados=comps.filter(cc=>custoItem(cc.item_filho_id)==null).map(cc=>nomeItem(cc.item_filho_id));
+        motivo=quebrados.length?'Componente(s) sem custo: '+quebrados.join(', '):'Ficha técnica sem rendimento válido';
+      }else if(temFuncao(i,'compravel')){
+        motivo='Nenhuma compra registrada com valor';
+      }else{
+        motivo='Sem ficha técnica e sem compra registrada';
+      }
+      semCusto.push({item:i,motivo});
+    }else if(c===0){
+      zerados.push({item:i});
+    }
+  });
+  const quebras=[];
+  S.composicoes.filter(cc=>cc.ativo!==false).forEach(cc=>{
+    if(custoItem(cc.item_filho_id)==null){
+      const pai=itemById(cc.item_pai_id), filho=itemById(cc.item_filho_id);
+      if(pai&&filho&&pai.ativo!==false)quebras.push({pai,filho,qtd:cc.quantidade});
+    }
+  });
+  return {semCusto,zerados,quebras,totalAuditado:itensAud.length};
+}
+VIEWS.custos=function(){
+  const {semCusto,zerados,quebras,totalAuditado}=auditoriaCustos();
+  const pctOk=totalAuditado?Math.round((totalAuditado-semCusto.length)/totalAuditado*100):100;
+  const rowsSem=semCusto.slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt')).map(({item:i,motivo})=>{
+    const acao=temFuncao(i,'compravel')
+      ?`<button class="btn sm primary" onclick="modalCompra([{item:'${i.id}',qtd:'',total:'',lote:'',validade:''}])">Registrar compra</button>`
+      :`<button class="btn sm" onclick="modalItem('${i.id}')">Editar item</button>`;
+    return `<tr><td><b>${esc(i.nome)}</b><div class="mono-id">${i.id}${i.categoria?' · '+esc(i.categoria):''}</div></td>
+      <td>${(i.funcoes||[]).map(f=>{const F=FUNCOES.find(x=>x.id===f);return `<span class="tag f">${F?F.nome:f}</span>`;}).join(' ')}</td>
+      <td class="subtle">${esc(motivo)}</td>
+      <td class="r">${acao}</td></tr>`;
+  }).join('')||`<tr><td colspan="4"><div class="empty"><b>Nenhum item sem custo</b>Todo item comprável ou produzível ativo tem custo calculado.</div></td></tr>`;
+  const rowsZero=zerados.slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt')).map(({item:i})=>
+    `<tr><td><b>${esc(i.nome)}</b><div class="mono-id">${i.id}</div></td>
+     <td class="r num">${money(0)}/${i.unidade_base}</td>
+     <td class="subtle">Confira se a última compra ou produção foi lançada com valor R$ 0,00 por engano.</td>
+     <td class="r"><button class="btn sm" onclick="modalCompra([{item:'${i.id}',qtd:'',total:'',lote:'',validade:''}])">Registrar compra</button></td></tr>`
+  ).join('')||`<tr><td colspan="4"><div class="empty">Nenhum item com custo zerado.</div></td></tr>`;
+  const rowsQuebra=quebras.slice().sort((a,b)=>a.pai.nome.localeCompare(b.pai.nome,'pt')).map(({pai,filho,qtd})=>
+    `<tr><td><b>${esc(pai.nome)}</b></td><td>${esc(filho.nome)}</td><td class="r num">${qty(qtd,filho.unidade_base)}</td>
+     <td class="r"><button class="btn sm" onclick="modalItem('${filho.id}')">Corrigir ${esc(filho.nome)}</button></td></tr>`
+  ).join('')||`<tr><td colspan="4"><div class="empty">Nenhuma quebra de ficha técnica encontrada.</div></td></tr>`;
+  return header('Auditoria de Custos','var(--m-custos)','Nenhuma matéria-prima ou pré-preparo deve ficar sem custo real — senão a margem calculada engana.',
+    `<span class="tag ${semCusto.length?'bad':'f'}" style="font-size:13px;padding:6px 12px">${pctOk}% dos ${totalAuditado} itens auditados com custo</span>`)+
+  `<div class="card"><div class="card-h"><h3>Sem custo (${semCusto.length})</h3><span class="subtle">Comprável ou produzível ativo, sem nenhum custo calculado — qualquer prato que dependa disso está com CMV subestimado.</span></div>
+    <table><thead><tr><th>Item</th><th>Funções</th><th>Motivo provável</th><th class="r"></th></tr></thead><tbody>${rowsSem}</tbody></table></div>
+   <div class="card section-gap"><div class="card-h"><h3>Custo zerado (${zerados.length})</h3><span class="subtle">Custo calculado é exatamente R$ 0,00 — normalmente é compra ou produção lançada sem valor, não item de graça.</span></div>
+    <table><thead><tr><th>Item</th><th class="r">Custo</th><th>Observação</th><th class="r"></th></tr></thead><tbody>${rowsZero}</tbody></table></div>
+   <div class="card section-gap"><div class="card-h"><h3>Quebras na ficha técnica (${quebras.length})</h3><span class="subtle">Composições cujo componente não tem custo — é aqui que o problema nasce, antes de aparecer no prato final.</span></div>
+    <table><thead><tr><th>Prato / item pai</th><th>Componente sem custo</th><th class="r">Qtd usada</th><th class="r"></th></tr></thead><tbody>${rowsQuebra}</tbody></table></div>`;
+};
 
 /* ================= MARGENS ================= */
 VIEWS.margens=function(){

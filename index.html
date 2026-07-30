@@ -766,16 +766,16 @@ let filtroCategoriaItens='', filtroTipoItens='';
 const TIPOS_ITEM=[['MAT','Matéria-prima'],['PRE','Pré-preparo'],['PRD','Produto']];
 VIEWS.itens=function(){
   garantirCategoriasPadrao();
-  const lista=S.itens.filter(i=>{
+  const passaFiltro=i=>{
     if(filtroCategoriaItens&&i.categoria!==filtroCategoriaItens)return false;
     if(filtroTipoItens&&!i.id.startsWith(filtroTipoItens+'-'))return false;
     return !filtroItens||i.nome.toLowerCase().includes(filtroItens)||(i.categoria||'').toLowerCase().includes(filtroItens);
-  }).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
-  const rows=lista.map(i=>{
+  };
+  const linhaItem=i=>{
     const fs=(i.funcoes||[]).map(f=>{const F=FUNCOES.find(x=>x.id===f);return `<span class="tag f">${F?F.nome:f}</span>`;}).join(' ');
     const s=temFuncao(i,'estocavel')?qty(saldo(i.id),i.unidade_base):'—';
     const c=custoItem(i.id);
-    return `<tr style="${i.ativo===false?'opacity:.45':''}">
+    return `<tr>
       <td><b>${esc(i.nome)}</b><div class="mono-id">${i.id}${i.categoria?' · '+esc(i.categoria):''}</div></td>
       <td>${fs||'<span class="tag mut">sem função</span>'}</td>
       <td class="r num">${s}</td>
@@ -783,15 +783,23 @@ VIEWS.itens=function(){
       <td class="r num">${temFuncao(i,'vendavel')&&i.preco_venda?money(i.preco_venda):'—'}</td>
       <td class="r"><button class="btn sm" onclick="modalItem('${i.id}')">Editar</button>
         <button class="btn sm ghost" onclick="toggleItem('${i.id}')">${i.ativo===false?'Reativar':'Inativar'}</button></td></tr>`;
-  }).join('')||`<tr><td colspan="6"><div class="empty"><b>Nenhum item cadastrado</b>Item representa qualquer coisa que exista no sistema: insumo, preparo, produto, embalagem, serviço ou equipamento.</div></td></tr>`;
-  // só mostra categorias usadas por itens que NÃO são produto final vendável — categoria de cardápio fica na tela Produtos
-  const catNomesItens=new Set(S.itens.filter(i=>!temFuncao(i,'vendavel')&&i.categoria).map(i=>i.categoria));
-  const catsItens=S.categorias.filter(c=>c.ativo!==false&&catNomesItens.has(c.nome));
+  };
+  const ativos=S.itens.filter(i=>i.ativo!==false&&passaFiltro(i)).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  const inativos=S.itens.filter(i=>i.ativo===false).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+  const rows=ativos.map(linhaItem).join('')||`<tr><td colspan="6"><div class="empty"><b>Nenhum item cadastrado</b>Item representa qualquer coisa que exista no sistema: insumo, preparo, produto, embalagem, serviço ou equipamento.</div></td></tr>`;
+  const rowsInativos=inativos.map(linhaItem).join('');
+  // só mostra categorias usadas por itens ativos que NÃO são produto final vendável — categoria de cardápio fica na tela Produtos.
+  // ordem fixa: Tradicional, Fit, Conforto, Especiais, Massas, Gourmet primeiro (se aparecerem aqui); o resto em ordem alfabética.
+  const catNomesItens=new Set(S.itens.filter(i=>i.ativo!==false&&!temFuncao(i,'vendavel')&&i.categoria).map(i=>i.categoria));
+  const catsItens=ordenarCategorias([...catNomesItens],ORDEM_CATEGORIAS_CARDAPIO);
   const catChips=`<button class="cat-chip ${!filtroCategoriaItens?'active':''}" style="${!filtroCategoriaItens?'background:var(--primary)':''}" onclick='filtroCategoriaItens="";render()'>Todas</button>`+
-    catsItens.map(c=>`<button class="cat-chip ${filtroCategoriaItens===c.nome?'active':''}" style="${filtroCategoriaItens===c.nome?'background:'+corCategoria(c.nome):''}" onclick='filtroCategoriaItens=${JSON.stringify(c.nome)};render()'>${esc(c.nome)}</button>`).join('');
+    catsItens.map(c=>`<button class="cat-chip ${filtroCategoriaItens===c?'active':''}" style="${filtroCategoriaItens===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaItens=${JSON.stringify(c)};render()'>${esc(c)}</button>`).join('');
   const tipoChips=`<button class="cat-chip ${!filtroTipoItens?'active':''}" style="${!filtroTipoItens?'background:var(--primary)':''}" onclick='filtroTipoItens="";render()'>Todos os tipos</button>`+
     TIPOS_ITEM.map(([pref,label])=>{ const n=S.itens.filter(i=>i.id.startsWith(pref+'-')).length;
       return `<button class="cat-chip ${filtroTipoItens===pref?'active':''}" style="${filtroTipoItens===pref?'background:var(--primary)':''}" onclick='filtroTipoItens=${JSON.stringify(pref)};render()'>${label} (${n})</button>`; }).join('');
+
+  const tabelaInativos=inativos.length?`<div class="card section-gap" style="opacity:.7"><div class="card-h"><h3>Itens inativos (${inativos.length})</h3></div>
+    <table><thead><tr><th>Item</th><th>Funções</th><th class="r">Saldo</th><th class="r">Custo</th><th class="r">Preço venda</th><th class="r"></th></tr></thead><tbody>${rowsInativos}</tbody></table></div>`:'';
 
   return header('Itens','var(--m-itens)','Um item nunca muda de identidade — apenas ganha funções.',
     `<input class="search" id="busca-itens" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();refocarBusca('busca-itens')">
@@ -799,7 +807,8 @@ VIEWS.itens=function(){
      <button class="btn primary" onclick="modalItem()">+ Novo item</button>`)+
   `<div class="cat-chips">${tipoChips}</div>`+
   `<div class="cat-chips" style="margin-top:6px">${catChips}</div>`+
-  `<div class="card"><table><thead><tr><th>Item</th><th>Funções</th><th class="r">Saldo</th><th class="r">Custo</th><th class="r">Preço venda</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  `<div class="card"><table><thead><tr><th>Item</th><th>Funções</th><th class="r">Saldo</th><th class="r">Custo</th><th class="r">Preço venda</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`+
+  tabelaInativos;
 };
 
 function modalCategorias(){

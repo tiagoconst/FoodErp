@@ -780,8 +780,9 @@ VIEWS.itens=function(){
     // rastro nenhum pra trás (sem movimento, sem pedido, sem ser componente de outra receita).
     // Matéria-prima nunca ganha esse botão — pra ela o caminho é sempre Inativar.
     const podeExcluir=temFuncao(i,'produzivel')&&itemPodeSerExcluido(i.id);
+    const usos=(i.ativo!==false&&!temFuncao(i,'vendavel'))?usosAtivosDoItem(i.id):[];
     return `<tr>
-      <td><b>${esc(i.nome)}</b><div class="mono-id">${i.id}${i.categoria?' · '+esc(i.categoria):''}</div></td>
+      <td><b>${esc(i.nome)}</b><div class="mono-id">${i.id}${i.categoria?' · '+esc(i.categoria):''}</div>${usos.length?`<div class="subtle" style="font-size:11px">usado em: ${esc(usos.join(', '))}</div>`:''}</td>
       <td>${fs||'<span class="tag mut">sem função</span>'}</td>
       <td class="r num">${s}</td>
       <td class="r num">${c!=null?money(c)+'/'+i.unidade_base:'—'}</td>
@@ -1040,8 +1041,27 @@ function salvarItem(id){
     registrarEvento('ITEM_CRIADO',`${nome} criado com funções: ${funcoes.join(', ')||'nenhuma'}`,nid); }
   closeModal(); scheduleSave(); render(); toast('Item salvo.');
 }
-function toggleItem(id){ const i=itemById(id); i.ativo=i.ativo===false; // registros não são excluídos, apenas inativados
-  registrarEvento('ITEM_ATUALIZADO',`${i.nome} ${i.ativo?'reativado':'inativado'}`,id); scheduleSave(); render(); }
+// Onde este item é usado como componente de uma composição ATIVA (de outro pré-preparo ou de
+// um produto final) — é isso que trava o Inativar pra matéria-prima/pré-preparo.
+function usosAtivosDoItem(id){
+  return [...new Set(S.composicoes.filter(c=>c.item_filho_id===id&&c.ativo!==false).map(c=>nomeItem(c.item_pai_id)))];
+}
+function toggleItem(id){
+  const i=itemById(id); if(!i)return;
+  const vaiInativar=i.ativo!==false; // hoje está ativo, essa ação vai inativar
+  // Produto final (vendável) pode ser inativado livremente — ele é o topo da cadeia, tirar ele
+  // do ar não quebra nenhuma outra ficha técnica. Matéria-prima e pré-preparo, não: se algum
+  // produto final ou outro pré-preparo ainda usa esse item numa composição ativa, bloqueia.
+  if(vaiInativar&&!temFuncao(i,'vendavel')){
+    const usos=usosAtivosDoItem(id);
+    if(usos.length){
+      alert(`Não dá pra inativar "${i.nome}" agora — ele ainda está na ficha técnica de:\n\n${usos.map(n=>'• '+n).join('\n')}\n\nRemova "${i.nome}" dessas receitas (ou inative essas receitas) antes de inativar o item.`);
+      return;
+    }
+  }
+  i.ativo=i.ativo===false; // registros não são excluídos, apenas inativados
+  registrarEvento('ITEM_ATUALIZADO',`${i.nome} ${i.ativo?'reativado':'inativado'}`,id); scheduleSave(); render();
+}
 function toggleQueridinho(id){
   const i=itemById(id); if(!i)return;
   i.destaque_manual=!i.destaque_manual;

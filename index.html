@@ -1120,9 +1120,10 @@ function excluirItemDefinitivo(id){
 }
 function blocoComposicao(pid,mostrarPreco){
   const it=itemById(pid); if(!it)return'';
-  const ativa=composicaoAtiva(pid);
+  const ativo=it.ativo!==false; // agora é o ITEM que manda aqui — mesmo campo/mesma trava da aba Itens
   const comps=composicoesDeTodas(pid);
-  const custo=ativa?custoItem(pid):null;
+  const custo=custoItem(pid);
+  const usos=(ativo&&!temFuncao(it,'vendavel'))?usosAtivosDoItem(pid):[];
   const linhas=comps.map(c=>{
     const f=itemById(c.item_filho_id); const cu=custoItem(c.item_filho_id);
     const sub=f&&componentesDe(f.id).length?` <span class="tag info">também composto</span>`:'';
@@ -1140,8 +1141,8 @@ function blocoComposicao(pid,mostrarPreco){
     if(it.preco_venda&&custoTotal!=null)extra+=` &nbsp;<span class="subtle">margem ${(((it.preco_venda-custoTotal)/it.preco_venda)*100).toFixed(0)}%</span>`;
   }
   const podeExcluir=itemPodeSerExcluido(pid);
-  return `<details class="comp-tree" style="${ativa?'':'opacity:.55'}"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)}${ativa?'':' <span class="tag mut">inativa</span>'} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span></span>
-    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleComposicao('${pid}')">${ativa?'inativar':'reativar'}</a>${podeExcluir?` &nbsp;<a class="link" style="color:var(--danger,#B3372C)" onclick="event.preventDefault();excluirItemDefinitivo('${pid}')" title="Sem histórico algum — pode excluir de vez">excluir</a>`:''}</span></summary>
+  return `<details class="comp-tree" style="${ativo?'':'opacity:.55'}"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span>${usos.length?`<div class="subtle" style="font-size:11px">usado em: ${esc(usos.join(', '))}</div>`:''}</span>
+    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleItem('${pid}')">${ativo?'inativar':'reativar'}</a>${podeExcluir?` &nbsp;<a class="link" style="color:var(--danger,#B3372C)" onclick="event.preventDefault();excluirItemDefinitivo('${pid}')" title="Sem histórico algum — pode excluir de vez">excluir</a>`:''}</span></summary>
     <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
 }
 let filtroCategoriaComposicoes='';

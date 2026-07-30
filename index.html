@@ -128,7 +128,11 @@ td.r,th.r{text-align:right}
 .cat-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px;margin-bottom:20px}
 .cat-chip{padding:6px 14px;border-radius:99px;font-size:12.5px;font-weight:600;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;white-space:nowrap}
 .cat-chip.active{color:#fff;border-color:transparent}
-.prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.prod-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:1150px){.prod-grid{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:980px){.prod-grid{grid-template-columns:repeat(3,1fr)}}
+.prod-group{margin-bottom:24px}
+.prod-group-h{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid;padding-bottom:7px;margin-bottom:12px}
 .prod-card{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px;cursor:pointer;transition:transform .08s,box-shadow .08s;user-select:none}
 .prod-card:hover{box-shadow:var(--shadow);transform:translateY(-1px)}
 .prod-card .pc-cat{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700;opacity:.85;margin-bottom:6px}
@@ -287,11 +291,13 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <div class="nav-label">Visão</div>
     <button class="nav-btn" data-view="dashboard"><span class="nav-dot" style="background:var(--m-dashboard)"></span>Dashboard</button>
     <button class="nav-btn" data-view="eventos"><span class="nav-dot" style="background:var(--m-eventos)"></span>Eventos<span class="count" id="cnt-eventos"></span></button>
+    <div class="nav-label">Vendas</div>
+    <button class="nav-btn" data-view="pedidos"><span class="nav-dot" style="background:var(--m-pedidos)"></span>Pedidos<span class="count" id="cnt-pedidos"></span></button>
+    <button class="nav-btn" data-view="clientes"><span class="nav-dot" style="background:var(--m-clientes)"></span>Clientes</button>
     <div class="nav-label">Cadastro</div>
     <button class="nav-btn" data-view="itens"><span class="nav-dot" style="background:var(--m-itens)"></span>Itens<span class="count" id="cnt-itens"></span></button>
     <button class="nav-btn" data-view="composicoes"><span class="nav-dot" style="background:var(--m-composicao)"></span>Composições</button>
     <button class="nav-btn" data-view="produtos"><span class="nav-dot" style="background:var(--m-produtos)"></span>Produtos</button>
-    <button class="nav-btn" data-view="clientes"><span class="nav-dot" style="background:var(--m-clientes)"></span>Clientes</button>
     <button class="nav-btn" data-view="fornecedores"><span class="nav-dot" style="background:var(--m-fornecedores)"></span>Fornecedores</button>
     <button class="nav-btn" data-view="funcionarios"><span class="nav-dot" style="background:var(--m-funcionarios)"></span>Funcionários</button>
     <div class="nav-label">Operação</div>
@@ -300,7 +306,6 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <button class="nav-btn" data-view="producao"><span class="nav-dot" style="background:var(--m-producao)"></span>Produção</button>
     <button class="nav-btn" data-view="planejamento"><span class="nav-dot" style="background:var(--m-planejamento)"></span>Planejamento</button>
     <button class="nav-btn" data-view="consumo"><span class="nav-dot" style="background:var(--m-planejamento)"></span>Consumo</button>
-    <button class="nav-btn" data-view="pedidos"><span class="nav-dot" style="background:var(--m-pedidos)"></span>Pedidos<span class="count" id="cnt-pedidos"></span></button>
     <div class="nav-label">Gestão</div>
     <button class="nav-btn" data-view="financeiro"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Financeiro</button>
     <button class="nav-btn" data-view="custosfixos"><span class="nav-dot" style="background:var(--m-financeiro)"></span>Custos Fixos</button>
@@ -347,6 +352,22 @@ const FUNCOES = [
   {id:'ativo_imob',   nome:'Ativo imobilizado', desc:'Bem patrimonial / equipamento'}
 ];
 const UNIDADES = ['g','ml','un'];
+/* ---------- Ordem fixa das categorias de cardápio (prato final) ---------- */
+// cada grupo lista as variações (singular/plural, com/sem acento já normalizado) aceitas pro nome real da categoria
+const ORDEM_CATEGORIAS_CARDAPIO=[
+  ['tradicional','tradicionais'],
+  ['fit','fits'],
+  ['conforto','confortos'],
+  ['especial','especiais'],
+  ['massa','massas'],
+  ['gourmet','gourmets']
+];
+const ORDEM_CATEGORIAS_PEDIDO=[...ORDEM_CATEGORIAS_CARDAPIO,['personalizada','personalizado','personalizados']];
+function normalizarCategoria(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
+function rankCategoria(nome,ordem){ const n=normalizarCategoria(nome); const idx=ordem.findIndex(grupo=>grupo.includes(n)); return idx===-1?ordem.length:idx; }
+function ordenarCategorias(nomes,ordem){ return nomes.slice().sort((a,b)=>{ const ra=rankCategoria(a,ordem),rb=rankCategoria(b,ordem); return ra!==rb?ra-rb:a.localeCompare(b,'pt'); }); }
+/* ---------- Refoco de campos de busca após re-render (senão perde o foco a cada tecla) ---------- */
+function refocarBusca(id){ const el=document.getElementById(id); if(el){ el.focus(); const n=el.value.length; el.setSelectionRange(n,n); } }
 const EVENTO_CORES = {
   COMPRA_REGISTRADA:'var(--m-compras)', PRODUCAO_REALIZADA:'var(--m-producao)',
   PEDIDO_CONFIRMADO:'var(--m-pedidos)', PEDIDO_ENTREGUE:'var(--m-pedidos)',
@@ -773,7 +794,7 @@ VIEWS.itens=function(){
       return `<button class="cat-chip ${filtroTipoItens===pref?'active':''}" style="${filtroTipoItens===pref?'background:var(--primary)':''}" onclick='filtroTipoItens=${JSON.stringify(pref)};render()'>${label} (${n})</button>`; }).join('');
 
   return header('Itens','var(--m-itens)','Um item nunca muda de identidade — apenas ganha funções.',
-    `<input class="search" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();this.focus();this.setSelectionRange(99,99)">
+    `<input class="search" id="busca-itens" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();refocarBusca('busca-itens')">
      <button class="btn" onclick="modalCategorias()">🏷️ Categorias</button>
      <button class="btn primary" onclick="modalItem()">+ Novo item</button>`)+
   `<div class="cat-chips">${tipoChips}</div>`+
@@ -1052,30 +1073,44 @@ function blocoComposicao(pid,mostrarPreco){
     <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleComposicao('${pid}')">${ativa?'inativar':'reativar'}</a></span></summary>
     <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
 }
+let filtroCategoriaComposicoes='';
 VIEWS.composicoes=function(){
-  const pais=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&!temFuncao(it,'vendavel'); });
-  const blocos=pais.map(pid=>blocoComposicao(pid,false)).join('')||
+  const nomeDe=pid=>(itemById(pid)||{}).nome||'';
+  const paisTodos=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&!temFuncao(it,'vendavel'); });
+  const ativos=paisTodos.filter(pid=>(itemById(pid)||{}).ativo!==false).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),'pt'));
+  const inativos=paisTodos.filter(pid=>(itemById(pid)||{}).ativo===false).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),'pt'));
+  const catNomes=new Set(ativos.map(pid=>(itemById(pid)||{}).categoria).filter(Boolean));
+  const cats=[...catNomes].sort((a,b)=>a.localeCompare(b,'pt'));
+  const ativosFiltrados=ativos.filter(pid=>!filtroCategoriaComposicoes||(itemById(pid)||{}).categoria===filtroCategoriaComposicoes);
+  const chips=cats.length?`<div class="cat-chips"><button class="cat-chip ${!filtroCategoriaComposicoes?'active':''}" style="${!filtroCategoriaComposicoes?'background:var(--primary)':''}" onclick='filtroCategoriaComposicoes="";render()'>Todas</button>`+
+    cats.map(c=>`<button class="cat-chip ${filtroCategoriaComposicoes===c?'active':''}" style="${filtroCategoriaComposicoes===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaComposicoes=${JSON.stringify(c)};render()'>${esc(c)}</button>`).join('')+`</div>`:'';
+  const blocos=ativosFiltrados.map(pid=>blocoComposicao(pid,false)).join('')||
     `<div class="card"><div class="empty"><b>Nenhuma composição definida</b>Composições são as fichas técnicas dos seus pré-preparos e itens intermediários — insumo → pré-preparo → pré-preparo. Para o produto final que você vende (com preço), use a aba <b>Produtos</b>.</div></div>`;
+  const blocosInativos=inativos.length?`<div class="card section-gap"><div class="card-h"><h3>Itens inativos (${inativos.length})</h3></div></div><div style="opacity:.7">${inativos.map(pid=>blocoComposicao(pid,false)).join('')}</div>`:'';
   return header('Composições','var(--m-composicao)','Fichas técnicas de pré-preparos e itens intermediários — não são vendidos diretamente.',
-    `<button class="btn primary" onclick="modalComposicao(null,'preparo')">+ Definir composição</button>`)+blocos;
+    `<button class="btn primary" onclick="modalComposicao(null,'preparo')">+ Definir composição</button>`)+chips+blocos+blocosInativos;
 };
 let filtroCategoriaProdutos='';
 VIEWS.produtos=function(){
-  const pais=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&temFuncao(it,'vendavel'); });
-  const paisFiltrados=pais.filter(pid=>!filtroCategoriaProdutos||(itemById(pid)||{}).categoria===filtroCategoriaProdutos);
+  const nomeDe=pid=>(itemById(pid)||{}).nome||'';
+  const paisTodos=[...new Set(S.composicoes.map(c=>c.item_pai_id))].filter(pid=>{ const it=itemById(pid); return it&&temFuncao(it,'vendavel'); });
+  const ativos=paisTodos.filter(pid=>(itemById(pid)||{}).ativo!==false).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),'pt'));
+  const inativos=paisTodos.filter(pid=>(itemById(pid)||{}).ativo===false).sort((a,b)=>nomeDe(a).localeCompare(nomeDe(b),'pt'));
+  const paisFiltrados=ativos.filter(pid=>!filtroCategoriaProdutos||(itemById(pid)||{}).categoria===filtroCategoriaProdutos);
   const semComposicao=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&!componentesDe(i.id).length);
   const blocos=paisFiltrados.map(pid=>blocoComposicao(pid,true)).join('')||
     `<div class="card"><div class="empty"><b>Nenhum produto com ficha técnica</b>Marque um item como <b>Vendável</b> em Itens, depois defina aqui do que ele é composto (itens e/ou pré-preparos) e o preço de venda.</div></div>`;
+  const inativosHtml=inativos.length?`<div class="card section-gap"><div class="card-h"><h3>Produtos inativos (${inativos.length})</h3></div></div><div style="opacity:.7">${inativos.map(pid=>blocoComposicao(pid,true)).join('')}</div>`:'';
   const aviso=semComposicao.length?`<div class="card section-gap"><div class="card-b"><p class="subtle"><b>${semComposicao.length} produto(s) vendável(is) sem ficha técnica:</b> ${semComposicao.map(i=>esc(i.nome)).join(', ')}. Sem composição definida o custo (CMV) não é calculado.</p></div></div>`:'';
-  // categoria de cardápio: só as usadas por produtos vendáveis (Tradicionais, Fit, Conforto...)
-  const catNomesProdutos=new Set(S.itens.filter(i=>temFuncao(i,'vendavel')&&i.categoria).map(i=>i.categoria));
-  const catsProdutos=S.categorias.filter(c=>c.ativo!==false&&catNomesProdutos.has(c.nome));
+  // categoria de cardápio: só as usadas por produtos ativos vendáveis, sempre na ordem Tradicional, Fit, Conforto, Especiais, Massas, Gourmet
+  const catNomesProdutos=new Set(ativos.map(pid=>(itemById(pid)||{}).categoria).filter(Boolean));
+  const catsProdutos=ordenarCategorias([...catNomesProdutos],ORDEM_CATEGORIAS_CARDAPIO);
   const chips=`<button class="cat-chip ${!filtroCategoriaProdutos?'active':''}" style="${!filtroCategoriaProdutos?'background:var(--primary)':''}" onclick='filtroCategoriaProdutos="";render()'>Todas</button>`+
-    catsProdutos.map(c=>`<button class="cat-chip ${filtroCategoriaProdutos===c.nome?'active':''}" style="${filtroCategoriaProdutos===c.nome?'background:'+corCategoria(c.nome):''}" onclick='filtroCategoriaProdutos=${JSON.stringify(c.nome)};render()'>${esc(c.nome)}</button>`).join('');
+    catsProdutos.map(c=>`<button class="cat-chip ${filtroCategoriaProdutos===c?'active':''}" style="${filtroCategoriaProdutos===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaProdutos=${JSON.stringify(c)};render()'>${esc(c)}</button>`).join('');
   return header('Produtos','var(--m-produtos)','O que você vende — composto por itens e/ou pré-preparos, com preço de venda definido aqui.',
     `<button class="btn" onclick="modalUploadMassa()">📸 Fotos em massa</button>
      <button class="btn primary" onclick="modalComposicao(null,'produto')">+ Definir produto</button>`)+
-  `<div class="cat-chips">${chips}</div>`+blocos+aviso;
+  `<div class="cat-chips">${chips}</div>`+blocos+aviso+inativosHtml;
 };
 
 /* ---------- Upload em massa de fotos (casa pelo nome do arquivo com o nome do produto) ---------- */
@@ -1603,7 +1638,7 @@ VIEWS.pedidos=function(){
   return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido (não conta produção/custo) → Confirmado → Em produção (contam produção + "em aberto") → Disponível → Entrega (Parcial ou Ag. Pagamento) → Finalizado. "Pago" pode ser marcado a partir de Confirmado, em qualquer etapa. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
     `<button class="btn" onclick="modalStatusPersonalizados()">⚙️ Status</button>
      <button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
-  `<input class="search" style="width:100%;margin-top:16px" placeholder="Item, cliente ou código" value="${esc(filtroBuscaPedido)}" oninput="filtroBuscaPedido=this.value;render();this.focus();this.setSelectionRange(99,99)">
+  `<input class="search" id="busca-pedidos" style="width:100%;margin-top:16px" placeholder="Item, cliente ou código" value="${esc(filtroBuscaPedido)}" oninput="filtroBuscaPedido=this.value;render();refocarBusca('busca-pedidos')">
   <div class="only-mobile" style="margin-top:12px">${statusSelectMobile}</div>
   <div class="only-desktop"><div class="cat-chips">${statusChips}</div>
     <div class="card"><table><thead><tr><th>Nº</th><th>Data</th><th>Cliente</th><th class="r">Itens</th><th class="r">Valor</th><th>Status</th><th class="r">Recibo</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -1712,7 +1747,8 @@ VIEWS.venda=function(){
   if(!vend.length)
     return header('Novo pedido','var(--m-pedidos)','',`<button class="btn" onclick="nav('pedidos')">← Voltar</button>`)+
     `<div class="card"><div class="empty"><b>Nenhum produto vendável cadastrado</b>Cadastre itens com a função Vendável (e preço de venda) em Itens.</div></div>`;
-  const cats=[...new Set(vend.map(i=>(i.categoria||'').trim()||'Sem categoria'))].sort((a,b)=>a.localeCompare(b,'pt'));
+  const catsRaw=[...new Set(vend.map(i=>(i.categoria||'').trim()||'Sem categoria'))];
+  const cats=ordenarCategorias(catsRaw,ORDEM_CATEGORIAS_PEDIDO);
   const busca=vendaBusca.toLowerCase();
   const filtrados=vend.filter(i=>{
     const cat=(i.categoria||'').trim()||'Sem categoria';
@@ -1726,7 +1762,7 @@ VIEWS.venda=function(){
     <option value="__todas__" ${vendaCat==='__todas__'?'selected':''}>Todas as categorias</option>
     ${cats.map(c=>`<option value="${esc(c)}" ${vendaCat===c?'selected':''}>${esc(c)}</option>`).join('')}
   </select>`;
-  const cards=filtrados.map(i=>{
+  const cartaoProduto=i=>{
     const cat=(i.categoria||'').trim()||'Sem categoria';
     const cor=corCategoria(cat);
     const sobMedida=i.id===ITEM_ID_SOB_MEDIDA;
@@ -1739,7 +1775,14 @@ VIEWS.venda=function(){
       <div class="pc-nome">${sobMedida?'🛠️ ':''}${esc(i.nome)}</div>
       <div class="pc-preco num">${sobMedida?'montar…':(i.preco_venda!=null?money(i.preco_venda):'—')}</div>
     </div>`;
-  }).join('')||`<div class="empty" style="grid-column:1/-1"><b>Nada encontrado</b>Tente outra busca ou categoria.</div>`;
+  };
+  // agrupa por categoria (na ordem fixa do cardápio + Personalizada), com uma linha separando cada grupo
+  const grupos=cats.map(cat=>({cat,itens:filtrados.filter(i=>((i.categoria||'').trim()||'Sem categoria')===cat)})).filter(g=>g.itens.length);
+  const cards=grupos.map(g=>{
+    const cor=corCategoria(g.cat);
+    return `<div class="prod-group"><div class="prod-group-h" style="border-color:${cor}"><span style="color:${cor}">${esc(g.cat)}</span><span class="subtle">${g.itens.length} item(ns)</span></div>
+      <div class="prod-grid">${g.itens.map(cartaoProduto).join('')}</div></div>`;
+  }).join('')||`<div class="empty"><b>Nada encontrado</b>Tente outra busca ou categoria.</div>`;
   const listaMobile=filtrados.map(i=>{
     const cat=(i.categoria||'').trim()||'Sem categoria';
     const cor=corCategoria(cat);
@@ -1760,8 +1803,8 @@ VIEWS.venda=function(){
     <div class="top-actions"><button class="btn" onclick="vendaSair()">← Voltar</button></div></div>
     <div class="venda-wrap">
       <div>
-        <input class="search" style="margin-bottom:12px;width:100%" placeholder="Buscar produto…" value="${esc(vendaBusca)}" oninput="vendaBusca=this.value;render();this.focus();this.setSelectionRange(99,99)">
-        <div class="only-desktop"><div class="cat-chips">${chips}</div><div class="prod-grid">${cards}</div></div>
+        <input class="search" id="busca-venda" style="margin-bottom:12px;width:100%" placeholder="Buscar produto…" value="${esc(vendaBusca)}" oninput="vendaBusca=this.value;render();refocarBusca('busca-venda')">
+        <div class="only-desktop"><div class="cat-chips">${chips}</div>${cards}</div>
         <div class="only-mobile"><div style="margin-bottom:10px">${catSelect}</div><div class="prod-list">${listaMobile}</div></div>
       </div>
       <div class="card cart-panel" id="carrinho-painel"><div class="card-h"><h3>🛒 Pedido</h3>${pedLinhas.length?`<button class="btn sm ghost" onclick="if(confirm('Esvaziar carrinho?')){pedLinhas=[];render()}">Esvaziar</button>`:''}</div>

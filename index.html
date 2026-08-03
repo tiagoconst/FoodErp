@@ -3024,7 +3024,7 @@ function imprimirListaCompras(){
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
 }
-let filtroCategoriaCompras='';
+let filtroCategoriaCompras='', filtroCategoriaPreparos='';
 function demandaPersonalizada(){
   const grupos={};
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
@@ -3077,22 +3077,39 @@ VIEWS.planejamento=function(){
   let resultado='';
   if(mrpResultado){
     const R=mrpResultado;
-    const etapasPrep=prePreparosPorEtapa(R.producoes);
+    // categorias presentes nos pré-preparos do plano atual (independe do filtro selecionado, pra
+    // não sumir chip enquanto ele tá ativo) + chip de filtro, igual ao padrão usado em Compras
+    const todosPrep=R.producoes.filter(p=>!temFuncao(p.item,'vendavel'));
+    const categoriasPrep=[...new Set(todosPrep.map(p=>p.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
+    const chipsPrep=categoriasPrep.length?`<div class="cat-chips" style="margin-top:12px;margin-bottom:6px">
+      <button class="cat-chip ${!filtroCategoriaPreparos?'active':''}" style="${!filtroCategoriaPreparos?'background:var(--primary)':''}" onclick="filtroCategoriaPreparos='';render()">Todas (${todosPrep.length})</button>
+      ${categoriasPrep.map(c=>{ const n=todosPrep.filter(p=>p.item.categoria===c).length;
+        return `<button class="cat-chip ${filtroCategoriaPreparos===c?'active':''}" style="${filtroCategoriaPreparos===c?'background:'+corCategoria(c):''}" onclick='filtroCategoriaPreparos=${JSON.stringify(c)};render()'>${esc(c)} (${n})</button>`; }).join('')}
+    </div>`:'';
+    const prepFiltrados=todosPrep.filter(p=>!filtroCategoriaPreparos||p.item.categoria===filtroCategoriaPreparos);
+    const etapasPrep=prePreparosPorEtapa(prepFiltrados);
     const prePreparos=etapasPrep.flatMap(e=>e.itens);
     const mostrarEtapas=etapasPrep.length>1;
+    // dentro de cada etapa, agrupa por categoria (Carboidratos, Proteína, Molho…) em ordem
+    // alfabética, pra facilitar achar tudo de um tipo junto na hora de organizar a produção
+    const porCategoria=itens=>{ const g={}; itens.forEach(p=>{ const c=p.item.categoria||'Sem categoria'; (g[c]=g[c]||[]).push(p); });
+      return Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt')).map(c=>({categoria:c,itens:g[c]})); };
     const etapaHead=(e)=>`<tr><td colspan="4" style="background:var(--soft);padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700">Etapa ${e.etapa}${e.etapa===1?' — faça primeiro':''}</td></tr>`;
-    const prepRows=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?etapaHead(e):'')+e.itens.map(p=>`<tr>
+    const catHead=(cat)=>`<tr><td colspan="4" style="padding:6px 12px 4px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line)">${esc(cat)}</td></tr>`;
+    const prepRows=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?etapaHead(e):'')
+      +porCategoria(e.itens).map(g=>catHead(g.categoria)+g.itens.map(p=>`<tr>
       <td><b>${esc(p.item.nome)}</b></td>
       <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
-      <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')).join('')
+      <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')).join('')).join('')
       : '<tr><td colspan="4" class="empty">Nenhum pré-preparo a fazer — estoque cobre a demanda 👍</td></tr>';
     const prepCards=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?`<div class="subtle" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin:${e.etapa>1?'14px':'0'} 0 6px">Etapa ${e.etapa}${e.etapa===1?' — faça primeiro':''}</div>`:'')
-      +e.itens.map(p=>`<div class="pln-card">
+      +porCategoria(e.itens).map(g=>`<div class="subtle" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin:10px 0 4px">${esc(g.categoria)}</div>`
+      +g.itens.map(p=>`<div class="pln-card">
       <div class="pln-card-tit">${esc(p.item.nome)}</div>
       <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
         <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
-      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')).join('')
+      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')).join('')).join('')
       : '<div class="empty"><b>Nenhum pré-preparo a fazer</b>Estoque cobre a demanda 👍</div>';
     const categoriasCompras=[...new Set(R.compras.map(c=>c.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
     const comprasFiltradas=R.compras.filter(c=>!filtroCategoriaCompras||c.item.categoria===filtroCategoriaCompras);
@@ -3128,6 +3145,7 @@ VIEWS.planejamento=function(){
         <div><span class="subtle" style="margin-right:10px">calculado ${dtBR(R.quando)} · ${R.pedidos} pedidos em aberto</span>
         <button class="btn sm" onclick="imprimirPlanoProducao()">🖨 Imprimir</button>
         <button class="btn sm" onclick="enviarPlanoProducaoWhatsapp()">💬 WhatsApp</button></div></div>
+      <div class="card-b" style="padding-bottom:0">${chipsPrep}</div>
       <div class="only-desktop"><table><thead><tr><th>Item</th><th class="r">Produzir</th><th class="r">Custo est.</th><th class="r"></th></tr></thead><tbody>${prepRows}</tbody></table></div>
       <div class="only-mobile card-b">${prepCards}</div></div>
     <div class="card section-gap"><div class="card-h"><h3>Lista de compras</h3>

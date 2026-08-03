@@ -1129,6 +1129,18 @@ function excluirItemDefinitivo(id){
   registrarEvento('ITEM_ATUALIZADO',`${it.nome} excluído definitivamente do cadastro`,id);
   scheduleSave(); render(); toast('Item excluído.');
 }
+// Apaga a ficha técnica (linhas de composição) de um item SEM excluir o item em si — pra quando
+// uma matéria-prima acabou ganhando uma "receita" por engano (ex.: Brócolis com um componente
+// "Sal" cadastrado à toa) e isso faz ela aparecer na aba Composições feito se fosse pré-preparo.
+function removerFichaTecnica(pid){
+  const it=itemById(pid); if(!it)return;
+  const n=composicoesDeTodas(pid).length;
+  if(!n)return;
+  if(!confirm(`Remover a ficha técnica de "${it.nome}"? Isso apaga os ${n} componente(s) cadastrados aqui — o item continua existindo normalmente (com seu histórico e saldo intactos), só deixa de aparecer em Composições como se fosse um pré-preparo.`))return;
+  S.composicoes=S.composicoes.filter(c=>c.item_pai_id!==pid);
+  registrarEvento('COMPOSICAO_DEFINIDA',`${it.nome}: ficha técnica removida (item não é pré-preparo)`,pid);
+  scheduleSave(); render(); toast('Ficha técnica removida.');
+}
 function blocoComposicao(pid,mostrarPreco){
   const it=itemById(pid); if(!it)return'';
   const ativo=it.ativo!==false; // agora é o ITEM que manda aqui — mesmo campo/mesma trava da aba Itens
@@ -1152,8 +1164,12 @@ function blocoComposicao(pid,mostrarPreco){
     if(it.preco_venda&&custoTotal!=null)extra+=` &nbsp;<span class="subtle">margem ${(((it.preco_venda-custoTotal)/it.preco_venda)*100).toFixed(0)}%</span>`;
   }
   const podeExcluir=itemPodeSerExcluido(pid);
-  return `<details class="comp-tree" style="${ativo?'':'opacity:.55'}"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span>${usos.length?`<div class="subtle" style="font-size:11px">usado em: ${esc(usos.join(', '))}</div>`:''}</span>
-    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleItem('${pid}')">${ativo?'inativar':'reativar'}</a>${podeExcluir?` &nbsp;<a class="link" style="color:var(--danger,#B3372C)" onclick="event.preventDefault();excluirItemDefinitivo('${pid}')" title="Sem histórico algum — pode excluir de vez">excluir</a>`:''}</span></summary>
+  // "remover ficha técnica" só faz sentido em Composições (não em Produtos, onde o item É o
+  // produto vendável de verdade) e só pra item que não é Produzível — ou seja, um item que não
+  // deveria ter receita própria nenhuma (matéria-prima com uma composição cadastrada por engano).
+  const podeRemoverFicha=!mostrarPreco&&!temFuncao(it,'produzivel');
+  return `<details class="comp-tree" style="${ativo?'':'opacity:.55'}"><summary><span>${mostrarPreco?'🍱':'🧩'} ${esc(it.nome)} <span class="subtle">(${comps.length} componentes · rende ${qty(rend,it.unidade_base)})</span>${usos.length?`<div class="subtle" style="font-size:11px">usado em: ${esc(usos.join(', '))}</div>`:''}${podeRemoverFicha?`<div class="subtle" style="font-size:11px;color:var(--danger,#B3372C)">⚠️ esse item não está marcado como Produzível — provavelmente ganhou uma ficha técnica por engano</div>`:''}</span>
+    <span class="num">${custo!=null?'custo '+money(custo)+'/'+it.unidade_base:''}${extra} &nbsp;<a class="link" onclick="event.preventDefault();modalComposicao('${pid}')">editar</a> &nbsp;<a class="link" onclick="event.preventDefault();toggleItem('${pid}')">${ativo?'inativar':'reativar'}</a>${podeExcluir?` &nbsp;<a class="link" style="color:var(--danger,#B3372C)" onclick="event.preventDefault();excluirItemDefinitivo('${pid}')" title="Sem histórico algum — pode excluir de vez">excluir</a>`:''}${podeRemoverFicha?` &nbsp;<a class="link" style="color:var(--danger,#B3372C)" onclick="event.preventDefault();removerFichaTecnica('${pid}')" title="Apaga a receita, o item continua existindo normalmente">remover ficha técnica</a>`:''}</span></summary>
     <div class="tree-b"><table><thead><tr><th>Componente</th><th class="r">Qtd</th><th class="r">Perda</th><th class="r">Custo</th></tr></thead><tbody>${linhas}</tbody></table></div></details>`;
 }
 let filtroCategoriaComposicoes='';
@@ -1278,7 +1294,12 @@ async function enviarFotosMassa(){
 let compLinhas=[], compTipo='preparo';
 function modalComposicao(paiId,tipo){
   compTipo = tipo || (paiId ? (temFuncao(itemById(paiId),'vendavel')?'produto':'preparo') : 'preparo');
-  const compostos=S.itens.filter(i=>i.ativo!==false&&(compTipo==='produto'?temFuncao(i,'vendavel'):!temFuncao(i,'vendavel')));
+  // Pra "preparo" (pré-preparo), só oferece pra virar "pai" quem está marcado como Produzível —
+  // senão dá pra criar uma "receita" numa matéria-prima pura por engano (ex.: Brócolis ganhando
+  // um componente "Sal" à toa), que depois confunde tudo (aparece em Composições, conta como
+  // "também composto" onde é usado etc.). Ao editar uma composição já existente, mantém o item
+  // atual na lista mesmo que ele não bata no filtro, pra não quebrar a edição de casos antigos.
+  const compostos=S.itens.filter(i=>i.ativo!==false&&(compTipo==='produto'?temFuncao(i,'vendavel'):(!temFuncao(i,'vendavel')&&(temFuncao(i,'produzivel')||i.id===paiId))));
   const pai=paiId?itemById(paiId):null;
   compLinhas=paiId?composicoesDeTodas(paiId).map(c=>({item:c.item_filho_id,qtd:c.quantidade,perda:c.perda_percentual||0})):[{item:'',qtd:'',perda:0}];
   const rotulo=compTipo==='produto'?'Produto (item vendável) *':'Item composto (pré-preparo) *';

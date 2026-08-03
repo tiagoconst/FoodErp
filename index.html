@@ -2829,14 +2829,29 @@ function enviarListaComprasWhatsapp(){
   txt+=`\n*Total est.: ${money(totalGeral)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
+// Agrupa os pré-preparos do plano de produção em "etapas": um item que entra como ingrediente
+// de outro pré-preparo (ex.: "Peito de Frango Grelhado" dentro de "Peito de Frango ao Molho
+// Caseiro") está mais fundo na ficha técnica — precisa ficar pronto ANTES — então a etapa 1 é
+// sempre o nível mais fundo (nivel mais alto no MRP), e vai subindo até o nível mais raso.
+function prePreparosPorEtapa(producoes){
+  const lista=(producoes||[]).filter(p=>!temFuncao(p.item,'vendavel'));
+  if(!lista.length)return [];
+  const niveis=[...new Set(lista.map(p=>p.nivel))].sort((a,b)=>b-a);
+  return niveis.map((niv,idx)=>({
+    etapa:idx+1,
+    itens:lista.filter(p=>p.nivel===niv).sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'))
+  }));
+}
 function imprimirPlanoProducao(){
-  const prePreparos=mrpResultado?mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt')):[];
+  const etapas=mrpResultado?prePreparosPorEtapa(mrpResultado.producoes):[];
+  const prePreparos=etapas.flatMap(e=>e.itens);
   if(!prePreparos.length)return toast('Nenhum pré-preparo a fazer no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const custoTotal=prePreparos.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  const blocos=prePreparos.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('');
+  const blocos=etapas.map(e=>`<div class="cat">Etapa ${e.etapa}${etapas.length>1?(e.etapa===1?' — faça primeiro':''):''}</div>`
+    +e.itens.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('')).join('<hr>');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pré-preparos a fazer</title><style>
     @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
@@ -2858,13 +2873,15 @@ function imprimirPlanoProducao(){
   w.document.write(html); w.document.close();
 }
 function enviarPlanoProducaoWhatsapp(){
-  const prePreparos=mrpResultado?mrpResultado.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt')):[];
+  const etapas=mrpResultado?prePreparosPorEtapa(mrpResultado.producoes):[];
+  const prePreparos=etapas.flatMap(e=>e.itens);
   if(!prePreparos.length)return toast('Nenhum pré-preparo a fazer no plano atual.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const custoTotal=prePreparos.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   let txt=`*${nomeEmp}*\n👨‍🍳 *PRÉ-PREPAROS A FAZER*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
-  prePreparos.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; });
+  etapas.forEach(e=>{ txt+=`\n*ETAPA ${e.etapa}${etapas.length>1&&e.etapa===1?' — faça primeiro':''}*\n`;
+    e.itens.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; }); });
   txt+=`\n*Custo est.: ${money(custoTotal)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
@@ -3027,19 +3044,23 @@ VIEWS.planejamento=function(){
   let resultado='';
   if(mrpResultado){
     const R=mrpResultado;
-    const prePreparos=R.producoes.filter(p=>!temFuncao(p.item,'vendavel')).slice().sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
-    const prepRows=prePreparos.map(p=>`<tr>
+    const etapasPrep=prePreparosPorEtapa(R.producoes);
+    const prePreparos=etapasPrep.flatMap(e=>e.itens);
+    const mostrarEtapas=etapasPrep.length>1;
+    const etapaHead=(e)=>`<tr><td colspan="4" style="background:var(--soft);padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700">Etapa ${e.etapa}${e.etapa===1?' — faça primeiro':''}</td></tr>`;
+    const prepRows=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?etapaHead(e):'')+e.itens.map(p=>`<tr>
       <td><b>${esc(p.item.nome)}</b></td>
       <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
-      <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')||
-      '<tr><td colspan="4" class="empty">Nenhum pré-preparo a fazer — estoque cobre a demanda 👍</td></tr>';
-    const prepCards=prePreparos.map(p=>`<div class="pln-card">
+      <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')).join('')
+      : '<tr><td colspan="4" class="empty">Nenhum pré-preparo a fazer — estoque cobre a demanda 👍</td></tr>';
+    const prepCards=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?`<div class="subtle" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin:${e.etapa>1?'14px':'0'} 0 6px">Etapa ${e.etapa}${e.etapa===1?' — faça primeiro':''}</div>`:'')
+      +e.itens.map(p=>`<div class="pln-card">
       <div class="pln-card-tit">${esc(p.item.nome)}</div>
       <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>
         <span>Custo est. <b class="num">${p.custo!=null?money(p.custo*p.qtd):'—'}</b></span></div>
-      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')
-      ||'<div class="empty"><b>Nenhum pré-preparo a fazer</b>Estoque cobre a demanda 👍</div>';
+      <button class="btn primary" style="width:100%;margin-top:10px" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></div>`).join('')).join('')
+      : '<div class="empty"><b>Nenhum pré-preparo a fazer</b>Estoque cobre a demanda 👍</div>';
     const categoriasCompras=[...new Set(R.compras.map(c=>c.item.categoria).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt'));
     const comprasFiltradas=R.compras.filter(c=>!filtroCategoriaCompras||c.item.categoria===filtroCategoriaCompras);
     const chipsCompras=categoriasCompras.length?`<div class="cat-chips" style="margin-top:12px;margin-bottom:6px">

@@ -2829,18 +2829,22 @@ function enviarListaComprasWhatsapp(){
   txt+=`\n*Total est.: ${money(totalGeral)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
-// Agrupa os pré-preparos do plano de produção em "etapas": um item que entra como ingrediente
-// de outro pré-preparo (ex.: "Peito de Frango Grelhado" dentro de "Peito de Frango ao Molho
-// Caseiro") está mais fundo na ficha técnica — precisa ficar pronto ANTES — então a etapa 1 é
-// sempre o nível mais fundo (nivel mais alto no MRP), e vai subindo até o nível mais raso.
+// Agrupa os pré-preparos do plano de produção em "etapas" pela PRÓPRIA ficha técnica de cada
+// item (não pela distância até o pedido final): etapa 1 é quem não usa nenhum outro pré-preparo
+// como componente — só matéria-prima direto (ex.: Arroz Branco Cozido, Bife Acebolado, Peito de
+// Frango Grelhado); etapa 2 é quem usa algum pré-preparo (um componente que por sua vez também
+// tem ficha técnica própria) — ex.: "Peito de Frango ao Molho Caseiro", que leva o "Peito de
+// Frango Grelhado" já pronto como ingrediente.
 function prePreparosPorEtapa(producoes){
   const lista=(producoes||[]).filter(p=>!temFuncao(p.item,'vendavel'));
   if(!lista.length)return [];
-  const niveis=[...new Set(lista.map(p=>p.nivel))].sort((a,b)=>b-a);
-  return niveis.map((niv,idx)=>({
-    etapa:idx+1,
-    itens:lista.filter(p=>p.nivel===niv).sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'))
-  }));
+  const usaSubPreparo=id=>componentesDe(id).some(c=>componentesDe(c.item_filho_id).length>0);
+  const etapa1=lista.filter(p=>!usaSubPreparo(p.item.id)).sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
+  const etapa2=lista.filter(p=>usaSubPreparo(p.item.id)).sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
+  const etapas=[];
+  if(etapa1.length)etapas.push({etapa:1,itens:etapa1});
+  if(etapa2.length)etapas.push({etapa:etapas.length+1,itens:etapa2});
+  return etapas;
 }
 function imprimirPlanoProducao(){
   const etapas=mrpResultado?prePreparosPorEtapa(mrpResultado.producoes):[];

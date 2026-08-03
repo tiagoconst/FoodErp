@@ -2735,12 +2735,8 @@ function gerarCompraMRP(){
   modalCompra(linhas);
 }
 function enviarDemandaWhatsapp(){
-  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
-  const abertos={};
-  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
-    .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
+  const {vendaveis,abertos,semCorrespondente:personalizadas}=demandaConsolidada();
   const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
-  const personalizadas=demandaPersonalizada();
   if(!comDemanda.length&&!Object.keys(personalizadas).length)return toast('Nenhum produto com demanda no momento.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
@@ -2765,12 +2761,8 @@ function enviarDemandaWhatsapp(){
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
 function imprimirDemanda(){
-  const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
-  const abertos={};
-  S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
-    .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
+  const {vendaveis,abertos,semCorrespondente:personalizadas}=demandaConsolidada();
   const comDemanda=vendaveis.filter(i=>(abertos[i.id]||0)+(parseFloat(mrpExtras[i.id])||0)>0);
-  const personalizadas=demandaPersonalizada();
   if(!comDemanda.length&&!Object.keys(personalizadas).length)return toast('Nenhum produto com demanda no momento.',true);
   const emp=getEmpresaInfo(); const idn=getIdent();
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
@@ -2993,17 +2985,33 @@ function demandaPersonalizada(){
     }));
   return grupos;
 }
-VIEWS.planejamento=function(){
+// Junta a demanda de pedidos "normais" com a das marmitas sob medida: o nome do prato de uma
+// sob medida é sempre igual ao nome do produto vendável escolhido no construtor (ver
+// confirmarMarmitaSobMedida), então dá pra casar pelo nome e somar tudo numa linha só — em vez
+// de "Bife Acebolado" aparecer espalhado (uma linha normal + uma linha "sob medida" separada).
+// Só sobra linha separada (sem-correspondente) pro nome que não bate com nenhum produto vendável
+// ativo no momento (ex.: produto foi inativado/renomeado depois que a marmita foi montada).
+function demandaConsolidada(){
   const vendaveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA);
   const abertos={};
   S.pedidos.filter(p=>['confirmado','em_producao'].includes(p.status))
     .forEach(p=>p.itens.forEach(l=>{ abertos[l.item_id]=(abertos[l.item_id]||0)+l.quantidade; }));
+  const semCorrespondente={};
+  Object.entries(demandaPersonalizada()).forEach(([nome,q])=>{
+    const item=vendaveis.find(i=>i.nome===nome);
+    if(item)abertos[item.id]=(abertos[item.id]||0)+q;
+    else semCorrespondente[nome]=(semCorrespondente[nome]||0)+q;
+  });
+  return {vendaveis,abertos,semCorrespondente};
+}
+VIEWS.planejamento=function(){
+  const {vendaveis,abertos,semCorrespondente}=demandaConsolidada();
   const demRows=vendaveis.map(i=>`<tr><td><b>${esc(i.nome)}</b></td>
     <td class="r num">${abertos[i.id]?qty(abertos[i.id],i.unidade_base):'—'}</td>
     <td class="r num subtle">${temFuncao(i,'estocavel')?qty(Math.max(0,saldo(i.id)),i.unidade_base):'—'}</td>
     <td class="r"><input type="number" step="any" min="0" style="width:110px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--input-bg,#FDFCF9)"
       value="${mrpExtras[i.id]||''}" placeholder="extra" oninput="mrpExtras['${i.id}']=this.value"></td></tr>`).join('')
-    +Object.entries(demandaPersonalizada()).map(([nome,q])=>`<tr><td><b>🛠️ ${esc(nome)}</b><span class="tag mut" style="margin-left:6px">sob medida</span></td>
+    +Object.entries(semCorrespondente).map(([nome,q])=>`<tr><td><b>🛠️ ${esc(nome)}</b><span class="tag mut" style="margin-left:6px">sob medida</span></td>
       <td class="r num">${qty(q,'un')}</td><td class="r num subtle">—</td><td class="r subtle">consumo direto de insumo</td></tr>`).join('');
   const demCards=vendaveis.map(i=>`<div class="pln-card">
     <div class="pln-card-tit">${esc(i.nome)}</div>
@@ -3011,7 +3019,7 @@ VIEWS.planejamento=function(){
       <span>Em estoque <b>${temFuncao(i,'estocavel')?qty(Math.max(0,saldo(i.id)),i.unidade_base):'—'}</b></span></div>
     <input type="number" step="any" min="0" style="width:100%;margin-top:8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--input-bg,#FDFCF9)"
       value="${mrpExtras[i.id]||''}" placeholder="planejar quantidade extra" oninput="mrpExtras['${i.id}']=this.value"></div>`).join('')
-    +Object.entries(demandaPersonalizada()).map(([nome,q])=>`<div class="pln-card">
+    +Object.entries(semCorrespondente).map(([nome,q])=>`<div class="pln-card">
       <div class="pln-card-tit">🛠️ ${esc(nome)} <span class="tag mut">sob medida</span></div>
       <div class="pln-card-stats"><span>Pedidos em aberto <b>${qty(q,'un')}</b></span></div></div>`).join('')
     ||'<div class="empty"><b>Nenhum produto vendável</b></div>';

@@ -2875,6 +2875,13 @@ function prePreparosPorEtapa(producoes){
     itens:grupos[e].sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'))
   }));
 }
+// Subdivide uma lista de pré-preparos (já de uma etapa) por categoria (Carboidratos, Proteína,
+// Molho…), em ordem alfabética — mesmo agrupamento usado na tela, reaproveitado aqui pro
+// Imprimir e pro WhatsApp não saírem "achatados" (sem separação) como antes.
+function agruparPorCategoria(itens){
+  const g={}; itens.forEach(p=>{ const c=p.item.categoria||'Sem categoria'; (g[c]=g[c]||[]).push(p); });
+  return Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt')).map(c=>({categoria:c,itens:g[c]}));
+}
 function imprimirPlanoProducao(){
   const etapas=mrpResultado?prePreparosPorEtapa(mrpResultado.producoes):[];
   const prePreparos=etapas.flatMap(e=>e.itens);
@@ -2884,13 +2891,15 @@ function imprimirPlanoProducao(){
   const custoTotal=prePreparos.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const blocos=etapas.map(e=>`<div class="cat">Etapa ${e.etapa}${etapas.length>1?(e.etapa===1?' — faça primeiro':''):''}</div>`
-    +e.itens.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('')).join('<hr>');
+    +agruparPorCategoria(e.itens).map(g=>`<div class="subcat">${esc(g.categoria)}</div>`
+      +g.itens.map(p=>`<div class="item"><span class="chk">☐</span><div class="item-txt">${esc(p.item.nome)}</div><b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></div>`).join('')).join('')).join('<hr>');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pré-preparos a fazer</title><style>
     @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
     .center{text-align:center} h1{font-size:12px;margin:1mm 0}
     hr{border:none;border-top:1px dashed #000;margin:2.5mm 0} .small{font-size:9px;color:#333}
     .cat{font-weight:bold;font-size:10.5px;text-transform:uppercase;margin:2mm 0 1.5mm;letter-spacing:.03em}
+    .subcat{font-weight:bold;font-size:9px;text-transform:uppercase;color:#555;margin:1.5mm 0 1mm;letter-spacing:.03em}
     .item{display:flex;align-items:flex-start;gap:2mm;margin-bottom:2mm}
     .chk{font-size:12px;flex:none;line-height:1.3} .item-txt{flex:1;min-width:0} .item b{flex:none}
     .tot{font-weight:bold;font-size:12px;border-top:1px solid #000;padding-top:1.5mm;margin-top:2mm;display:flex;justify-content:space-between}
@@ -2914,7 +2923,8 @@ function enviarPlanoProducaoWhatsapp(){
   const custoTotal=prePreparos.reduce((a,p)=>a+(p.custo!=null?p.custo*p.qtd:0),0);
   let txt=`*${nomeEmp}*\n👨‍🍳 *PRÉ-PREPAROS A FAZER*\nGerada ${dBR(hoje())} às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}\n`;
   etapas.forEach(e=>{ txt+=`\n*ETAPA ${e.etapa}${etapas.length>1&&e.etapa===1?' — faça primeiro':''}*\n`;
-    e.itens.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; }); });
+    agruparPorCategoria(e.itens).forEach(g=>{ txt+=`_${g.categoria}_\n`;
+      g.itens.forEach(p=>{ txt+=`☐ ${p.item.nome} - ${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}\n`; }); }); });
   txt+=`\n*Custo est.: ${money(custoTotal)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
@@ -3090,21 +3100,17 @@ VIEWS.planejamento=function(){
     const etapasPrep=prePreparosPorEtapa(prepFiltrados);
     const prePreparos=etapasPrep.flatMap(e=>e.itens);
     const mostrarEtapas=etapasPrep.length>1;
-    // dentro de cada etapa, agrupa por categoria (Carboidratos, Proteína, Molho…) em ordem
-    // alfabética, pra facilitar achar tudo de um tipo junto na hora de organizar a produção
-    const porCategoria=itens=>{ const g={}; itens.forEach(p=>{ const c=p.item.categoria||'Sem categoria'; (g[c]=g[c]||[]).push(p); });
-      return Object.keys(g).sort((a,b)=>a.localeCompare(b,'pt')).map(c=>({categoria:c,itens:g[c]})); };
     const etapaHead=(e)=>`<tr><td colspan="4" style="background:var(--soft);padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700">Etapa ${e.etapa}${e.etapa===1?' — faça primeiro':''}</td></tr>`;
     const catHead=(cat)=>`<tr><td colspan="4" style="padding:6px 12px 4px;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line)">${esc(cat)}</td></tr>`;
     const prepRows=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?etapaHead(e):'')
-      +porCategoria(e.itens).map(g=>catHead(g.categoria)+g.itens.map(p=>`<tr>
+      +agruparPorCategoria(e.itens).map(g=>catHead(g.categoria)+g.itens.map(p=>`<tr>
       <td><b>${esc(p.item.nome)}</b></td>
       <td class="r num"><b>${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></td>
       <td class="r num subtle">${p.custo!=null?money(p.custo*p.qtd):'—'}</td>
       <td class="r"><button class="btn sm primary" onclick="modalProducao('${p.item.id}',${p.qtd})">Registrar produção</button></td></tr>`).join('')).join('')).join('')
       : '<tr><td colspan="4" class="empty">Nenhum pré-preparo a fazer — estoque cobre a demanda 👍</td></tr>';
     const prepCards=etapasPrep.length?etapasPrep.map(e=>(mostrarEtapas?`<div class="subtle" style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin:${e.etapa>1?'14px':'0'} 0 6px">Etapa ${e.etapa}${e.etapa===1?' — faça primeiro':''}</div>`:'')
-      +porCategoria(e.itens).map(g=>`<div class="subtle" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin:10px 0 4px">${esc(g.categoria)}</div>`
+      +agruparPorCategoria(e.itens).map(g=>`<div class="subtle" style="font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin:10px 0 4px">${esc(g.categoria)}</div>`
       +g.itens.map(p=>`<div class="pln-card">
       <div class="pln-card-tit">${esc(p.item.nome)}</div>
       <div class="pln-card-stats"><span>Produzir <b class="num">${qty(Math.round(p.qtd*100)/100,p.item.unidade_base)}</b></span>

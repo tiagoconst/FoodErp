@@ -861,7 +861,8 @@ function modalItem(id){
   const it=id?itemById(id):null;
   const checks=FUNCOES.map(f=>{
     const on=it&&temFuncao(it,f.id);
-    const extra=f.id==='vendavel'?";const w=document.getElementById('it-foto-wrap');if(w)w.style.display=this.checked?'block':'none'":'';
+    const extra=f.id==='vendavel'?";const w=document.getElementById('it-foto-wrap');if(w)w.style.display=this.checked?'block':'none'"
+      :f.id==='produzivel'?";const we=document.getElementById('it-etapa-wrap');if(we)we.style.display=this.checked?'block':'none'":'';
     return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)${extra}"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
   }).join('');
   const catOpts=S.categorias.filter(c=>c.ativo!==false||(it&&it.categoria===c.nome)).map(c=>`<option value="${esc(c.nome)}" ${it&&it.categoria===c.nome?'selected':''}>${esc(c.nome)}</option>`).join('');
@@ -878,6 +879,15 @@ function modalItem(id){
       <div class="field"><label>Estoque mínimo</label><input id="it-min" type="number" step="any" min="0" value="${it&&it.estoque_minimo?it.estoque_minimo:''}" placeholder="alerta no dashboard"></div>
     </div>
     <div class="field"><label>Funções — um item pode ter uma ou várias simultaneamente</label><div class="check-grid">${checks}</div></div>
+    <div class="field" id="it-etapa-wrap" style="display:${it&&temFuncao(it,'produzivel')?'block':'none'}">
+      <label>Etapa de produção — em que ordem fazer no Planejamento</label>
+      <select id="it-etapa">
+        <option value="1" ${(!it||!(it.etapa_producao>1))?'selected':''}>Etapa 1 — não depende de nenhum outro pré-preparo (ex.: Arroz Cozido, Peito de Frango Grelhado)</option>
+        <option value="2" ${it&&it.etapa_producao===2?'selected':''}>Etapa 2 — usa outro pré-preparo pronto como ingrediente (ex.: Peito de Frango ao Molho Caseiro)</option>
+        <option value="3" ${it&&it.etapa_producao===3?'selected':''}>Etapa 3</option>
+      </select>
+      <span class="hint">Só aparece pra item marcado como "Produzível" — é o que define a ordem das seções em Planejamento → Pré-preparos a fazer.</span>
+    </div>
     <div class="field"><label>Observação</label><textarea id="it-obs" rows="2">${it?esc(it.observacao||''):''}</textarea></div>
     <div class="field" id="it-foto-wrap" style="display:${it&&temFuncao(it,'vendavel')?'block':'none'}">
       <label>Foto (aparece no site de pedidos — só faz sentido pra item marcado como "vendável")</label>
@@ -1035,6 +1045,7 @@ function salvarItem(id){
   const dados={nome,categoria:$('#it-cat').value,unidade_base:$('#it-un').value,
     preco_venda:parseFloat($('#it-preco').value)||null,estoque_minimo:parseFloat($('#it-min').value)||0,
     foto_url:$('#it-foto').value.trim()||null,
+    etapa_producao:funcoes.includes('produzivel')?(parseInt($('#it-etapa')?.value)||1):null,
     funcoes,observacao:$('#it-obs').value.trim(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(itemById(id),dados); registrarEvento('ITEM_ATUALIZADO',`${nome} atualizado (${funcoes.length} funções)`,id); }
   else{ const nid=uid('ITM'); S.itens.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},dados));
@@ -2829,22 +2840,19 @@ function enviarListaComprasWhatsapp(){
   txt+=`\n*Total est.: ${money(totalGeral)}*`;
   window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
 }
-// Agrupa os pré-preparos do plano de produção em "etapas" pela PRÓPRIA ficha técnica de cada
-// item (não pela distância até o pedido final): etapa 1 é quem não usa nenhum outro pré-preparo
-// como componente — só matéria-prima direto (ex.: Arroz Branco Cozido, Bife Acebolado, Peito de
-// Frango Grelhado); etapa 2 é quem usa algum pré-preparo (um componente que por sua vez também
-// tem ficha técnica própria) — ex.: "Peito de Frango ao Molho Caseiro", que leva o "Peito de
-// Frango Grelhado" já pronto como ingrediente.
+// Agrupa os pré-preparos do plano de produção em "etapas" — pela classificação MANUAL que você
+// define no cadastro do item (campo "Etapa de produção", só aparece pra item Produzível). Item
+// sem etapa definida (cadastro antigo) cai na Etapa 1 por padrão.
 function prePreparosPorEtapa(producoes){
   const lista=(producoes||[]).filter(p=>!temFuncao(p.item,'vendavel'));
   if(!lista.length)return [];
-  const usaSubPreparo=id=>componentesDe(id).some(c=>componentesDe(c.item_filho_id).length>0);
-  const etapa1=lista.filter(p=>!usaSubPreparo(p.item.id)).sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
-  const etapa2=lista.filter(p=>usaSubPreparo(p.item.id)).sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'));
-  const etapas=[];
-  if(etapa1.length)etapas.push({etapa:1,itens:etapa1});
-  if(etapa2.length)etapas.push({etapa:etapas.length+1,itens:etapa2});
-  return etapas;
+  const etapaDe=p=>p.item.etapa_producao>0?p.item.etapa_producao:1;
+  const grupos={};
+  lista.forEach(p=>{ const e=etapaDe(p); (grupos[e]=grupos[e]||[]).push(p); });
+  return Object.keys(grupos).map(Number).sort((a,b)=>a-b).map(e=>({
+    etapa:e,
+    itens:grupos[e].sort((a,b)=>a.item.nome.localeCompare(b.item.nome,'pt'))
+  }));
 }
 function imprimirPlanoProducao(){
   const etapas=mrpResultado?prePreparosPorEtapa(mrpResultado.producoes):[];

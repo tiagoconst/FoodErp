@@ -37,6 +37,10 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .cm-line input{width:64px;flex:none;padding:10px 6px;border:1px solid var(--line);border-radius:8px;background:var(--soft);font-size:13.5px;font-family:inherit;text-align:center}
 .cm-line .rm{flex:none;background:none;border:none;color:var(--danger);font-size:17px;cursor:pointer;padding:0 2px}
 .btn-add-componente{width:100%;padding:9px;border-radius:8px;border:1.5px dashed var(--line);background:transparent;color:var(--primary-dark);font-weight:700;font-size:13px;cursor:pointer;margin-top:2px}
+.cm-secao-tit{font-family:var(--font-menu);font-size:12.5px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--primary-dark);margin:14px 0 8px}
+.cm-secao-tit:first-child{margin-top:0}
+.cm-proteina-box{border:1.5px solid var(--primary-dark);border-radius:10px;padding:10px;background:rgba(0,0,0,.02);margin-bottom:6px}
+.cm-proteina-box .cm-line{margin-bottom:0}
 .navbar .cart-btn{position:relative;display:flex;align-items:center;gap:9px;background:transparent;color:#fff;border:none;padding:6px 4px;font-family:var(--font-menu);font-weight:700;font-size:14px;cursor:pointer;margin-left:auto}
 .navbar .cart-btn img{height:34px;display:block}
 .navbar .cart-btn .cart-badge{position:absolute;top:-4px;left:20px;background:var(--primary-dark);color:#fff;border-radius:999px;min-width:16px;height:16px;padding:0 4px;font-size:10px;line-height:16px;text-align:center;font-weight:700;display:none}
@@ -535,8 +539,13 @@ function alterarQtd(id,delta){
 
 /* ===== Marmita Personalizada (monte a sua) ===== */
 let catalogoSobMedida=null; // {margem, preco_minimo_unitario, combo_min_unidades, combo_desconto_unidade, grupos:{Categoria:[{item_id,nome,preco_100g_estimado,preco_referencia}]}}
-let montarLinhas=[]; // [{item_id, gramas}] sendo montada agora, antes de ir pro carrinho
+// A proteína é obrigatória e única (trava o preço mínimo no prato pronto equivalente — sem ela
+// não dá pra montar por menos que uma marmita de verdade custaria). O resto (carboidrato, legume,
+// molho, adicional) fica livre, pode ter zero ou vários.
+let montarProteina={item_id:'',gramas:150}; // a única proteína da marmita sendo montada agora
+let montarExtras=[]; // [{item_id, gramas}] — carboidratos/legumes/molho/adicionais, livre
 const GRUPOS_SOB_MEDIDA=['Proteína','Carboidratos','Legumes/Verduras','Molho','Adicionais'];
+const GRUPOS_SOB_MEDIDA_EXTRAS=GRUPOS_SOB_MEDIDA.filter(g=>g!=='Proteína');
 async function carregarCatalogoSobMedida(){
   if(catalogoSobMedida)return catalogoSobMedida;
   const {data,error}=await sb.rpc('erp_catalogo_sob_medida_publico',{p_empresa_id:EMPRESA_ID});
@@ -584,26 +593,34 @@ function brutoCarrinhoCustom(){ return carrinhoCustom.reduce((a,l)=>a+precoUnita
 async function abrirMontarMarmita(){
   await carregarCatalogoSobMedida();
   if(!catalogoSobMedida){ toast('Não foi possível carregar as opções agora. Tente de novo em instantes.',true); return; }
-  montarLinhas=[{item_id:'',gramas:100}];
+  montarProteina={item_id:'',gramas:150};
+  montarExtras=[];
   renderMontarMarmita();
   $('#montar-overlay').classList.add('open'); document.body.style.overflow='hidden';
 }
 function fecharMontarMarmita(){ $('#montar-overlay').classList.remove('open'); document.body.style.overflow=''; }
-function montarOpcoesHtml(itemIdSelecionado){
+// grupos: lista de grupos a incluir no <select> (pro seletor de proteína, só 'Proteína'; pros
+// extras, todo o resto) — evita repetir a proteína como opção lá embaixo, nos extras.
+function montarOpcoesHtml(itemIdSelecionado,grupos){
   const cfg=catalogoSobMedida;
-  return '<option value="">Escolha o componente…</option>'+GRUPOS_SOB_MEDIDA.map(g=>{
+  return '<option value="">Escolha…</option>'+grupos.map(g=>{
     const itens=(cfg.grupos[g]||[]);
     if(!itens.length)return'';
     const opts=itens.map(it=>`<option value="${esc(it.item_id)}" ${it.item_id===itemIdSelecionado?'selected':''}>${esc(it.nome)}</option>`).join('');
     return `<optgroup label="${esc(g)}">${opts}</optgroup>`;
   }).join('');
 }
-function montarAddComponente(){ montarLinhas.push({item_id:'',gramas:100}); renderMontarMarmita(); }
-function montarAtualizarItem(idx,val){ montarLinhas[idx].item_id=val; renderMontarMarmita(); }
-function montarAtualizarGramas(idx,val){ montarLinhas[idx].gramas=parseFloat(val)||0; renderMontarMarmita(); }
-function montarRemoverComponente(idx){ montarLinhas.splice(idx,1); renderMontarMarmita(); }
+function montarAtualizarProteina(val){ montarProteina.item_id=val; renderMontarMarmita(); }
+function montarAtualizarGramasProteina(val){ montarProteina.gramas=parseFloat(val)||0; renderMontarMarmita(); }
+function montarAddComponente(){ montarExtras.push({item_id:'',gramas:100}); renderMontarMarmita(); }
+function montarAtualizarItem(idx,val){ montarExtras[idx].item_id=val; renderMontarMarmita(); }
+function montarAtualizarGramas(idx,val){ montarExtras[idx].gramas=parseFloat(val)||0; renderMontarMarmita(); }
+function montarRemoverComponente(idx){ montarExtras.splice(idx,1); renderMontarMarmita(); }
 function montarItensSelecionados(){
-  return montarLinhas.filter(l=>l.item_id&&l.gramas>0).map(l=>{
+  const linhas=[];
+  if(montarProteina.item_id&&montarProteina.gramas>0)linhas.push(montarProteina);
+  linhas.push(...montarExtras.filter(l=>l.item_id&&l.gramas>0));
+  return linhas.map(l=>{
     const info=acharItemCatalogoSM(l.item_id);
     return {item_id:l.item_id,gramas:l.gramas,nome:info?info.nome:l.item_id};
   });
@@ -614,23 +631,30 @@ function renderMontarMarmita(){
   const peso=pesoTotalSelecaoSM(itensSel);
   const ehG=marmitaGAtivaSM(itensSel);
   const precoFinal=precoUnitarioCustom({itens:itensSel});
-  const linhasHtml=montarLinhas.map((l,k)=>`<div class="cm-line">
-      <select onchange="montarAtualizarItem(${k},this.value)">${montarOpcoesHtml(l.item_id)}</select>
+  const extrasHtml=montarExtras.map((l,k)=>`<div class="cm-line">
+      <select onchange="montarAtualizarItem(${k},this.value)">${montarOpcoesHtml(l.item_id,GRUPOS_SOB_MEDIDA_EXTRAS)}</select>
       <input type="number" min="0" step="10" placeholder="g" value="${l.gramas||''}" oninput="montarAtualizarGramas(${k},this.value)">
       <button class="rm" onclick="montarRemoverComponente(${k})">✕</button>
     </div>`).join('');
   $('#montar-body').innerHTML=`
-    <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5">Escolha o componente e digite a quantidade em gramas — o preço final é calculado pelo que você montar, nunca abaixo do valor do prato pronto equivalente.</p>
-    ${linhasHtml}
+    <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5">Escolha a proteína (obrigatório) e, se quiser, ajuste carboidratos, legumes e outros itens — o preço nunca fica abaixo do valor do prato pronto com essa proteína.</p>
+    <div class="cm-secao-tit">Proteína — escolha 1</div>
+    <div class="cm-proteina-box"><div class="cm-line">
+      <select onchange="montarAtualizarProteina(this.value)">${montarOpcoesHtml(montarProteina.item_id,['Proteína'])}</select>
+      <input type="number" min="0" step="10" placeholder="g" value="${montarProteina.gramas||''}" oninput="montarAtualizarGramasProteina(this.value)">
+    </div></div>
+    <div class="cm-secao-tit">Carboidratos, legumes e mais — opcional</div>
+    ${extrasHtml}
     <button class="btn-add-componente" onclick="montarAddComponente()">+ Adicionar componente</button>
     ${peso>0?`<p class="subtle" style="font-family:var(--font-menu);font-size:12px;color:var(--muted);margin-top:10px">Peso total: ${peso}g${ehG?` — marmita G (acima de ${cfg.peso_padrao_g??400}g): +${money(cfg.preco_adicional_g??1.2)}`:''}</p>`:''}
     <div class="tot" style="margin-top:16px"><span>Total estimado</span><span>${money(precoFinal)}</span></div>
-    <button class="btn" ${itensSel.length?'':'disabled'} onclick="montarAdicionarAoCarrinho()">Adicionar à sacola</button>
+    <button class="btn" ${montarProteina.item_id&&montarProteina.gramas>0?'':'disabled'} onclick="montarAdicionarAoCarrinho()">Adicionar à sacola</button>
+    ${!montarProteina.item_id?'<p class="subtle" style="font-family:var(--font-menu);font-size:12px;color:var(--danger);margin-top:8px">Escolha uma proteína pra continuar.</p>':''}
   `;
 }
 function montarAdicionarAoCarrinho(){
+  if(!montarProteina.item_id||!(montarProteina.gramas>0))return toast('Escolha uma proteína pra continuar.',true);
   const itensSel=montarItensSelecionados();
-  if(!itensSel.length)return toast('Selecione pelo menos um componente.',true);
   carrinhoCustom.push({id:(crypto.randomUUID?crypto.randomUUID():'cm-'+Date.now()+'-'+Math.random().toString(36).slice(2)),itens:itensSel,qtd:1});
   if(cupomAplicado){ cupomAplicado=null; cupomErro=null; }
   salvarCarrinhoCustom();

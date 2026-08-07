@@ -1778,7 +1778,7 @@ VIEWS['pedido-detalhe']=function(){
             <button class="btn sm" style="flex:none;width:auto;margin-top:0" onclick="copiarLinkAcompanhamento('${p.id}')">📋 Copiar</button>
           </div></div></div>`:''}
         ${p.observacao?`<div class="card section-gap"><div class="card-h"><h3>Observação</h3></div><div class="card-b"><p>${esc(p.observacao)}</p></div></div>`:''}
-        <div class="card section-gap"><div class="card-h"><h3>Itens</h3></div><div class="card-b" style="padding:0 6px">
+        <div class="card section-gap"><div class="card-h"><h3>Itens</h3><a class="link" onclick="event.preventDefault();modalEditarItensPedido('${p.id}')">editar itens</a></div><div class="card-b" style="padding:0 6px">
           <table><thead><tr><th>Item</th><th class="r">Unitário</th><th class="r">Subtotal</th></tr></thead><tbody>${linhas}</tbody></table></div></div>
         <div class="card section-gap"><div class="card-h"><h3>Histórico</h3></div><div class="card-b">${historicoHtml}</div></div>
       </div>
@@ -1859,6 +1859,50 @@ function aplicarTrocaCliente(id){
   p.cliente=cliId?(clienteById(cliId)?clienteById(cliId).nome:''):nomeAvulso;
   registrarEvento('PEDIDO_ATUALIZADO',`Cliente do pedido alterado: "${nomeAntigo}" → "${p.cliente}"`,id);
   scheduleSave(); closeModal(); render(); toast('Cliente do pedido atualizado.');
+}
+// Corrige quantidade/preço de um item já lançado num pedido (ex.: digitou 1x em vez de 4x na
+// hora de fechar a venda). Reserva de estoque (disponivel()/reservado()) é calculada ao vivo em
+// cima de p.itens — então só ajustar a quantidade aqui já corrige tudo o mais (MRP, dashboard
+// etc.) sem precisar mexer em movimento nenhum.
+function modalEditarItensPedido(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  const linhas=(p.itens||[]).map((l,k)=>`<div class="line" style="grid-template-columns:1fr 80px 100px 90px;display:grid;gap:8px;align-items:center;margin-bottom:8px">
+    <div>${esc(nomeLinha(l))}${l.quantidade_entregue?`<div class="subtle" style="font-size:11px">${l.quantidade_entregue} já entregue(s)</div>`:''}</div>
+    <input type="number" min="0" step="1" id="ei-qtd-${k}" value="${l.quantidade}">
+    <input type="number" min="0" step="0.01" id="ei-preco-${k}" value="${l.preco_unitario}">
+    <div class="num subtle" id="ei-sub-${k}">${money(l.quantidade*l.preco_unitario)}</div></div>`).join('')
+    ||'<p class="subtle">Sem itens neste pedido.</p>';
+  openModal(`<div class="m-h"><h3>Editar itens do pedido</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <div class="line" style="grid-template-columns:1fr 80px 100px 90px;display:grid;gap:8px;margin-bottom:6px"><b class="subtle" style="font-size:11px">ITEM</b><b class="subtle" style="font-size:11px">QTD</b><b class="subtle" style="font-size:11px">UNITÁRIO</b><b class="subtle" style="font-size:11px">SUBTOTAL</b></div>
+    ${linhas}
+    <p class="subtle" style="margin-top:10px">Desconto (${money((p.desconto_combo||0)+(p.desconto_manual||0)+(p.desconto_cupom||0))}) continua igual — o total é recalculado só em cima do novo subtotal.</p>
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarEdicaoItensPedido('${id}')">Salvar</button></div>`,true);
+  (p.itens||[]).forEach((l,k)=>{
+    const upd=()=>{ const q=parseFloat($('#ei-qtd-'+k).value)||0, pr=parseFloat($('#ei-preco-'+k).value)||0;
+      $('#ei-sub-'+k).textContent=money(q*pr); };
+    $('#ei-qtd-'+k).oninput=upd; $('#ei-preco-'+k).oninput=upd;
+  });
+}
+function salvarEdicaoItensPedido(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  const novasLinhas=(p.itens||[]).map((l,k)=>{
+    const q=parseFloat($('#ei-qtd-'+k).value)||0, pr=parseFloat($('#ei-preco-'+k).value)||0;
+    return {...l,quantidade:q,preco_unitario:pr};
+  });
+  if(novasLinhas.some(l=>!(l.quantidade>0)))return toast('Quantidade tem que ser maior que zero (pra remover um item, cancele o pedido e refaça).',true);
+  const comEntregaMaior=novasLinhas.find(l=>(l.quantidade_entregue||0)>l.quantidade);
+  if(comEntregaMaior&&!confirm(`"${nomeLinha(comEntregaMaior)}" já teve ${comEntregaMaior.quantidade_entregue} entregue(s) — mais do que a nova quantidade (${comEntregaMaior.quantidade}). Confirma mesmo assim?`))return;
+  const resumoAntes=(p.itens||[]).map(l=>`${l.quantidade}x ${nomeLinha(l)}`).join(', ');
+  p.itens=novasLinhas;
+  const novoBruto=novasLinhas.reduce((a,l)=>a+l.quantidade*l.preco_unitario,0);
+  const descontoTotal=(p.desconto_combo||0)+(p.desconto_manual||0)+(p.desconto_cupom||0);
+  p.valor_bruto=novoBruto;
+  p.valor_total=Math.max(0,Math.round((novoBruto-descontoTotal)*100)/100);
+  const resumoDepois=novasLinhas.map(l=>`${l.quantidade}x ${nomeLinha(l)}`).join(', ');
+  registrarEvento('PEDIDO_ATUALIZADO',`Itens corrigidos — de [${resumoAntes}] para [${resumoDepois}]`,id);
+  scheduleSave(); closeModal(); render(); toast('Itens do pedido atualizados.');
 }
 let pedLinhas=[];
 const CAT_PALETTE=['#1F6FB2','#C05E10','#5F6B1B','#8C1D3F','#7A3E6B','#A87718','#2F6B7A','#8A6642','#4A5FA5','#3D7A6E','#9E2B25','#1F4E79'];

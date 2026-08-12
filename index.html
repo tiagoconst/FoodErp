@@ -1991,6 +1991,7 @@ function vendaSair(){
   pedLinhas=[]; vendaCat='__todas__'; vendaBusca=''; descTipo='valor'; descValor=0; nav('pedidos');
 }
 let construtorComponentes=[], construtorEditandoIdx=null, construtorProdutoBaseId='';
+let construtorClienteConsumoId='', construtorRefeicao='';
 let margemAlvoPadrao=60;
 function componentesDisponiveis(){
   return S.itens.filter(i=>i.ativo!==false&&!temFuncao(i,'vendavel')&&(temFuncao(i,'compravel')||temFuncao(i,'composto')))
@@ -2011,9 +2012,13 @@ function abrirConstrutorMarmita(idxEdicao){
     const l = pedLinhas[construtorEditandoIdx];
     construtorComponentes = l.componentes.filter(c=>!c.base).map(c=>({...c}));
     construtorProdutoBaseId = l.produtoBaseId || (S.itens.find(i=>temFuncao(i,'vendavel')&&i.nome===l.nomeCustom)||{}).id || '';
+    construtorClienteConsumoId = l.consumoClienteId||'';
+    construtorRefeicao = l.refeicao||'';
   } else {
     construtorComponentes = [];
     construtorProdutoBaseId = '';
+    construtorClienteConsumoId = '';
+    construtorRefeicao = '';
   }
   const perfis=S.perfis_marmita||[];
   const opcoesPerfil=perfis.map(p=>{ const cli=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:'—';
@@ -2021,14 +2026,24 @@ function abrirConstrutorMarmita(idxEdicao){
   const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
   const baseDisp=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA).sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
   const opcoesBase=baseDisp.map(i=>`<option value="${i.id}">${esc(i.nome)}</option>`).join('');
+  const clienteConsumoSep=construtorClienteConsumoId&&clienteById(construtorClienteConsumoId)?.consumo_sob_medida?.separar_refeicao;
   openModal(`<div class="m-h"><h3>🛠️ Marmita Sob Medida</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     ${perfis.length?`<div class="field"><label>Carregar perfil salvo</label>
       <select id="cm-perfil" onchange="carregarPerfilMarmita(this.value)"><option value="">— montar do zero —</option>${opcoesPerfil}</select></div>`:''}
+    <div class="frow c2">
+      <div class="field"><label>Cliente (puxa o consumo dela)</label>
+        <select id="cm-cli-consumo" onchange="cmClienteConsumoAlterado(this.value)"><option value="">— nenhum, montar livre —</option>${cliOpts}</select></div>
+      <div class="field" id="cm-refeicao-wrap" style="display:${clienteConsumoSep?'flex':'none'}"><label>Refeição</label>
+        <select id="cm-refeicao" onchange="construtorRefeicao=this.value;cmAplicarConsumoCliente();"><option value="">— selecione —</option>
+          <option value="almoco" ${construtorRefeicao==='almoco'?'selected':''}>Almoço</option>
+          <option value="janta" ${construtorRefeicao==='janta'?'selected':''}>Janta</option></select></div>
+    </div>
     <div class="field"><label>Produto — vira o nome do prato</label>
       <select id="cm-produto-base" onchange="cmProdutoBaseAlterado(this.value)"><option value="">— selecione —</option>${opcoesBase}</select></div>
-    <p class="subtle" style="margin-top:-6px;margin-bottom:10px">Ao escolher, o(s) pré-preparo(s) da ficha técnica desse produto (ex.: a proteína) já entram na lista de componentes abaixo, prontos pra ajustar a quantidade. O nome do prato (pedido, etiqueta e lista de produção) sempre fica igual ao nome padrão do produto, pra agrupar certinho na lista de produção.</p>
+    <p class="subtle" style="margin-top:-6px;margin-bottom:10px">Ao escolher, o(s) pré-preparo(s) da ficha técnica desse produto (ex.: a proteína) já entram na lista de componentes abaixo. Se um cliente estiver selecionado acima, a quantidade de cada Proteína/Carboidrato já vem ajustada pro consumo cadastrado dela (Legumes usa o valor único cadastrado, pra qualquer legume do prato); sem cadastro pra aquele item específico, fica a quantidade padrão da ficha técnica mesmo. O nome do prato (pedido, etiqueta e lista de produção) sempre fica igual ao nome padrão do produto.</p>
     <div class="field"><label>Componentes</label><div id="cm-componentes"></div>
+      <div id="cm-aviso-carbo" class="subtle" style="display:none;color:#b8860b;margin-top:6px">⚠ 2 ou mais carboidratos selecionados — confere se é isso mesmo antes de salvar.</div>
       <button class="btn sm" onclick="cmAddComponente()">+ Adicionar componente</button></div>
     <div class="frow c2" style="margin-top:14px">
       <div class="field"><label>Margem alvo (%)</label><input id="cm-margem" type="number" min="0" max="95" value="${margemAlvoPadrao}" oninput="margemAlvoPadrao=parseFloat(this.value)||0;cmRecalcular()"></div>
@@ -2044,7 +2059,38 @@ function abrirConstrutorMarmita(idxEdicao){
   <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="confirmarMarmitaSobMedida()">Adicionar ao pedido</button></div>`,true);
   cmDesenharComponentes();
   if(construtorProdutoBaseId)$('#cm-produto-base').value=construtorProdutoBaseId;
+  if(construtorClienteConsumoId)$('#cm-cli-consumo').value=construtorClienteConsumoId;
   if(construtorEditandoIdx!=null){ $('#cm-preco').value=pedLinhas[construtorEditandoIdx].preco||''; }
+}
+function cmClienteConsumoAlterado(clienteId){
+  construtorClienteConsumoId=clienteId;
+  const cli=clienteId?clienteById(clienteId):null;
+  const sep=!!cli?.consumo_sob_medida?.separar_refeicao;
+  $('#cm-refeicao-wrap').style.display=sep?'flex':'none';
+  if(!sep)construtorRefeicao='';
+  cmAplicarConsumoCliente();
+}
+// Pega o perfil de consumo do cliente selecionado (respeitando separar_refeicao/refeição) e
+// ajusta a quantidade de cada componente de Proteína/Carboidratos já presente na lista pro valor
+// cadastrado daquele item específico — sem cadastro pra ele, mantém a quantidade que já estava
+// (da ficha técnica padrão ou digitada manualmente). Legumes/Verduras usa o valor único.
+function cmAplicarConsumoCliente(){
+  const cli=construtorClienteConsumoId?clienteById(construtorClienteConsumoId):null;
+  const consumo=cli?.consumo_sob_medida;
+  if(!consumo){ cmDesenharComponentes(); return; }
+  const sep=!!consumo.separar_refeicao;
+  if(sep&&!construtorRefeicao){ cmDesenharComponentes(); return; } // precisa escolher a refeição antes
+  const perfil=sep?(construtorRefeicao==='janta'?consumo.janta:consumo.almoco):consumo.unico;
+  if(!perfil){ cmDesenharComponentes(); return; }
+  construtorComponentes.forEach(c=>{
+    if(!c.item_id)return;
+    const it=itemById(c.item_id); if(!it)return;
+    const cat=(it.categoria||'').trim().toLowerCase();
+    if(['proteína','proteina'].includes(cat)&&perfil.proteina&&perfil.proteina[c.item_id]!=null) c.quantidade=perfil.proteina[c.item_id];
+    else if(cat==='carboidratos'&&perfil.carboidrato&&perfil.carboidrato[c.item_id]!=null) c.quantidade=perfil.carboidrato[c.item_id];
+    else if(cat==='legumes/verduras'&&perfil.legumes!=null) c.quantidade=perfil.legumes;
+  });
+  cmDesenharComponentes();
 }
 function cmProdutoBaseAlterado(id){
   construtorProdutoBaseId=id;
@@ -2055,7 +2101,7 @@ function cmProdutoBaseAlterado(id){
   } else {
     toast('Esse produto não tem pré-preparo vinculado na ficha técnica — adicione o componente manualmente.',true);
   }
-  cmDesenharComponentes();
+  cmAplicarConsumoCliente();
 }
 function cmAddComponente(){ construtorComponentes.push({item_id:'',quantidade:100}); cmDesenharComponentes(); }
 function cmDesenharComponentes(){
@@ -2067,6 +2113,8 @@ function cmDesenharComponentes(){
     <button class="rm" onclick="construtorComponentes.splice(${k},1);cmDesenharComponentes()">✕</button></div>`).join('')
     ||'<p class="subtle">Selecione o produto acima (ou clique em "+ Adicionar componente") pra começar.</p>';
   construtorComponentes.forEach((c,k)=>{ const sel=$('#cm-componentes').children[k]?.querySelector('select'); if(sel&&c.item_id)sel.value=c.item_id; });
+  const qtdCarbo=construtorComponentes.filter(c=>c.item_id&&((itemById(c.item_id)||{}).categoria||'').trim().toLowerCase()==='carboidratos').length;
+  const avisoEl=$('#cm-aviso-carbo'); if(avisoEl)avisoEl.style.display=qtdCarbo>=2?'block':'none';
   cmRecalcular();
 }
 function cmRecalcular(){
@@ -2102,8 +2150,10 @@ function confirmarMarmitaSobMedida(){
   if(construtorEditandoIdx!=null){
     const l=pedLinhas[construtorEditandoIdx];
     l.nomeCustom=nome; l.produtoBaseId=baseId; l.preco=preco; l.componentes=validos.map(c=>({...c})); l.cmv=cmv;
+    l.consumoClienteId=construtorClienteConsumoId||null; l.refeicao=construtorRefeicao||null;
   } else {
-    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,produtoBaseId:baseId,qtd:1,preco,componentes:validos.map(c=>({...c})),cmv});
+    pedLinhas.push({item:ITEM_ID_SOB_MEDIDA,custom:true,nomeCustom:nome,produtoBaseId:baseId,qtd:1,preco,componentes:validos.map(c=>({...c})),cmv,
+      consumoClienteId:construtorClienteConsumoId||null,refeicao:construtorRefeicao||null});
   }
   closeModal(); scheduleSave(); render(); toast('Marmita personalizada adicionada.');
 }
@@ -2197,7 +2247,7 @@ async function salvarPedidoVenda(){
   const numero=await proximoNumeroPedido();
   const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
   const itens=validas.map(l=>l.custom
-    ? {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0),nome_custom:l.nomeCustom,componentes:l.componentes,cmv_unitario:l.cmv}
+    ? {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0),nome_custom:l.nomeCustom,componentes:l.componentes,cmv_unitario:l.cmv,refeicao:l.refeicao||null}
     : {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)});
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
@@ -2463,14 +2513,15 @@ function imprimirEtiquetas(id){
   const hoje_=new Date(); const fmt=d=>d.toLocaleDateString('pt-BR');
   const validade=new Date(hoje_); validade.setDate(validade.getDate()+30);
   const etiquetas=[];
+  const rotuloRefeicao={almoco:'ALMOÇO',janta:'JANTA'};
   p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
-    for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom}); });
+    for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||''}); });
   const linhaCorte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
   const blocos=linhaCorte+etiquetas.map((et,i)=>`${i>0?linhaCorte:''}<div class="et">
     <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
     ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
     <div class="et-sabor">${esc(et.nome)}</div>
-    ${et.sobMedida?'<div class="et-tarja">SOB MEDIDA</div>':''}
+    ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
   </div>`).join('')+linhaCorte;
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
@@ -2982,6 +3033,7 @@ function marmitasSobMedidaAtivas(){
         cliente: cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'),
         nome: l.nome_custom||'Marmita personalizada',
         qtd: l.quantidade,
+        refeicao: {almoco:'Almoço',janta:'Janta'}[l.refeicao]||'',
         componentes: l.componentes.map(c=>{ const it=itemById(c.item_id);
           return {nome:it?it.nome:c.item_id, quantidade:c.quantidade, unidade:it?it.unidade_base:''}; })
       });
@@ -2995,7 +3047,7 @@ function imprimirMarmitasSobMedida(){
   const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
   const blocos=lista.map((m,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="ficha">
-    <div class="ficha-cli">${esc(m.cliente)}</div>
+    <div class="ficha-cli">${esc(m.cliente)}${m.refeicao?' · '+m.refeicao.toUpperCase():''}</div>
     <div class="ficha-prato">🛠️ ${esc(m.nome)}${m.qtd>1?' ('+m.qtd+'un)':''}</div>
     <div class="ficha-comp">${m.componentes.map(c=>`<div class="comp-linha"><span class="comp-nome">${esc(c.nome.toUpperCase())}</span><b class="comp-qtd">${qty(Math.round(c.quantidade*100)/100,c.unidade)}</b></div>`).join('')}</div>
   </div>`).join('');
@@ -3373,8 +3425,55 @@ VIEWS.clientes=function(){
   </div>
   <div class="card"><table><thead><tr><th>Cliente</th><th class="r">Saldo</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
+// Itens elegíveis pro cadastro de "Consumo / Sob Medida" do cliente: só pré-preparos (função
+// Produzível) de Proteína ou Carboidratos — são esses que entram nos componentes de uma marmita
+// sob medida (ver produtoBaseComponentesSugeridos). Legumes/Verduras não lista item por item
+// porque o valor é único, vale pra qualquer legume que o prato base já usar.
+function itensConsumoProteina(){ return S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'produzivel')&&['proteína','proteina'].includes((i.categoria||'').trim().toLowerCase())).sort((a,b)=>a.nome.localeCompare(b.nome,'pt')); }
+function itensConsumoCarboidrato(){ return S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'produzivel')&&(i.categoria||'').trim().toLowerCase()==='carboidratos').sort((a,b)=>a.nome.localeCompare(b.nome,'pt')); }
+function consumoLinhaHtml(key,tipo,item,valor){
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dotted var(--line,#ddd)">
+    <span style="font-size:12.5px">${esc(item.nome)}</span>
+    <input type="number" min="0" step="any" style="width:72px;padding:3px 6px;border:1px solid var(--line,#ccc);border-radius:5px;font-size:12px" data-cons="${key}|${tipo}|${item.id}" value="${valor==null?'':valor}" placeholder="—g"></div>`;
+}
+function consumoBlocoHtml(key,dados){
+  dados=dados||{}; const prot=dados.proteina||{}, carb=dados.carboidrato||{};
+  return `
+    <div class="subtle" style="margin:8px 0 4px;font-weight:700">Proteínas (g)</div>
+    ${itensConsumoProteina().map(i=>consumoLinhaHtml(key,'proteina',i,prot[i.id])).join('')||'<p class="subtle">Nenhum pré-preparo de Proteína cadastrado ainda.</p>'}
+    <div class="subtle" style="margin:10px 0 4px;font-weight:700">Carboidratos (g)</div>
+    ${itensConsumoCarboidrato().map(i=>consumoLinhaHtml(key,'carboidrato',i,carb[i.id])).join('')||'<p class="subtle">Nenhum pré-preparo de Carboidratos cadastrado ainda.</p>'}
+    <div class="field" style="margin-top:10px"><label>Legumes/Verduras (g) — vale pra qualquer legume do prato</label>
+      <input type="number" min="0" step="any" data-cons="${key}|legumes|_" value="${dados.legumes==null?'':dados.legumes}" placeholder="—g"></div>`;
+}
+function clToggleConsumoRefeicao(){
+  const sep=$('#cl-cons-sep').checked;
+  $('#cl-cons-unico').style.display=sep?'none':'block';
+  $('#cl-cons-duplo').style.display=sep?'block':'none';
+}
+function lerConsumoSobMedida(){
+  const sep=!!$('#cl-cons-sep')?.checked;
+  const ler=key=>{
+    const proteina={}, carboidrato={}; let legumes=null;
+    document.querySelectorAll(`[data-cons^="${key}|"]`).forEach(inp=>{
+      const [,tipo,itemId]=inp.dataset.cons.split('|');
+      if(inp.value==='')return;
+      const v=parseFloat(inp.value); if(isNaN(v))return;
+      if(tipo==='proteina')proteina[itemId]=v;
+      else if(tipo==='carboidrato')carboidrato[itemId]=v;
+      else if(tipo==='legumes')legumes=v;
+    });
+    return {proteina,carboidrato,legumes};
+  };
+  return {separar_refeicao:sep, unico:ler('unico'), almoco:ler('almoco'), janta:ler('janta')};
+}
 function modalCliente(id){
   const c=id?clienteById(id):null;
+  const consumo=(c&&c.consumo_sob_medida)||{separar_refeicao:false,unico:{},almoco:{},janta:{}};
+  const sep=!!consumo.separar_refeicao;
+  const temConsumoSalvo=!!(consumo.unico&&(Object.keys(consumo.unico.proteina||{}).length||Object.keys(consumo.unico.carboidrato||{}).length||consumo.unico.legumes!=null))
+    ||!!(consumo.almoco&&(Object.keys(consumo.almoco.proteina||{}).length||Object.keys(consumo.almoco.carboidrato||{}).length||consumo.almoco.legumes!=null))
+    ||!!(consumo.janta&&(Object.keys(consumo.janta.proteina||{}).length||Object.keys(consumo.janta.carboidrato||{}).length||consumo.janta.legumes!=null));
   openModal(`<div class="m-h"><h3>${c?'Editar cliente':'Novo cliente'}</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
     <div class="field"><label>Nome *</label><input id="cl-nome" value="${c?esc(c.nome):''}"></div>
@@ -3384,6 +3483,16 @@ function modalCliente(id){
     </div>
     <div class="field"><label>Endereço</label><input id="cl-end" value="${c?esc(c.endereco||''):''}"></div>
     <div class="field"><label>Observação</label><textarea id="cl-obs" rows="2">${c?esc(c.observacao||''):''}</textarea></div>
+    <details ${temConsumoSalvo?'open':''} style="margin-top:14px">
+      <summary style="cursor:pointer;font-weight:700">🍽️ Consumo / Sob Medida (opcional)</summary>
+      <p class="subtle" style="margin:6px 0 4px">Gramas que esse cliente costuma consumir de cada item — usado pra pré-preencher a quantidade automaticamente na hora de montar uma Marmita Sob Medida pra ele.</p>
+      <div class="field"><label><input type="checkbox" id="cl-cons-sep" ${sep?'checked':''} onchange="clToggleConsumoRefeicao()"> Separar consumo por refeição (almoço/janta)</label></div>
+      <div id="cl-cons-unico" style="display:${sep?'none':'block'}">${consumoBlocoHtml('unico',consumo.unico)}</div>
+      <div id="cl-cons-duplo" style="display:${sep?'block':'none'}">
+        <div class="subtle" style="font-weight:800;margin-top:6px">☀️ Almoço</div>${consumoBlocoHtml('almoco',consumo.almoco)}
+        <div class="subtle" style="font-weight:800;margin-top:14px">🌙 Janta</div>${consumoBlocoHtml('janta',consumo.janta)}
+      </div>
+    </details>
   </div>
   <div class="m-f">${c?`<button class="btn ghost" onclick="toggleCliente('${id}')">${c.ativo===false?'Reativar':'Inativar'}</button>`:''}
     <button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarCliente('${id||''}')">Salvar</button></div>`);
@@ -3391,7 +3500,8 @@ function modalCliente(id){
 }
 function salvarCliente(id){
   const nome=$('#cl-nome').value.trim(); if(!nome)return toast('Informe o nome.',true);
-  const d={nome,telefone:$('#cl-tel').value.trim(),email:$('#cl-email').value.trim(),endereco:$('#cl-end').value.trim(),observacao:$('#cl-obs').value.trim(),atualizado_em:new Date().toISOString()};
+  const d={nome,telefone:$('#cl-tel').value.trim(),email:$('#cl-email').value.trim(),endereco:$('#cl-end').value.trim(),observacao:$('#cl-obs').value.trim(),
+    consumo_sob_medida:lerConsumoSobMedida(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(clienteById(id),d); registrarEvento('CLIENTE_ATUALIZADO',nome+' atualizado',id); }
   else{ const nid=uid('CLI'); S.clientes.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},d));
     registrarEvento('CLIENTE_CRIADO',nome+' cadastrado',nid); }

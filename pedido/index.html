@@ -261,6 +261,29 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .preparo-step .txt b{display:block;font-family:var(--font-menu);font-weight:800;font-size:14px;color:var(--ink);margin-bottom:3px}
 .preparo-step .txt p{margin:0;font-family:var(--font-menu);font-size:13.5px;color:var(--ink);line-height:1.55}
 .preparo-fim{margin-top:6px;padding-top:16px;border-top:1px dashed var(--line);font-family:var(--font-menu);font-size:13.5px;color:var(--primary-dark);font-weight:700;text-align:center}
+
+.como-card{max-width:860px}
+.como-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:30px}
+.como-step{border-radius:16px;padding:22px 18px;color:#fff;box-shadow:0 8px 20px rgba(62,46,32,.14)}
+.como-step .cs-num{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.28);font-family:var(--font-menu);font-weight:800;font-size:14px}
+.como-step h4{font-family:var(--font-menu);font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.02em;margin:14px 0 8px;color:#fff}
+.como-step p{font-family:var(--font-menu);font-size:12.5px;line-height:1.6;color:rgba(255,255,255,.94);margin:0}
+.cs-1{background:linear-gradient(150deg,var(--primary),var(--primary-dark))}
+.cs-2{background:linear-gradient(150deg,var(--accent),#5c6849)}
+.cs-3{background:linear-gradient(150deg,var(--primary-dark),#7a4527)}
+@media (max-width:640px){.como-steps{grid-template-columns:1fr}}
+
+.como-faq{border-top:1px solid var(--line);padding-top:4px}
+.faq-item{border-bottom:1px solid var(--line);padding:15px 0}
+.faq-item summary{list-style:none;cursor:pointer;font-family:var(--font-menu);font-weight:800;font-size:14px;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item .faq-ic{flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--primary-dark);position:relative}
+.faq-item .faq-ic::before,.faq-item .faq-ic::after{content:'';position:absolute;background:var(--primary-dark);top:50%;left:50%;transform:translate(-50%,-50%)}
+.faq-item .faq-ic::before{width:10px;height:1.5px}
+.faq-item .faq-ic::after{width:1.5px;height:10px;transition:transform .2s}
+.faq-item[open] .faq-ic::after{transform:translate(-50%,-50%) scaleY(0)}
+.faq-item p{margin-top:12px;font-family:var(--font-menu);font-size:13.5px;color:var(--ink);line-height:1.65}
+.faq-item p a{color:var(--primary-dark);font-weight:700}
 </style>
 </head>
 <body>
@@ -333,32 +356,56 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 
 <div class="sobre-overlay" id="como-overlay" onclick="if(event.target===this)fecharComoFunciona()">
   <button class="sobre-close" onclick="fecharComoFunciona()">✕</button>
-  <div class="legal-card">
+  <div class="legal-card como-card">
     <div class="legal-head">
       <h2>Como Funciona</h2>
-      <div class="muted">Tudo o que você precisa saber antes de pedir</div>
+      <div class="muted">Do pedido à sua mesa, em poucos passos</div>
     </div>
     <div class="legal-body">
-      <h3>Como funcionam as marmitas?</h3>
-      <p>Você escolhe as marmitas prontas do nosso cardápio, ou monta a sua do jeitinho que quiser na opção "Monte a Sua Marmita". Depois é só finalizar o pedido pelo site, escolher entrega ou retirada e pagar na hora (Pix/cartão) ou depois. Simples assim.</p>
+      <div class="como-steps">
+        <div class="como-step cs-1">
+          <span class="cs-num">1</span>
+          <h4>Escolha do seu jeito</h4>
+          <p>Você escolhe as marmitas prontas do nosso cardápio, ou podemos montar da forma, dos sabores ou do tamanho que você preferir. Peça pelo site ou pelo WhatsApp — estamos sempre à disposição.</p>
+        </div>
+        <div class="como-step cs-2">
+          <span class="cs-num">2</span>
+          <h4>Receba quando quiser</h4>
+          <p>Pediu num dia de produção? Recebe fresquinha, no mesmo dia. Prefere programar? É só agendar pra manhã, tarde ou noite, no dia que for melhor pra você.</p>
+        </div>
+        <div class="como-step cs-3">
+          <span class="cs-num">3</span>
+          <h4>Pague como preferir</h4>
+          <p>Aceitamos vale-alimentação, vale-refeição, débito, crédito, Pix e os principais cartões de benefícios — o que for mais prático pra você.</p>
+        </div>
+      </div>
 
-      <h3>As marmitas vêm congeladas?</h3>
-      <p>Sim! Todas as marmitas chegam congeladas, prontas pra ir direto do freezer pro micro-ondas na hora que você quiser comer — isso preserva o sabor e a qualidade da comida. Veja o passo a passo certinho de aquecimento em <a onclick="fecharComoFunciona();abrirPreparo()">Modo de Preparar</a>.</p>
-
-      <h3>Posso pedir a quantidade que eu quiser?</h3>
-      <p>Pode sim — não tem quantidade mínima nem máxima fixa. Pede quantas marmitas fizerem sentido pra sua semana.</p>
-
-      <h3>Posso adaptar para o meu plano alimentar (dieta)?</h3>
-      <p>Sim! Na opção "Monte a Sua Marmita" você escolhe cada componente (proteína, carboidrato, legumes etc.) e a quantidade de cada um, com o preço calculado na hora — ótimo pra quem segue alguma dieta ou restrição alimentar.</p>
-
-      <h3>Posso pedir mais ou menos comida?</h3>
-      <p>Sim, também na Marmita Sob Medida dá pra ajustar a quantidade de cada componente conforme sua fome ou objetivo, pra mais ou pra menos.</p>
-
-      <h3>Vocês entregam?</h3>
-      <p>Entregamos sim! No fechamento do pedido você escolhe entre entrega ou retirada, conforme as opções disponíveis pra sua região.</p>
-
-      <h3>Ainda com dúvida?</h3>
-      <p>Chama a gente pelo <a onclick="fecharComoFunciona();abrirContato()">WhatsApp</a> que respondemos rapidinho.</p>
+      <div class="como-faq">
+        <details class="faq-item" open>
+          <summary>As marmitas vêm congeladas?<span class="faq-ic"></span></summary>
+          <p>Sim! Todas as marmitas chegam congeladas, prontas pra ir direto do freezer pro micro-ondas na hora que você quiser comer — isso preserva o sabor e a qualidade da comida. Sob demanda, também conseguimos servir marmitas frescas, combinando antes com a gente. Veja o passo a passo certinho de aquecimento em <a onclick="fecharComoFunciona();abrirPreparo()">Modo de Preparar</a>.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Posso pedir a quantidade que eu quiser?<span class="faq-ic"></span></summary>
+          <p>No seu primeiro pedido, você pode pedir a quantidade que quiser pra conhecer nossos sabores. Além disso, temos combos com preço diferenciado, que se adequam à necessidade de cada pessoa.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Posso adaptar para o meu plano alimentar (dieta)?<span class="faq-ic"></span></summary>
+          <p>No site você encontra a opção "Monte a Sua Marmita". Se preferir, também pode nos enviar seu plano alimentar ou contar sobre suas preferências e restrições — a gente monta os pratos de acordo com a sua necessidade, sempre entregando a melhor experiência e sabor.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Posso pedir mais ou menos comida?<span class="faq-ic"></span></summary>
+          <p>Sim! No "Monte a Sua Marmita" você escolhe a quantidade de cada componente do jeito que quiser. E se tiver dúvida, a gente te ajuda a entender a quantidade ideal pra sua necessidade.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Vocês entregam?<span class="faq-ic"></span></summary>
+          <p>Entregamos sim! Atendemos entrega em Irati, e mediante agendamento também entregamos nas cidades próximas.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Ainda com dúvida?<span class="faq-ic"></span></summary>
+          <p>Chama a gente no <a onclick="fecharComoFunciona();abrirContato()">WhatsApp</a> que respondemos na hora.</p>
+        </details>
+      </div>
     </div>
   </div>
 </div>

@@ -1619,6 +1619,19 @@ function statusDisponiveis(){
           ...(S.status_personalizados||[]).filter(s=>s.ativo!==false).map(s=>({id:s.id,nome:s.nome,sistema:false}))];
 }
 function pedidoPago(p){ return !!(p.pago ?? p.recebido); }
+// Dispara a pesquisa de satisfação por WhatsApp quando o pedido vira pago+finalizado.
+// Só chama a Edge Function (que por sua vez já é idempotente via pesquisa_wpp_enviada_em),
+// nunca bloqueia a UI — falha de envio não deve travar o fluxo de pagamento do ERP.
+function dispararPesquisaSatisfacaoWpp(id){
+  const p=S.pedidos.find(x=>x.id===id);
+  if(!p||p.status!=='finalizado'||!p.pago||!p.telefone||p.pesquisa_wpp_enviada_em)return;
+  sb.functions.invoke('whatsapp-enviar-pesquisa',{body:{empresa_id:empresa.empresa_id,pedido_id:id}})
+    .then(({data,error})=>{
+      if(error||(data&&data.error)){ console.error('Pesquisa WhatsApp não enviada:',error||data.error); return; }
+      p.pesquisa_wpp_enviada_em=new Date().toISOString(); scheduleSave();
+    })
+    .catch(e=>console.error('Pesquisa WhatsApp não enviada:',e));
+}
 function totalEntregue(p){ return (p.itens||[]).every(l=>(l.quantidade_entregue||0)>=l.quantidade); }
 function qtdPendente(l){ return Math.max(0,l.quantidade-(l.quantidade_entregue||0)); }
 function togglePago(id){
@@ -1635,6 +1648,7 @@ function togglePago(id){
     registrarEvento('PEDIDO_STATUS_ALTERADO',`${p.cliente||id}: ${p.pago?'marcado como pago':'pagamento desmarcado'}`,id);
   }
   scheduleSave(); render(); toast(p.pago?'Marcado como pago.':'Pagamento desmarcado.');
+  dispararPesquisaSatisfacaoWpp(id);
 }
 function modalStatusPersonalizados(){
   openModal(`<div class="m-h"><h3>Status de pedido personalizados</h3><button class="x" onclick="closeModal()">✕</button></div>
@@ -1808,10 +1822,11 @@ function aplicarNovoStatus(id){ const sel=$('#pd-status-sel'); if(sel)mudarStatu
 function mudarStatusPedido(id,novo){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   if(novo===p.status)return;
-  if(['entregue','entrega_parcial'].includes(novo)){ modalEntrega(id); return; }
+  // "Entregue Ag. Pagamento" e "Entrega Parcial" só registram a baixa de estoque — nunca perguntam
+  // forma de pagamento nem fecham o pedido. Só "Finalizado" (ou marcar como pago) pergunta pagamento.
+  if(['entregue','entrega_parcial'].includes(novo)){ modalEntrega(id,false); return; }
   if(novo==='cancelado'){ cancelarPedido(id); return; }
-  if(novo==='finalizado'&&p.status==='entregue'){ receberPedido(id); return; }
-  if(novo==='finalizado'&&p.status!=='entregue'){ modalEntrega(id); return; } // ainda não passou por entrega — coleta forma de pagamento primeiro
+  if(novo==='finalizado'){ modalEntrega(id,true); return; }
   if(['entregue','finalizado','entrega_parcial'].includes(p.status)){
     if(!confirm(`Esse pedido já estava "${statusInfo(p.status).label}". Mudar o status agora devolve o estoque do que foi entregue e remove os lançamentos financeiros dessa entrega. Confirmar?`))return;
     p.itens.forEach(l=>{ const q=l.quantidade_entregue||0; if(q<=0)return;
@@ -2328,31 +2343,43 @@ function avancarPedido(id,novo){
   if(novo==='disponivel')registrarEvento('PEDIDO_DISPONIVEL',`${p.cliente||id} disponível para entrega/retirada`,id);
   p.status=novo; scheduleSave(); render();
 }
-function modalEntrega(id){
+// cobrarPagamento controla se esse passo pergunta forma de pagamento e pode fechar o pedido:
+// false = só "Entregar" (Entregue Ag. Pagamento / Entrega Parcial) — nunca pergunta pagamento.
+// true  = "Finalizar" — pergunta forma de pagamento (a menos que já esteja marcado como pago).
+function modalEntrega(id,cobrarPagamento){
   garantirFormasPadrao();
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   const jaPago=pedidoPago(p);
-  const linhasHtml=p.itens.map((l,k)=>{
+  const algumPendente=p.itens.some(l=>qtdPendente(l)>0);
+  const linhasHtml=algumPendente?p.itens.map((l,k)=>{
     const it=itemById(l.item_id); const pend=qtdPendente(l); const jaEnt=l.quantidade_entregue||0;
     return `<div class="line" style="grid-template-columns:1fr 90px 90px;align-items:center">
       <div>${esc(it?it.nome:l.item_id)}${jaEnt?`<div class="subtle" style="font-size:11px">${jaEnt} já entregue(s) antes</div>`:''}</div>
       <input type="number" min="0" max="${pend}" step="any" value="${pend}" id="ent-qtd-${k}">
       <span class="subtle num" style="font-size:12px">pendente: ${pend}</span></div>`;
-  }).join('');
-  const formas=S.formas.filter(f=>f.ativo!==false).map(f=>`<option value="F:${f.id}">${esc(f.nome)}${f.taxa_percentual?' (taxa '+f.taxa_percentual+'%)':''}</option>`).join('');
-  const conta=p.cliente_id?`<option value="CONTA">Na conta do cliente (mensalista — fica a pagar)</option>`:'';
-  const cn=p.canal_id?canalById(p.canal_id):null;
-  const canalOpt=cn?`<option value="CANAL">Repasse do canal ${esc(cn.nome)}${cn.taxa_percentual?' (comissão '+cn.taxa_percentual+'%)':''}</option>`:'';
-  openModal(`<div class="m-h"><h3>Entregar — ${esc(p.cliente||id)}</h3><button class="x" onclick="closeModal()">✕</button></div>
+  }).join(''):'';
+  let pagamentoHtml='';
+  if(cobrarPagamento){
+    if(jaPago){
+      pagamentoHtml=`<div class="tag f" style="margin-bottom:4px">✅ Esse pedido já está marcado como pago — não vai pedir forma de pagamento de novo</div>`;
+    } else {
+      const formas=S.formas.filter(f=>f.ativo!==false).map(f=>`<option value="F:${f.id}">${esc(f.nome)}${f.taxa_percentual?' (taxa '+f.taxa_percentual+'%)':''}</option>`).join('');
+      const conta=p.cliente_id?`<option value="CONTA">Na conta do cliente (mensalista — fica a pagar)</option>`:'';
+      const cn=p.canal_id?canalById(p.canal_id):null;
+      const canalOpt=cn?`<option value="CANAL">Repasse do canal ${esc(cn.nome)}${cn.taxa_percentual?' (comissão '+cn.taxa_percentual+'%)':''}</option>`:'';
+      pagamentoHtml=`<div class="field"><label>Forma de pagamento</label><select id="en-forma">${canalOpt}${formas}${conta}<option value="ARECEBER">Receber depois (contas a receber)</option></select></div>`;
+    }
+  }
+  openModal(`<div class="m-h"><h3>${cobrarPagamento?'Finalizar':'Entregar'} — ${esc(p.cliente||id)}</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
-    <p class="subtle" style="margin-bottom:10px">Ajuste as quantidades abaixo se for entrega parcial. A entrega baixa o estoque (PVPS) e fotografa o custo.</p>
-    <div class="lines" style="margin-bottom:14px">${linhasHtml}</div>
-    ${jaPago?`<div class="tag f" style="margin-bottom:4px">✅ Esse pedido já está marcado como pago — não vai pedir forma de pagamento de novo</div>`
-      :`<div class="field"><label>Pagamento (só perguntado se a entrega ficar 100% completa)</label><select id="en-forma">${canalOpt}${formas}${conta}<option value="ARECEBER">Receber depois (contas a receber)</option></select></div>`}
+    ${algumPendente?`<p class="subtle" style="margin-bottom:10px">Ajuste as quantidades abaixo se for entrega parcial. A entrega baixa o estoque (PVPS) e fotografa o custo.</p>
+    <div class="lines" style="margin-bottom:14px">${linhasHtml}</div>`:''}
+    ${!cobrarPagamento?`<p class="subtle">Isso só registra a entrega — não pergunta pagamento nem fecha o pedido. Pagamento é tratado separadamente, em "Marcar como pago" ou ao "Finalizar".</p>`:''}
+    ${pagamentoHtml}
   </div>
-  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="executarEntregaUI('${id}')">Confirmar entrega</button></div>`);
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="executarEntregaUI('${id}',${cobrarPagamento?'true':'false'})">${cobrarPagamento?'Finalizar':'Confirmar entrega'}</button></div>`);
 }
-function executarEntregaUI(id){
+function executarEntregaUI(id,cobrarPagamento){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   const qtds=p.itens.map((l,k)=>{
     const el=$('#ent-qtd-'+k); const v=el?parseFloat(el.value)||0:0;
@@ -2360,15 +2387,15 @@ function executarEntregaUI(id){
   });
   const jaPago=pedidoPago(p);
   let modo=null, formaId=null;
-  if(!jaPago){
+  if(cobrarPagamento&&!jaPago){
     const v=$('#en-forma').value;
     if(v==='CANAL')modo='canal'; else if(v==='CONTA')modo='conta'; else if(v==='ARECEBER')modo='areceber';
     else{ modo='pago'; formaId=v.slice(2); }
   }
   closeModal();
-  executarEntrega(id,qtds,modo,formaId);
+  executarEntrega(id,qtds,modo,formaId,cobrarPagamento);
 }
-function executarEntrega(id,qtds,modo,formaId){
+function executarEntrega(id,qtds,modo,formaId,cobrarPagamento){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   const faltam=p.itens.filter((l,k)=>qtds[k]>0&&temFuncao(itemById(l.item_id),'estocavel')&&saldo(l.item_id)<qtds[k]);
   if(faltam.length&&!confirm('Estoque insuficiente para: '+faltam.map(l=>nomeItem(l.item_id)).join(', ')+'. Entregar mesmo assim? O saldo ficará negativo.'))return;
@@ -2395,6 +2422,14 @@ function executarEntrega(id,qtds,modo,formaId){
     scheduleSave(); render(); toast('Entrega parcial registrada. Falta entregar o restante depois.');
     return;
   }
+  if(!cobrarPagamento){
+    // Só registra a entrega — não pergunta pagamento nem fecha o pedido. Fechar só acontece
+    // explicitamente em "Finalizado" ou ao marcar como pago.
+    p.status='entregue';
+    registrarEvento('PEDIDO_ENTREGUE',`${p.cliente||id} · entrega completa registrada, aguardando pagamento`,id);
+    scheduleSave(); render(); toast('Pedido entregue. Aguardando pagamento.');
+    return;
+  }
   if(jaPago){
     p.status='finalizado'; p.recebido=true;
     if(!p.faturamento){
@@ -2403,7 +2438,8 @@ function executarEntrega(id,qtds,modo,formaId){
         categoria:'Vendas',data:p.data_entrega,status:'liquidado',data_liquidacao:p.data_entrega,origem:id});
     }
     registrarEvento('PEDIDO_ENTREGUE',`${p.cliente||id} · ${money(p.valor_total)} — já estava pago, pedido finalizado`,id);
-    scheduleSave(); render(); toast('Pedido entregue e finalizado.');
+    scheduleSave(); render(); toast('Pedido finalizado.');
+    dispararPesquisaSatisfacaoWpp(id);
     return;
   }
   p.faturamento=modo; p.forma_id=formaId||null;
@@ -2435,6 +2471,7 @@ function executarEntrega(id,qtds,modo,formaId){
     registrarEvento('PEDIDO_ENTREGUE',`${p.cliente||id} · ${money(p.valor_total)} — pago (${formaById(formaId)?formaById(formaId).nome:''}), caixa atualizado`,id);
   }
   scheduleSave(); render(); toast(modo==='pago'?'Pedido entregue e finalizado.':'Pedido entregue.');
+  if(modo==='pago')dispararPesquisaSatisfacaoWpp(id);
 }
 function receberPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
@@ -2442,6 +2479,7 @@ function receberPedido(id){
   S.lancamentos.filter(l=>l.origem===id&&l.status==='aberto').forEach(l=>{ l.status='liquidado'; l.data_liquidacao=hoje(); });
   registrarEvento(p.faturamento==='canal'?'REPASSE_CANAL':'RECEBIMENTO_REALIZADO',`${p.cliente||id} · ${money(p.valor_total)} — ${p.faturamento==='canal'?'repasse do canal liquidado (receita e comissão)':'baixa contas a receber, atualiza caixa'} · pedido finalizado`,id);
   scheduleSave(); render(); toast('Recebimento registrado e pedido finalizado.');
+  dispararPesquisaSatisfacaoWpp(id);
 }
 function cancelarPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;

@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/como", "destination": "/?pagina=como-funciona" }
+    { "source": "/como", "destination": "/" }
   ]
 }

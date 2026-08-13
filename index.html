@@ -861,7 +861,7 @@ function modalItem(id){
   const it=id?itemById(id):null;
   const checks=FUNCOES.map(f=>{
     const on=it&&temFuncao(it,f.id);
-    const extra=f.id==='vendavel'?";const w=document.getElementById('it-foto-wrap');if(w)w.style.display=this.checked?'block':'none'"
+    const extra=f.id==='vendavel'?";const w=document.getElementById('it-foto-wrap');if(w)w.style.display=this.checked?'block':'none';const wd=document.getElementById('it-desc-wrap');if(wd)wd.style.display=this.checked?'block':'none'"
       :f.id==='produzivel'?";const we=document.getElementById('it-etapa-wrap');if(we)we.style.display=this.checked?'block':'none'":'';
     return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)${extra}"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
   }).join('');
@@ -889,6 +889,10 @@ function modalItem(id){
       <span class="hint">Só aparece pra item marcado como "Produzível" — é o que define a ordem das seções em Planejamento → Pré-preparos a fazer.</span>
     </div>
     <div class="field"><label>Observação</label><textarea id="it-obs" rows="2">${it?esc(it.observacao||''):''}</textarea></div>
+    <div class="field" id="it-desc-wrap" style="display:${it&&temFuncao(it,'vendavel')?'block':'none'}">
+      <label>Descrição (aparece no site de pedidos e no catálogo do WhatsApp/Instagram/Facebook)</label>
+      <textarea id="it-desc" rows="2" placeholder="ex.: Frango grelhado com toque cítrico de limão siciliano">${it?esc(it.descricao||''):''}</textarea>
+    </div>
     <div class="field" id="it-foto-wrap" style="display:${it&&temFuncao(it,'vendavel')?'block':'none'}">
       <label>Foto (aparece no site de pedidos — só faz sentido pra item marcado como "vendável")</label>
       <input type="hidden" id="it-foto" value="${esc(fotoAtual)}">
@@ -1044,7 +1048,7 @@ function salvarItem(id){
   const funcoes=[...document.querySelectorAll('input[name=funcao]:checked')].map(c=>c.value);
   const dados={nome,categoria:$('#it-cat').value,unidade_base:$('#it-un').value,
     preco_venda:parseFloat($('#it-preco').value)||null,estoque_minimo:parseFloat($('#it-min').value)||0,
-    foto_url:$('#it-foto').value.trim()||null,
+    foto_url:$('#it-foto').value.trim()||null,descricao:$('#it-desc')?.value.trim()||null,
     etapa_producao:funcoes.includes('produzivel')?(parseInt($('#it-etapa')?.value)||1):null,
     funcoes,observacao:$('#it-obs').value.trim(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(itemById(id),dados); registrarEvento('ITEM_ATUALIZADO',`${nome} atualizado (${funcoes.length} funções)`,id); }

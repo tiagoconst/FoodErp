@@ -1,4 +1,7 @@
 {
+  "rewrites": [
+    { "source": "/como", "destination": "/pedido/?pagina=como-funciona" }
+  ],
   "headers": [
     {
       "source": "/producao/(.*)",

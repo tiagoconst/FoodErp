@@ -269,6 +269,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   <div class="brand" id="brand-box"><img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-UXF7V4NZ.png" alt="Sabores da Ana"></div>
   <div class="navlinks">
     <a onclick="document.getElementById('cardapio').scrollIntoView({behavior:'smooth'})">Produtos</a>
+    <a onclick="abrirComoFunciona()">Como Funciona</a>
     <a onclick="abrirPreparo()">Modo de Preparar</a>
     <a onclick="abrirSobre()">Sobre Nós</a>
     <a onclick="abrirContato()">Contato</a>
@@ -326,6 +327,38 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
       <div class="preparo-step"><span class="num">4</span><div class="txt"><b>Purês e cremes merecem mais tempo</b><p>Depois de aquecer por alguns minutos, retire, mexa bem e volte ao micro-ondas — isso garante que voltem à textura cremosa.</p></div></div>
       <div class="preparo-step"><span class="num">5</span><div class="txt"><b>Os legumes soltaram um pouco de líquido?</b><p>Isso é completamente normal — é uma característica natural dos alimentos. Basta misturar e aproveitar todos os nutrientes.</p></div></div>
       <div class="preparo-fim">Sua refeição merece esse cuidado — bom apetite! 💚</div>
+    </div>
+  </div>
+</div>
+
+<div class="sobre-overlay" id="como-overlay" onclick="if(event.target===this)fecharComoFunciona()">
+  <button class="sobre-close" onclick="fecharComoFunciona()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>Como Funciona</h2>
+      <div class="muted">Tudo o que você precisa saber antes de pedir</div>
+    </div>
+    <div class="legal-body">
+      <h3>Como funcionam as marmitas?</h3>
+      <p>Você escolhe as marmitas prontas do nosso cardápio, ou monta a sua do jeitinho que quiser na opção "Monte a Sua Marmita". Depois é só finalizar o pedido pelo site, escolher entrega ou retirada e pagar na hora (Pix/cartão) ou depois. Simples assim.</p>
+
+      <h3>As marmitas vêm congeladas?</h3>
+      <p>Sim! Todas as marmitas chegam congeladas, prontas pra ir direto do freezer pro micro-ondas na hora que você quiser comer — isso preserva o sabor e a qualidade da comida. Veja o passo a passo certinho de aquecimento em <a onclick="fecharComoFunciona();abrirPreparo()">Modo de Preparar</a>.</p>
+
+      <h3>Posso pedir a quantidade que eu quiser?</h3>
+      <p>Pode sim — não tem quantidade mínima nem máxima fixa. Pede quantas marmitas fizerem sentido pra sua semana.</p>
+
+      <h3>Posso adaptar para o meu plano alimentar (dieta)?</h3>
+      <p>Sim! Na opção "Monte a Sua Marmita" você escolhe cada componente (proteína, carboidrato, legumes etc.) e a quantidade de cada um, com o preço calculado na hora — ótimo pra quem segue alguma dieta ou restrição alimentar.</p>
+
+      <h3>Posso pedir mais ou menos comida?</h3>
+      <p>Sim, também na Marmita Sob Medida dá pra ajustar a quantidade de cada componente conforme sua fome ou objetivo, pra mais ou pra menos.</p>
+
+      <h3>Vocês entregam?</h3>
+      <p>Entregamos sim! No fechamento do pedido você escolhe entre entrega ou retirada, conforme as opções disponíveis pra sua região.</p>
+
+      <h3>Ainda com dúvida?</h3>
+      <p>Chama a gente pelo <a onclick="fecharComoFunciona();abrirContato()">WhatsApp</a> que respondemos rapidinho.</p>
     </div>
   </div>
 </div>
@@ -473,6 +506,10 @@ function abrirPreparo(){ $('#preparo-overlay').classList.add('open'); document.b
 function fecharPreparo(){ $('#preparo-overlay').classList.remove('open'); document.body.style.overflow=''; }
 function abrirSobre(){ $('#sobre-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
 function fecharSobre(){ $('#sobre-overlay').classList.remove('open'); document.body.style.overflow=''; }
+
+/* ===== Como Funciona ===== */
+function abrirComoFunciona(){ $('#como-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function fecharComoFunciona(){ $('#como-overlay').classList.remove('open'); document.body.style.overflow=''; }
 
 /* ===== Contato ===== */
 function abrirContato(){ $('#contato-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
@@ -1293,7 +1330,13 @@ async function verificarRetornoPagamento(){
   await telaAcompanhamento(pedidoId);
 }
 
+function verificarPaginaDireta(){
+  const p=new URLSearchParams(location.search);
+  if(p.get('pagina')==='como-funciona')abrirComoFunciona();
+}
+
 carregarCardapio().then(verificarRetornoPagamento);
+verificarPaginaDireta();
 initAuth();
 </script>
 </body>

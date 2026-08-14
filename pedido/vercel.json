@@ -1,5 +1,6 @@
 {
   "rewrites": [
-    { "source": "/como", "destination": "/" }
+    { "source": "/como", "destination": "/" },
+    { "source": "/privacidade", "destination": "/" }
   ]
 }

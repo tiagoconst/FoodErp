@@ -1378,11 +1378,13 @@ async function verificarRetornoPagamento(){
 }
 
 function verificarPaginaDireta(){
-  // A Vercel reescreve /como internamente, mas o navegador continua mostrando /como
-  // na barra de endereço (o querystring do destino não chega até aqui) — por isso
-  // a checagem é pelo caminho da URL, e não por um parâmetro.
+  // A Vercel reescreve /como e /privacidade internamente, mas o navegador continua
+  // mostrando esse caminho na barra de endereço (o querystring do destino não chega
+  // até aqui) — por isso a checagem é pelo caminho da URL, e não por um parâmetro.
   const p=new URLSearchParams(location.search);
-  if(location.pathname.replace(/\/+$/,'')==='/como'||p.get('pagina')==='como-funciona')abrirComoFunciona();
+  const caminho=location.pathname.replace(/\/+$/,'');
+  if(caminho==='/como'||p.get('pagina')==='como-funciona')abrirComoFunciona();
+  if(caminho==='/privacidade'||p.get('pagina')==='privacidade')abrirPrivacidade();
 }
 
 carregarCardapio().then(verificarRetornoPagamento);

@@ -1877,6 +1877,11 @@ function aplicarTrocaCliente(id){
   const nomeAntigo=p.cliente_id&&clienteById(p.cliente_id)?clienteById(p.cliente_id).nome:(p.cliente||'Cliente avulso');
   p.cliente_id=cliId;
   p.cliente=cliId?(clienteById(cliId)?clienteById(cliId).nome:''):nomeAvulso;
+  // Troca de cliente também precisa atualizar o telefone do PEDIDO (não só do cliente vinculado) —
+  // é esse campo (p.telefone) que a automação de pesquisa de satisfação por WhatsApp usa pra
+  // saber pra quem mandar a mensagem. Sem isso, pedidos que trocam de "avulso" pra um cliente
+  // cadastrado ficavam com telefone nulo e a pesquisa nunca disparava, silenciosamente.
+  if(cliId){ const cliNovo=clienteById(cliId); if(cliNovo&&cliNovo.telefone)p.telefone=cliNovo.telefone; }
   registrarEvento('PEDIDO_ATUALIZADO',`Cliente do pedido alterado: "${nomeAntigo}" → "${p.cliente}"`,id);
   scheduleSave(); closeModal(); render(); toast('Cliente do pedido atualizado.');
 }
@@ -2271,7 +2276,11 @@ async function salvarPedidoVenda(){
     : {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)});
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();
-  S.pedidos.push({id,numero,cliente_id:cliId,cliente:nome,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
+  // Esse fluxo de venda rápida não tem campo de telefone próprio — quando o pedido é vinculado
+  // a um cliente cadastrado, puxa o telefone do cadastro dele, senão a automação de pesquisa de
+  // satisfação por WhatsApp (que exige telefone) nunca dispara pra pedidos feitos por aqui.
+  const telefoneCli=cliId?((clienteById(cliId)||{}).telefone||null):null;
+  S.pedidos.push({id,numero,cliente_id:cliId,cliente:nome,telefone:telefoneCli,canal_id:$('#pd-canal').value||null,data_pedido:$('#pd-data').value||hoje(),
     status:'pedido',itens,valor_bruto:bruto,desconto_combo:descCombo,desconto_manual:descManual,valor_total:total,
     observacao:$('#pd-obs').value.trim(),recebido:false,faturamento:null,criado_em:new Date().toISOString()});
   registrarEvento('PEDIDO_CONFIRMADO',`Pedido de ${nome||'cliente'} · ${itens.length} itens · ${money(total)} registrado`,id);

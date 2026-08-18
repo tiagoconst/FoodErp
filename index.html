@@ -4245,7 +4245,7 @@ VIEWS.relatorios=function(){
       <div class="kpi" style="border:none;padding:0"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Nota média</div><div class="k-value num">${notaMedia.toFixed(1)} / 5</div><div class="k-foot">${nPesquisas} resposta(s)</div></div>
       <div class="kpi" style="border:none;padding:0"><div class="k-label"><span class="dot" style="background:var(--ok,#7FBF9B)"></span>Recomendariam a gente</div><div class="k-value num">${pctRecomenda}%</div></div>
       ${pizzaCategoria(contarCategoria('sabor'),'Sabor/tempero')}
-      ${pizzaCategoria(contarCategoria('pontualidade'),'Pontualidade')}
+      ${pizzaCategoria(contarCategoria('atendimento'),'Atendimento')}
     </div>
     ${comentariosRecentes.length?`<div class="k-label" style="margin-bottom:6px">Últimos comentários</div>
       <div class="grid g2">${comentariosRecentes.map(c=>

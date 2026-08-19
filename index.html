@@ -1629,7 +1629,13 @@ function pedidoPago(p){ return !!(p.pago ?? p.recebido); }
 // nunca bloqueia a UI — falha de envio não deve travar o fluxo de pagamento do ERP.
 function dispararPesquisaSatisfacaoWpp(id){
   const p=S.pedidos.find(x=>x.id===id);
-  if(!p||p.status!=='finalizado'||!p.pago||!p.telefone||p.pesquisa_wpp_enviada_em)return;
+  if(!p||p.status!=='finalizado'||!p.pago||p.pesquisa_wpp_enviada_em)return;
+  if(!p.telefone){
+    // Sem telefone no pedido a automação não tem pra quem mandar — antes isso falhava calado
+    // (o cliente simplesmente nunca recebia a pesquisa e ninguém percebia). Agora avisa na hora.
+    toast('Pedido finalizado sem telefone — a pesquisa de satisfação não será enviada automaticamente pra esse cliente.',true);
+    return;
+  }
   sb.functions.invoke('whatsapp-enviar-pesquisa',{body:{empresa_id:empresa.empresa_id,pedido_id:id}})
     .then(({data,error})=>{
       if(error||(data&&data.error)){ console.error('Pesquisa WhatsApp não enviada:',error||data.error); return; }
@@ -1722,7 +1728,7 @@ VIEWS.pedidos=function(){
       <td class="r num">${nItens} un.</td>
       <td class="r num"><b>${money(p.valor_total)}</b></td>
       <td><span class="tag ${st.tag}">${st.label}</span>${pedidoPago(p)?' 💰':''}</td>
-      <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button> <button class="btn sm ghost" title="Imprimir etiquetas" onclick="imprimirEtiquetas('${p.id}')">🏷️</button></td></tr>`;
+      <td class="r" onclick="event.stopPropagation()"><button class="btn sm ghost" title="Ver recibo" onclick="modalRecibo('${p.id}')">🧾</button> <button class="btn sm ghost" title="Imprimir etiquetas" onclick="imprimirEtiquetas('${p.id}')">🏷️</button> <button class="btn sm ghost" title="Duplicar pedido (novo pedido com os mesmos itens)" onclick="duplicarPedido('${p.id}')">📑</button></td></tr>`;
   }).join('')||`<tr><td colspan="7"><div class="empty"><b>Nenhum pedido${filtroStatusPedido?' com esse status':''}</b>Fluxo: Pedido → Confirmado (reserva estoque) → Em produção → Disponível → Entregue (baixa estoque, define pagamento). Os valores são fotografados no momento da venda.</div></td></tr>`;
   const statusChips=`<button class="cat-chip ${!filtroStatusPedido?'active':''}" style="${!filtroStatusPedido?'background:var(--primary)':''}" onclick="filtroStatusPedido='';render()">Todos (${pedidosReais.length})</button>`+
     statusDisponiveis().map(s=>{
@@ -1784,7 +1790,7 @@ VIEWS['pedido-detalhe']=function(){
   const opcoesStatus=statusDisponiveis().map(s=>`<option value="${s.id}" ${p.status===s.id?'selected':''}>${esc(s.nome)}</option>`).join('');
   const jaPago=pedidoPago(p);
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:var(--m-pedidos)"></span>Pedido ${p.numero?'#'+p.numero:p.id} ${p.numero?`<span class="mono-id" style="font-size:13px;font-weight:400">${p.id}</span>`:''}</h1></div>
-    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button><button class="btn" onclick="imprimirEtiquetas('${p.id}')">🏷️ Etiquetas</button><button class="btn primary" onclick="modalCompartilharPedido('${p.id}')">📤 Compartilhar</button></div></div>
+    <div class="top-actions"><button class="btn" onclick="nav('pedidos')">← Voltar</button><button class="btn" onclick="modalRecibo('${p.id}')">🧾 Recibo</button><button class="btn" onclick="imprimirEtiquetas('${p.id}')">🏷️ Etiquetas</button><button class="btn" title="Cria um pedido novo com os mesmos itens (sob medida incluído)" onclick="duplicarPedido('${p.id}')">📑 Duplicar</button><button class="btn primary" onclick="modalCompartilharPedido('${p.id}')">📤 Compartilhar</button></div></div>
     <div class="grid g2" style="align-items:start">
       <div>
         <div class="card"><div class="card-h"><h3>Cliente</h3><a class="link" onclick="event.preventDefault();modalTrocarCliente('${p.id}')">trocar cliente</a></div><div class="card-b">
@@ -2551,6 +2557,40 @@ function prepararLogoImpressao(nomeFallback,cb){
   };
   img.onerror=function(){ cb(null); };
   img.src=idn.logo_img;
+}
+// Duplica um pedido inteiro como um pedido NOVO (id/número novos, status voltando pro início do
+// fluxo) — diferente de só re-confirmar o mesmo pedido. Faz cópia profunda de cada linha, incluindo
+// os "componentes" da Marmita Sob Medida (senão a etiqueta e a lista de produção do pedido novo não
+// reconheceriam os itens como sob medida — ver nomeLinha/imprimirEtiquetas, que dependem de
+// nome_custom+componentes em cada linha, não só do item_id).
+async function duplicarPedido(id){
+  const orig=S.pedidos.find(x=>x.id===id); if(!orig)return;
+  if(!(orig.itens||[]).length)return toast('Esse pedido não tem itens pra duplicar.',true);
+  if(!confirm(`Duplicar o pedido ${orig.numero?'#'+orig.numero:orig.id} como um pedido novo (mesmos itens, sob medida incluído)?`))return;
+  const novoId=uid('PED');
+  const numero=await proximoNumeroPedido();
+  const itens=orig.itens.map(l=>({
+    ...l,
+    componentes:l.componentes?l.componentes.map(c=>({...c})):undefined,
+    quantidade_entregue:0
+  }));
+  const novo={
+    ...orig,
+    id:novoId, numero,
+    itens,
+    status:'pedido',
+    pago:false, recebido:false, faturamento:null, data_entrega:null,
+    pesquisa_wpp_enviada_em:undefined, pesquisa_wpp_message_id:undefined,
+    origem_externa:undefined,
+    data_pedido:hoje(),
+    observacao:orig.observacao?orig.observacao+' (réplica de '+(orig.numero?'#'+orig.numero:orig.id)+')':'Réplica de '+(orig.numero?'#'+orig.numero:orig.id),
+    criado_em:new Date().toISOString()
+  };
+  S.pedidos.push(novo);
+  registrarEvento('PEDIDO_CONFIRMADO',`Pedido duplicado a partir de ${orig.numero?'#'+orig.numero:orig.id} · ${itens.length} itens · ${money(novo.valor_total)}`,novoId);
+  scheduleSave();
+  pedidoDetalheId=novoId; nav('pedido-detalhe','pedidos');
+  toast('Pedido duplicado — confira os itens e confirme normalmente.');
 }
 function imprimirEtiquetas(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;

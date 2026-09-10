@@ -821,6 +821,7 @@ VIEWS.itens=function(){
   return header('Itens','var(--m-itens)','Um item nunca muda de identidade — apenas ganha funções.',
     `<input class="search" id="busca-itens" placeholder="Buscar por nome ou categoria…" value="${esc(filtroItens)}" oninput="filtroItens=this.value.toLowerCase();render();refocarBusca('busca-itens')">
      <button class="btn" onclick="modalCategorias()">🏷️ Categorias</button>
+     <button class="btn" onclick="exportarCardapioImagem()">📤 Exportar cardápio (JPG)</button>
      <button class="btn primary" onclick="modalItem()">+ Novo item</button>`)+
   `<div class="cat-chips">${tipoChips}</div>`+
   `<div class="cat-chips" style="margin-top:6px">${catChips}</div>`+
@@ -2757,6 +2758,68 @@ function compartilharPedidoImagem(id){
         const a=document.createElement('a'); a.href=url; a.download='pedido-'+p.id+'.png'; a.click();
         toast('Imagem baixada — agora é só anexar no WhatsApp.');
       },'image/png');
+    }).catch(()=>{ document.body.removeChild(box); toast('Não consegui gerar a imagem.',true); });
+  });
+}
+// Texto curto de composição de um prato pra exibição em documento/imagem pro cliente — mesma
+// regra do site: nunca mostra Lacre/Embalagem (categoria "Embalagem"), só o que é comida de verdade.
+function composicaoResumoTexto(itemId){
+  return componentesDe(itemId).map(c=>{
+    const filho=itemById(c.item_filho_id);
+    if(!filho||filho.categoria==='Embalagem')return null;
+    return `${filho.nome} (${qty(c.quantidade,filho.unidade_base)})`;
+  }).filter(Boolean).join(', ');
+}
+function exportarCardapioImagem(){
+  const vend=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel')&&i.id!==ITEM_ID_SOB_MEDIDA
+    &&(i.categoria||'').trim().toLowerCase()!=='classificar'&&i.preco_venda!=null);
+  if(!vend.length)return toast('Nenhum prato vendável com preço definido pra exportar.',true);
+  toast('Gerando imagem do cardápio…');
+  garantirHtml2Canvas(function(){
+    if(!window.html2canvas)return;
+    const idn=getIdent(); const emp=getEmpresaInfo();
+    const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+    const grupos={};
+    vend.forEach(i=>{ const cat=(i.categoria||'').trim()||'Outros'; (grupos[cat]=grupos[cat]||[]).push(i); });
+    const catsOrdenadas=ordenarCategorias(Object.keys(grupos),ORDEM_CATEGORIAS_CARDAPIO);
+    const PRIMARY='#FF914D', SAGE='#8C937D', CREAM='#F7F6E1', INK='#1A1A2E', PEACH='#FCB786';
+    const gruposHtml=catsOrdenadas.map(cat=>{
+      const itensCat=grupos[cat].slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+      const linhas=itensCat.map(i=>{
+        const comp=composicaoResumoTexto(i.id);
+        return `<div style="padding:10px 0;border-bottom:1px solid ${CREAM}">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+            <b style="font-size:15px;color:${INK}">${esc(i.nome)}</b>
+            <b style="font-size:15px;color:${PRIMARY};white-space:nowrap">${money(i.preco_venda)}</b>
+          </div>
+          ${comp?`<div style="font-size:12px;color:#6B6B6B;margin-top:2px">${esc(comp)}</div>`:''}
+        </div>`;
+      }).join('');
+      return `<div style="margin-top:16px">
+        <div style="background:${SAGE};color:#fff;font-weight:700;font-size:13px;letter-spacing:.03em;text-transform:uppercase;padding:6px 12px;border-radius:8px;display:inline-block">${esc(cat)}</div>
+        <div>${linhas}</div>
+      </div>`;
+    }).join('');
+    const box=document.createElement('div');
+    box.style.cssText=`position:fixed;left:-9999px;top:0;width:560px;background:#fff;font-family:Arial,Helvetica,sans-serif;padding:30px;color:${INK}`;
+    box.innerHTML=`
+      <div style="text-align:center;margin-bottom:8px">
+        ${idn.logo_img?`<img src="${idn.logo_img}" style="max-height:80px;margin-bottom:6px">`:`<div style="font-size:26px;font-weight:700;color:${PRIMARY}">${esc(nomeEmp)}</div>`}
+        <div style="font-size:13px;color:#666;margin-top:2px">Cardápio</div>
+      </div>
+      <div style="height:3px;background:${PEACH};border-radius:2px;margin:14px 0 4px"></div>
+      ${gruposHtml}
+      <div style="margin-top:22px;text-align:center;font-size:12px;color:#888;border-top:1px solid ${CREAM};padding-top:14px">
+        ${emp.telefone?'📞 '+esc(emp.telefone)+' · ':''}Peça já pelo WhatsApp 💚
+      </div>`;
+    document.body.appendChild(box);
+    html2canvas(box,{scale:2,backgroundColor:'#ffffff'}).then(canvas=>{
+      document.body.removeChild(box);
+      canvas.toBlob(blob=>{
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='cardapio-'+hoje()+'.jpg'; a.click();
+        toast('Cardápio exportado — já pode enviar no WhatsApp ou Instagram.');
+      },'image/jpeg',0.92);
     }).catch(()=>{ document.body.removeChild(box); toast('Não consegui gerar a imagem.',true); });
   });
 }

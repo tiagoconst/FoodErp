@@ -809,9 +809,12 @@ async function carregarCardapio(){
     sb.rpc('erp_queridinhos_publico',{p_empresa_id:EMPRESA_ID})
   ]);
   if(cardRes.error){ $('#cardapio').innerHTML='<div class="empty">Não foi possível carregar o cardápio agora. Tente novamente em instantes.</div>'; return; }
-  cardapio=cardRes.data||[];
-  const querid=(queridRes&&queridRes.data)||[];
-  destaques=querid.length?querid:(cardRes.error?[]:(destRes.data||[]));
+  // "Classificar" é a categoria de itens ainda sem grupo de proteína definido (sem ficha técnica/preço
+  // fechado) — nunca deve aparecer pro cliente, mesmo que a função do banco não filtre isso.
+  cardapio=(cardRes.data||[]).filter(i=>(i.categoria||'').trim().toLowerCase()!=='classificar');
+  const naoClassificar=i=>(i.categoria||'').trim().toLowerCase()!=='classificar';
+  const querid=((queridRes&&queridRes.data)||[]).filter(naoClassificar);
+  destaques=querid.length?querid:(cardRes.error?[]:((destRes.data||[]).filter(naoClassificar)));
   FOTO_PADRAO=(identRes&&identRes.data&&identRes.data.foto_padrao)||'';
   renderPromoBanner(identRes&&identRes.data&&identRes.data.banner_promo_desktop,identRes&&identRes.data&&identRes.data.banner_promo_mobile);
   COMPOSICOES=(compRes&&compRes.data)||{};
@@ -944,11 +947,11 @@ function cardHtml(i){
     </div>
   </div>`;
 }
-/* ordem fixa pedida: Queridinhos, Especiais, Tradicional, Fit, Conforto, Massas, Gourmet
-   — casa pelo início do nome da categoria. Usa o radical "Tradicion" (não "Tradicional")
-   porque em português o plural é "Tradicionais" (troca "al" por "ais"), então
-   "Tradicionais" NÃO começa com "Tradicional" — precisa do radical comum aos dois. */
-const ORDEM_CATEGORIAS=['Especiais','Tradicion','Fit','Conforto','Massas','Gourmet'];
+/* ordem fixa pedida: Queridinhos, Caldo, Carne, Frango, Massa, Peixe, Suíno, Vegetariano
+   — casa pelo início do nome da categoria. Categorias antigas (Especiais, Fit, Conforto,
+   Gourmet, Tradicion) ficam no fim só enquanto sobrar item parado nelas (sem ficha/preço
+   definido na migração pra proteína) — remover daqui quando esses itens forem resolvidos. */
+const ORDEM_CATEGORIAS=['Caldo','Carne','Frango','Massa','Peixe','Suíno','Vegetariano','Especiais','Tradicion','Fit','Conforto','Gourmet'];
 function rankCategoria(nome){
   const n=nome.toLowerCase();
   const idx=ORDEM_CATEGORIAS.findIndex(k=>n.startsWith(k.toLowerCase()));

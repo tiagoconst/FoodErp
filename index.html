@@ -1044,6 +1044,17 @@ async function uploadImagemAvulsa(evt){
   }catch(e){ console.error(e); status.textContent='Erro ao enviar: '+(e.message||e); }
   finally{ evt.target.value=''; }
 }
+// Prefixo do ID segue a hierarquia MAT (matéria-prima comprada) -> PRE (pré-preparo/composto,
+// intermediário, não vendido direto) -> PRD (produto final vendável). "Compra" manda primeiro
+// (é sempre a base crua, MAT, mesmo que também esteja marcada outra função por engano); depois
+// "Vende" define PRD; sobrando só produção/composição sem venda, é pré-preparo (PRE). Sem
+// nenhuma função marcada cai no genérico ITM (não deveria acontecer no uso normal da tela).
+function prefixoPorFuncoes(funcoes){
+  if(funcoes.includes('compravel'))return'MAT';
+  if(funcoes.includes('vendavel'))return'PRD';
+  if(funcoes.includes('composto')||funcoes.includes('produzivel'))return'PRE';
+  return'ITM';
+}
 function salvarItem(id){
   const nome=$('#it-nome').value.trim(); if(!nome)return toast('Informe o nome do item.',true);
   const funcoes=[...document.querySelectorAll('input[name=funcao]:checked')].map(c=>c.value);
@@ -1053,7 +1064,7 @@ function salvarItem(id){
     etapa_producao:funcoes.includes('produzivel')?(parseInt($('#it-etapa')?.value)||1):null,
     funcoes,observacao:$('#it-obs').value.trim(),atualizado_em:new Date().toISOString()};
   if(id){ Object.assign(itemById(id),dados); registrarEvento('ITEM_ATUALIZADO',`${nome} atualizado (${funcoes.length} funções)`,id); }
-  else{ const nid=uid('ITM'); S.itens.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},dados));
+  else{ const nid=uid(prefixoPorFuncoes(funcoes)); S.itens.push(Object.assign({id:nid,ativo:true,criado_em:new Date().toISOString()},dados));
     registrarEvento('ITEM_CRIADO',`${nome} criado com funções: ${funcoes.join(', ')||'nenhuma'}`,nid); }
   closeModal(); scheduleSave(); render(); toast('Item salvo.');
 }

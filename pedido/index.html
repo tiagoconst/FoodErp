@@ -335,6 +335,23 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   <div class="sheet" id="sheet"></div>
 </div>
 
+<div class="sobre-overlay" id="aviso-desconto-overlay" onclick="if(event.target===this)fecharAvisoDesconto()">
+  <button class="sobre-close" onclick="fecharAvisoDesconto()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>📣 Cardápio reorganizado</h2>
+      <div class="muted">Mais fácil de achar o que você quer</div>
+    </div>
+    <div class="legal-body">
+      <p>Demos uma repaginada em como o cardápio é organizado: em vez de combos fechados (Tradicional, Fit, Conforto...), agora os pratos ficam agrupados <b>por tipo de proteína</b> — Carnes, Frangos, Peixes, Suínos, Massas, Caldos e Vegetariano.</p>
+      <p>A ideia é simples: você já sabe se hoje bate mais vontade de frango, carne ou peixe, então ficou mais rápido achar e comparar as opções, sem precisar entrar em combo nenhum.</p>
+      <p>O resto continua igual — os mesmos pratos de sempre, o mesmo desconto por quantidade a partir de 5 unidades, e a Marmita Personalizada pra quem quer montar do seu jeito.</p>
+      <div class="preparo-fim">Esperamos que curta a mudança — bom apetite! 💚</div>
+    </div>
+    <div style="padding:0 32px 28px"><button class="btn" style="width:100%" onclick="fecharAvisoDesconto()">Entendi</button></div>
+  </div>
+</div>
+
 <div class="sobre-overlay" id="preparo-overlay" onclick="if(event.target===this)fecharPreparo()">
   <button class="sobre-close" onclick="fecharPreparo()">✕</button>
   <div class="legal-card">
@@ -551,6 +568,23 @@ document.title=LOJA_NOME+' — Faça seu pedido';
 /* ===== Sobre nós ===== */
 function abrirPreparo(){ $('#preparo-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
 function fecharPreparo(){ $('#preparo-overlay').classList.remove('open'); document.body.style.overflow=''; }
+// Aviso único (por navegador) avisando sobre a reorganização do cardápio por proteína. A chave
+// tem versão (_v1) — se o aviso mudar de novo no futuro, é só subir pra _v2 que ele volta a
+// aparecer pra quem já tinha fechado o antigo.
+const AVISO_DESCONTO_KEY='aviso_cardapio_proteina_v1';
+function abrirAvisoDesconto(){ $('#aviso-desconto-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
+function fecharAvisoDesconto(){
+  $('#aviso-desconto-overlay').classList.remove('open'); document.body.style.overflow='';
+  try{ localStorage.setItem(AVISO_DESCONTO_KEY,'1'); }catch(e){}
+}
+function mostrarAvisoDescontoSeNecessario(){
+  let ja='';
+  try{ ja=localStorage.getItem(AVISO_DESCONTO_KEY)||''; }catch(e){}
+  if(ja)return;
+  // não interrompe se já tiver outro popup/overlay aberto na tela (ex.: acompanhamento de pedido)
+  if(document.querySelector('.sobre-overlay.open'))return;
+  abrirAvisoDesconto();
+}
 function abrirSobre(){ $('#sobre-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
 function fecharSobre(){ $('#sobre-overlay').classList.remove('open'); document.body.style.overflow=''; }
 
@@ -1417,7 +1451,7 @@ function verificarPaginaDireta(){
   if(caminho==='/privacidade'||p.get('pagina')==='privacidade')abrirPrivacidade();
 }
 
-carregarCardapio().then(verificarRetornoPagamento);
+carregarCardapio().then(verificarRetornoPagamento).then(mostrarAvisoDescontoSeNecessario);
 verificarPaginaDireta();
 initAuth();
 </script>

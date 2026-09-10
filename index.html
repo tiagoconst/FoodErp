@@ -355,14 +355,23 @@ const FUNCOES = [
 ];
 const UNIDADES = ['g','ml','un'];
 /* ---------- Ordem fixa das categorias de cardápio (prato final) ---------- */
-// cada grupo lista as variações (singular/plural, com/sem acento já normalizado) aceitas pro nome real da categoria
+// migrado de combos (tradicional/fit/conforto/especial/massa/gourmet) para grupo de proteína.
+// cada grupo lista as variações (singular/plural, com/sem acento já normalizado) aceitas pro nome real da categoria.
+// "especial"/"fit"/"gourmet" ficam mantidos no fim só porque ainda tem item parado nessas categorias antigas
+// (sem ficha técnica/preço definido) — somem daqui assim que esses itens forem migrados ou removidos.
 const ORDEM_CATEGORIAS_CARDAPIO=[
-  ['tradicional','tradicionais'],
-  ['fit','fits'],
-  ['conforto','confortos'],
-  ['especial','especiais'],
+  ['caldo','caldos'],
+  ['carne','carnes'],
+  ['frango','frangos'],
   ['massa','massas'],
-  ['gourmet','gourmets']
+  ['peixe','peixes'],
+  ['suino','suinos'],
+  ['vegetariano','vegetarianos'],
+  ['especial','especiais'],
+  ['fit','fits'],
+  ['gourmet','gourmets'],
+  ['conforto','confortos'],
+  ['tradicional','tradicionais']
 ];
 const ORDEM_CATEGORIAS_PEDIDO=[...ORDEM_CATEGORIAS_CARDAPIO,['personalizada','personalizado','personalizados']];
 function normalizarCategoria(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
@@ -686,7 +695,7 @@ function garantirCategoriasPadrao(){
   if(S.categorias.length)return;
   const nomes=[...new Set(S.itens.map(i=>(i.categoria||'').trim()).filter(Boolean))];
   if(!nomes.length)return;
-  nomes.forEach(n=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,criado_em:new Date().toISOString()}));
+  nomes.forEach((n,idx)=>S.categorias.push({id:uid('CAT'),nome:n,ativo:true,ordem:idx,criado_em:new Date().toISOString()}));
 }
 const ITEM_ID_SOB_MEDIDA='PRD-SOB-MEDIDA';
 function garantirMarmitaSobMedida(){
@@ -822,16 +831,33 @@ VIEWS.itens=function(){
 function modalCategorias(){
   openModal(`<div class="m-h"><h3>Categorias de itens</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">
-    <p class="subtle" style="margin-bottom:12px">Grupos fixos pra organizar os itens (ex.: Matéria-prima, Embalagem, Pré-preparo, Produto). Renomear aqui atualiza automaticamente todos os itens que usam a categoria.</p>
+    <p class="subtle" style="margin-bottom:12px">Grupos fixos pra organizar os itens (ex.: Matéria-prima, Embalagem, Pré-preparo, Produto). Renomear aqui atualiza automaticamente todos os itens que usam a categoria. Use as setas ↑↓ pra definir a ordem — é essa ordem que o cardápio do site segue (pratos vendáveis), sem precisar mexer em código.</p>
     <div id="cat-crud-list">${renderCategoriasCrud()}</div>
-    <button class="btn sm" style="margin-top:8px" onclick="S.categorias.push({id:uid('CAT'),nome:'',ativo:true,criado_em:new Date().toISOString()});$('#cat-crud-list').innerHTML=renderCategoriasCrud();setTimeout(()=>{const ins=document.querySelectorAll('#cat-crud-list input');if(ins.length)ins[ins.length-1].focus()},30)">+ Nova categoria</button>
+    <button class="btn sm" style="margin-top:8px" onclick="const maxOrd=Math.max(-1,...S.categorias.map(c=>c.ordem??-1));S.categorias.push({id:uid('CAT'),nome:'',ativo:true,ordem:maxOrd+1,criado_em:new Date().toISOString()});$('#cat-crud-list').innerHTML=renderCategoriasCrud();setTimeout(()=>{const ins=document.querySelectorAll('#cat-crud-list input');if(ins.length)ins[ins.length-1].focus()},30)">+ Nova categoria</button>
   </div>
   <div class="m-f"><button class="btn primary" onclick="closeModal();render()">Concluído</button></div>`,true);
 }
+function categoriasOrdenadas(){
+  return S.categorias.slice().sort((a,b)=>(a.ordem??999999)-(b.ordem??999999)||a.nome.localeCompare(b.nome,'pt'));
+}
+function moverCategoria(id,dir){
+  const lista=categoriasOrdenadas();
+  const i=lista.findIndex(c=>c.id===id); if(i===-1)return;
+  const j=i+dir; if(j<0||j>=lista.length)return;
+  // troca a ordem entre os dois vizinhos (normaliza pra índice caso ordem esteja null/duplicada)
+  lista.forEach((c,idx)=>{ if(c.ordem==null)c.ordem=idx; });
+  const tmp=lista[i].ordem; lista[i].ordem=lista[j].ordem; lista[j].ordem=tmp;
+  scheduleSave(); const el=$('#cat-crud-list'); if(el)el.innerHTML=renderCategoriasCrud();
+}
 function renderCategoriasCrud(){
-  return S.categorias.map(c=>{
+  const lista=categoriasOrdenadas();
+  return lista.map((c,idx)=>{
     const n=S.itens.filter(i=>i.categoria===c.nome&&i.ativo!==false).length;
-    return `<div class="line" style="grid-template-columns:1fr 110px 34px;opacity:${c.ativo===false?.5:1}">
+    return `<div class="line" style="grid-template-columns:60px 1fr 110px 34px;opacity:${c.ativo===false?.5:1}">
+      <span style="align-self:center;display:flex;gap:2px">
+        <button class="btn sm" title="Subir" ${idx===0?'disabled':''} onclick="moverCategoria('${c.id}',-1)">↑</button>
+        <button class="btn sm" title="Descer" ${idx===lista.length-1?'disabled':''} onclick="moverCategoria('${c.id}',1)">↓</button>
+      </span>
       <input value="${esc(c.nome)}" placeholder="ex.: Matéria-prima" onchange="renomearCategoria('${c.id}',this.value)">
       <span class="subtle" style="align-self:center;text-align:center">${n?n+' item(ns)':'—'}</span>
       <button class="rm" title="Remover" onclick="removerCategoria('${c.id}')">✕</button></div>`;
@@ -866,7 +892,7 @@ function modalItem(id){
       :f.id==='produzivel'?";const we=document.getElementById('it-etapa-wrap');if(we)we.style.display=this.checked?'block':'none'":'';
     return `<label class="check ${on?'on':''}"><input type="checkbox" name="funcao" value="${f.id}" ${on?'checked':''} onchange="this.closest('.check').classList.toggle('on',this.checked)${extra}"><span><b>${f.nome}</b><small>${f.desc}</small></span></label>`;
   }).join('');
-  const catOpts=S.categorias.filter(c=>c.ativo!==false||(it&&it.categoria===c.nome)).map(c=>`<option value="${esc(c.nome)}" ${it&&it.categoria===c.nome?'selected':''}>${esc(c.nome)}</option>`).join('');
+  const catOpts=categoriasOrdenadas().filter(c=>c.ativo!==false||(it&&it.categoria===c.nome)).map(c=>`<option value="${esc(c.nome)}" ${it&&it.categoria===c.nome?'selected':''}>${esc(c.nome)}</option>`).join('');
   const fotoAtual=it&&it.foto_url?it.foto_url:'';
   openModal(`<div class="m-h"><h3>${it?'Editar item':'Novo item'}</h3><button class="x" onclick="closeModal()">✕</button></div>
   <div class="m-b">

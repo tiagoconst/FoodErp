@@ -947,21 +947,18 @@ function cardHtml(i){
     </div>
   </div>`;
 }
-/* ordem fixa pedida: Queridinhos, Caldo, Carne, Frango, Massa, Peixe, Suíno, Vegetariano
-   — casa pelo início do nome da categoria. Categorias antigas (Especiais, Fit, Conforto,
-   Gourmet, Tradicion) ficam no fim só enquanto sobrar item parado nelas (sem ficha/preço
-   definido na migração pra proteína) — remover daqui quando esses itens forem resolvidos. */
-const ORDEM_CATEGORIAS=['Caldo','Carne','Frango','Massa','Peixe','Suíno','Vegetariano','Especiais','Tradicion','Fit','Conforto','Gourmet'];
-function rankCategoria(nome){
-  const n=nome.toLowerCase();
-  const idx=ORDEM_CATEGORIAS.findIndex(k=>n.startsWith(k.toLowerCase()));
-  return idx===-1?999:idx;
-}
+/* Ordem das categorias no cardápio: não é mais fixa no código — vem do campo "ordem" que cada
+   categoria tem no admin (tela Itens → 🏷️ Categorias, setas ↑↓), devolvido pela função pública
+   erp_cardapio_publico como "categoria_ordem" em cada item. Categoria sem ordem definida vai pro
+   fim (999999). Dono do sistema reorganiza direto no admin, sem precisar mexer em código. */
 function renderCardapio(){
   if(!cardapio.length){ $('#cardapio').innerHTML='<div class="empty">Nenhum item disponível no momento.</div>'; $('#catnav').innerHTML=''; return; }
-  const porCategoria={};
-  cardapio.forEach(i=>{ (porCategoria[i.categoria]=porCategoria[i.categoria]||[]).push(i); });
-  const categorias=Object.keys(porCategoria).sort((a,b)=>rankCategoria(a)-rankCategoria(b)||a.localeCompare(b,'pt'));
+  const porCategoria={}, ordemPorCategoria={};
+  cardapio.forEach(i=>{
+    (porCategoria[i.categoria]=porCategoria[i.categoria]||[]).push(i);
+    if(ordemPorCategoria[i.categoria]===undefined)ordemPorCategoria[i.categoria]=i.categoria_ordem??999999;
+  });
+  const categorias=Object.keys(porCategoria).sort((a,b)=>ordemPorCategoria[a]-ordemPorCategoria[b]||a.localeCompare(b,'pt'));
   const pillQueridinhos=destaques.length?`<button class="catpill active" data-cat="queridinhos" onclick="irParaCategoria('queridinhos')">Queridinhos</button>`:'';
   $('#catnav').innerHTML=pillQueridinhos+categorias.map(cat=>`<button class="catpill${destaques.length?'':' active'}" data-cat="${slug(cat)}" onclick="irParaCategoria('${slug(cat)}')">${esc(capitalizar(cat))}</button>`).join('');
   _cardBgCounter=0;

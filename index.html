@@ -2246,27 +2246,32 @@ function vendaSub(itemId){
 }
 function totaisCarrinho(){
   const linhas=pedLinhas.filter(l=>l.item);
+  // Marmita Personalizada (l.custom) não conta pro mínimo de 5un nem recebe o desconto de combo —
+  // mesma regra do site (ela já sai com a margem de 60% calculada em cima do custo real).
+  const linhasNormais=linhas.filter(l=>!l.custom);
+  const totalUnidadesNormais=linhasNormais.reduce((a,l)=>a+(parseFloat(l.qtd)||0),0);
   const totalUnidades=linhas.reduce((a,l)=>a+(parseFloat(l.qtd)||0),0);
-  const comboAtivo=totalUnidades>=COMBO_MIN_UN;
+  const comboAtivo=totalUnidadesNormais>=COMBO_MIN_UN;
   const bruto=linhas.reduce((a,l)=>a+(parseFloat(l.qtd)||0)*(parseFloat(l.preco)||0),0);
-  const descCombo=comboAtivo?totalUnidades*COMBO_DESCONTO_UN:0;
+  const descCombo=comboAtivo?totalUnidadesNormais*COMBO_DESCONTO_UN:0;
   const subApósCombo=Math.max(0,bruto-descCombo);
   const descManual=descTipo==='percentual'?subApósCombo*((parseFloat(descValor)||0)/100):(parseFloat(descValor)||0);
   const total=Math.max(0,subApósCombo-descManual);
-  return {linhas,totalUnidades,comboAtivo,bruto,descCombo,descManual,total};
+  return {linhas,totalUnidades,totalUnidadesNormais,comboAtivo,bruto,descCombo,descManual,total};
 }
 function carrinhoHtml(){
-  const {linhas,totalUnidades,comboAtivo,bruto,descCombo,descManual,total}=totaisCarrinho();
+  const {linhas,totalUnidadesNormais,comboAtivo,bruto,descCombo,descManual,total}=totaisCarrinho();
   if(!linhas.length)return `<div class="cart-empty">Toque nos produtos ao lado para adicionar.</div>`;
+  // Marmita Personalizada nunca recebe o desconto de combo — preço cheio sempre.
   const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
   const rows=linhas.map(l=>{
     const idx=pedLinhas.indexOf(l);
     if(l.custom){
-      const pu=precoUn(parseFloat(l.preco)||0);
+      const pu=parseFloat(l.preco)||0;
       const sub=(parseFloat(l.qtd)||0)*pu;
       return `<div class="cart-line">
         <div class="cl-info"><div class="cl-nome">🛠️ ${esc(l.nomeCustom||'Marmita personalizada')}</div>
-          <div class="cl-sub num">${money(pu)} un.${comboAtivo?' <span style="color:var(--primary)">c/ combo</span>':''} · <a class="link" style="font-size:11px" onclick="abrirConstrutorMarmita(${idx})">editar</a></div></div>
+          <div class="cl-sub num">${money(pu)} un. · <a class="link" style="font-size:11px" onclick="abrirConstrutorMarmita(${idx})">editar</a></div></div>
         <div class="stepper"><button onclick="cmAjustarQtd(${idx},-1)">−</button><span class="num" style="min-width:18px;text-align:center;display:inline-block">${l.qtd}</span><button onclick="cmAjustarQtd(${idx},1)">+</button></div>
         <div class="num" style="width:64px;text-align:right;font-weight:700">${money(sub)}</div></div>`;
     }
@@ -2280,8 +2285,8 @@ function carrinhoHtml(){
       <div class="num" style="width:64px;text-align:right;font-weight:700">${money(sub)}</div></div>`;
   }).join('');
   const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
-  const comboLinha=comboAtivo?`<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--primary);margin-top:8px"><span>Combo ${totalUnidades}+ un. (−${money(COMBO_DESCONTO_UN)}/un.)</span><span class="num">−${money(descCombo)}</span></div>`
-    :`<div class="subtle" style="font-size:11.5px;margin-top:8px">Faltam ${COMBO_MIN_UN-totalUnidades} un. pro desconto de combo (−${money(COMBO_DESCONTO_UN)}/un. a partir de ${COMBO_MIN_UN}).</div>`;
+  const comboLinha=comboAtivo?`<div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--primary);margin-top:8px"><span>Combo ${totalUnidadesNormais}+ un. do cardápio (−${money(COMBO_DESCONTO_UN)}/un.)</span><span class="num">−${money(descCombo)}</span></div>`
+    :`<div class="subtle" style="font-size:11.5px;margin-top:8px">Faltam ${COMBO_MIN_UN-totalUnidadesNormais} un. do cardápio pro desconto de combo (−${money(COMBO_DESCONTO_UN)}/un. a partir de ${COMBO_MIN_UN} — marmita personalizada não entra nessa conta).</div>`;
   return rows+
     `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
       <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)"><span>Subtotal</span><span class="num">${money(bruto)}</span></div>
@@ -2313,9 +2318,10 @@ async function salvarPedidoVenda(){
   if(!validas.length)return toast('Adicione ao menos um item.',true);
   const id=uid('PED');
   const numero=await proximoNumeroPedido();
+  // Marmita Personalizada nunca recebe o desconto de combo — preço cheio sempre.
   const precoUn=comboAtivo?(p=>Math.max(0,p-COMBO_DESCONTO_UN)):(p=>p);
   const itens=validas.map(l=>l.custom
-    ? {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0),nome_custom:l.nomeCustom,componentes:l.componentes,cmv_unitario:l.cmv,refeicao:l.refeicao||null}
+    ? {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:parseFloat(l.preco)||0,nome_custom:l.nomeCustom,componentes:l.componentes,cmv_unitario:l.cmv,refeicao:l.refeicao||null}
     : {item_id:l.item,quantidade:parseFloat(l.qtd),preco_unitario:precoUn(parseFloat(l.preco)||0)});
   const cliId=$('#pd-cliid').value||null;
   const nome=cliId?(clienteById(cliId)||{}).nome:$('#pd-cli').value.trim();

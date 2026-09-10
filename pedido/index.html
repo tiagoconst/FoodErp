@@ -601,18 +601,20 @@ function renderPromoBanner(desktopUrl,mobileUrl){
     <div class="promo-txt promo-t2">ACIMA DE ${COMBO_MIN_UN} UNIDADES,<br>CADA MARMITA TEM</div>
     <div class="promo-badge">${money(COMBO_DESCONTO_UN)}<span>DE DESCONTO!</span></div>
     <span class="promo-ico">📦</span>
-    <div class="promo-txt promo-t3">Válido em<br>qualquer categoria</div>`;
+    <div class="promo-txt promo-t3">Válido em<br>qualquer categoria<br>(exceto marmita personalizada)</div>`;
 }
 renderPromoBanner();
 function brutoCarrinhoNormal(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
 function qtdCarrinhoNormal(){ return Object.values(carrinho).reduce((a,q)=>a+q,0); }
 function brutoCarrinho(){ return brutoCarrinhoNormal()+brutoCarrinhoCustom(); }
 function qtdCarrinho(){ return qtdCarrinhoNormal()+qtdCarrinhoCustom(); }
-function comboAtivoCarrinho(){ return qtdCarrinho()>=COMBO_MIN_UN; }
-/* o desconto por quantidade vale igual pra tudo, itens normais e marmita personalizada — o
-   mínimo da marmita personalizada já é o preço real do prato pronto equivalente, então o
-   desconto de R$2/un a partir de 5 unidades se aplica do mesmo jeito, sem regra separada */
-function descontoComboCarrinho(){ return comboAtivoCarrinho()?qtdCarrinho()*COMBO_DESCONTO_UN:0; }
+// Marmita Personalizada NÃO entra na contagem do desconto por quantidade (nem conta pro mínimo
+// de 5un, nem recebe o desconto) — ela já sai com a margem de 60% calculada em cima do custo
+// real, então o desconto de combo só corroeria essa margem sem necessidade. Isso é só a prévia
+// visual do carrinho; o valor cobrado de verdade é recalculado do mesmo jeito no banco
+// (erp_criar_pedido_publico).
+function comboAtivoCarrinho(){ return qtdCarrinhoNormal()>=COMBO_MIN_UN; }
+function descontoComboCarrinho(){ return comboAtivoCarrinho()?qtdCarrinhoNormal()*COMBO_DESCONTO_UN:0; }
 function totalCarrinho(){ return Math.max(0,brutoCarrinho()-descontoComboCarrinho()); }
 function alterarQtd(id,delta){
   const atual=carrinho[id]||0; const nova=Math.max(0,atual+delta);
@@ -1102,8 +1104,10 @@ function renderCarrinho(){
   const combo=comboAtivoCarrinho();
   const descCombo=descontoComboCarrinho();
   const comboHtml=combo
-    ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Desconto por quantidade (${qtdCarrinho()}+ un.)</span><span>−${money(descCombo)}</span></div>`
-    :`<div class="sub" style="margin:6px 0 0">Faltam ${COMBO_MIN_UN-qtdCarrinho()} un. pro desconto de ${money(COMBO_DESCONTO_UN)}/un. (a partir de ${COMBO_MIN_UN} un.)</div>`;
+    ?`<div class="line" style="border-bottom:none;color:var(--primary);font-weight:600"><span>Desconto por quantidade (${qtdCarrinhoNormal()}+ un. do cardápio)</span><span>−${money(descCombo)}</span></div>`
+    :(qtdCarrinhoNormal()>0||!carrinhoCustom.length
+      ?`<div class="sub" style="margin:6px 0 0">Faltam ${COMBO_MIN_UN-qtdCarrinhoNormal()} un. do cardápio pro desconto de ${money(COMBO_DESCONTO_UN)}/un. (a partir de ${COMBO_MIN_UN} un. — marmita personalizada não entra nessa conta)</div>`
+      :'');
   const custoEntrega=custoEntregaSelecionada();
   const descontoCupom=cupomAplicado?cupomAplicado.desconto:0;
   const totalFinal=Math.max(0,totalCarrinho()-descontoCupom)+custoEntrega;

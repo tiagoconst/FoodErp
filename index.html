@@ -2151,7 +2151,7 @@ function cmDesenharComponentes(){
 function cmRecalcular(){
   const cmv=construtorComponentes.reduce((a,c)=>a+(c.item_id?(custoItem(c.item_id)||0)*c.quantidade:0),0);
   const margem=parseFloat($('#cm-margem')?.value)||0;
-  const sugerido=margem<95?cmv/(1-margem/100):cmv;
+  const sugerido=margem<100?cmv/(1-margem/100):cmv; // margem sobre o preço — mesma fórmula usada no site público
   const elPreco=$('#cm-preco');
   if(elPreco&&!elPreco.dataset.editado)elPreco.value=Math.round(sugerido*100)/100;
   if(elPreco)elPreco.oninput=function(){ this.dataset.editado='1'; };

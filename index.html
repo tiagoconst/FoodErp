@@ -2652,34 +2652,26 @@ function imprimirEtiquetas(id){
   const rotuloRefeicao={almoco:'ALMOÇO',janta:'JANTA'};
   p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
     for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||''}); });
-  // AJUSTE PROVISÓRIO: etiquetas redondas de 5cm (fornecedor mudou o material), com 3mm de
-  // espaço entre uma etiqueta e outra — sem sinais de corte, já que a etiqueta já vem picotada redonda.
-  // A impressora (POS58) só aceita tamanhos de papel fixos e pré-cadastrados no driver, sem opção de
-  // "personalizado" — por isso NÃO dá pra pedir uma página por etiqueta (o Windows troca sozinho por
-  // outro preset e estica tudo). Voltamos a empilhar todas as etiquetas numa página só, contínua, e
-  // usamos exatamente um dos tamanhos que já existem no driver (58 x 3276mm) pra não haver troca de
-  // preset por trás e nenhuma distorção.
-  const blocos=etiquetas.map(et=>`<div class="et">
-    <div class="et-conteudo">
-      <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
-      ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
-      <div class="et-sabor">${esc(et.nome)}</div>
-      ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
-      <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
-    </div>
-  </div>`).join('');
+  const linhaCorte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
+  const blocos=linhaCorte+etiquetas.map((et,i)=>`${i>0?linhaCorte:''}<div class="et">
+    <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
+    ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
+    <div class="et-sabor">${esc(et.nome)}</div>
+    ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
+    <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
+  </div>`).join('')+linhaCorte;
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
-    @page{ size:58mm 3276mm; margin:0; }
+    @page{ margin:3mm; }
     *{box-sizing:border-box}
-    html,body{width:58mm}
-    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
-    .et{width:58mm;height:50mm;margin-bottom:3mm;display:flex;align-items:center;justify-content:center;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
-    .et-conteudo{width:40mm;text-align:center;margin-top:-5mm}
-    .et-topo{margin-bottom:1mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;line-height:1.15;letter-spacing:.02em} .et-topo img{max-height:7mm;max-width:38mm}
-    .et-cliente{font-size:9px;color:#333;margin-bottom:1mm}
-    .et-sabor{font-size:12.5px;font-weight:bold;line-height:1.15;margin-bottom:1mm}
-    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:7px;letter-spacing:.05em;padding:0.5mm 1.6mm;border-radius:2px;margin-bottom:1mm}
-    .et-datas{display:flex;justify-content:center;gap:3mm;font-size:9px;font-weight:bold}
+    html,body{width:100%}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
+    .et{padding:3mm 0;text-align:center}
+    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:15px;line-height:1.2;letter-spacing:.02em} .et-topo img{max-height:8mm;max-width:44mm}
+    .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
+    .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:1.5mm}
+    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:8px;letter-spacing:.05em;padding:0.6mm 2mm;border-radius:2px;margin-bottom:1.5mm}
+    .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
+    .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
   </style></head><body>
     ${blocos}
     <script>window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;

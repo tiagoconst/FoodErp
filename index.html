@@ -2654,10 +2654,12 @@ function imprimirEtiquetas(id){
     for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||''}); });
   // AJUSTE PROVISÓRIO: etiquetas redondas de 5cm (fornecedor mudou o material), com 3mm de
   // espaço entre uma etiqueta e outra — sem sinais de corte, já que a etiqueta já vem picotada redonda.
-  // Cada etiqueta é a sua PRÓPRIA página de impressão (58 x 53mm = 50mm da etiqueta + 3mm do espaço).
-  // Empilhar tudo numa folha só gigante fazia o alinhamento derivar (arredondamento acumulando
-  // etiqueta após etiqueta); página por etiqueta zera essa conta a cada uma.
-  const blocos=etiquetas.map((et,i)=>`<div class="et"${i>0?' style="page-break-before:always;break-before:page"':''}>
+  // A impressora (POS58) só aceita tamanhos de papel fixos e pré-cadastrados no driver, sem opção de
+  // "personalizado" — por isso NÃO dá pra pedir uma página por etiqueta (o Windows troca sozinho por
+  // outro preset e estica tudo). Voltamos a empilhar todas as etiquetas numa página só, contínua, e
+  // usamos exatamente um dos tamanhos que já existem no driver (58 x 3276mm) pra não haver troca de
+  // preset por trás e nenhuma distorção.
+  const blocos=etiquetas.map(et=>`<div class="et">
     <div class="et-conteudo">
       <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
       ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
@@ -2667,11 +2669,11 @@ function imprimirEtiquetas(id){
     </div>
   </div>`).join('');
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
-    @page{ size:58mm 53mm; margin:0; }
+    @page{ size:58mm 3276mm; margin:0; }
     *{box-sizing:border-box}
     html,body{width:58mm}
     body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
-    .et{width:58mm;height:50mm;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .et{width:58mm;height:50mm;margin-bottom:3mm;display:flex;align-items:center;justify-content:center;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
     .et-conteudo{width:40mm;text-align:center;margin-top:-5mm}
     .et-topo{margin-bottom:1mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;line-height:1.15;letter-spacing:.02em} .et-topo img{max-height:7mm;max-width:38mm}
     .et-cliente{font-size:9px;color:#333;margin-bottom:1mm}

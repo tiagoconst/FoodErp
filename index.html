@@ -1804,6 +1804,8 @@ VIEWS.pedidos=function(){
 
   return header('Pedidos','var(--m-pedidos)',`Fluxo: Pedido (não conta produção/custo) → Confirmado → Em produção (contam produção + "em aberto") → Disponível → Entrega (Parcial ou Ag. Pagamento) → Finalizado. "Pago" pode ser marcado a partir de Confirmado, em qualquer etapa. ${abertos?`<b>${abertos} em andamento.</b>`:''}`,
     `<button class="btn" onclick="modalStatusPersonalizados()">⚙️ Status</button>
+     <button class="btn" title="Imprime o recibo de todos os pedidos Confirmado, em sequência, numa página só" onclick="imprimirPedidosConfirmados()">🖨️ Imprimir confirmados</button>
+     <button class="btn" title="Imprime as etiquetas de todos os pedidos Confirmado, em sequência, numa página só" onclick="imprimirEtiquetasConfirmados()">🏷️ Etiquetas confirmados</button>
      <button class="btn primary" onclick="pedLinhas=[];vendaCat='__todas__';vendaBusca='';nav('venda','pedidos')">+ Novo pedido</button>`)+
   `<input class="search" id="busca-pedidos" style="width:100%;margin-top:16px" placeholder="Item, cliente ou código" value="${esc(filtroBuscaPedido)}" oninput="filtroBuscaPedido=this.value;render();refocarBusca('busca-pedidos')">
   <div class="only-mobile" style="margin-top:12px">${statusSelectMobile}</div>
@@ -2636,42 +2638,54 @@ async function duplicarPedido(id){
   pedidoDetalheId=novoId; nav('pedido-detalhe','pedidos');
   toast('Pedido duplicado — confira os itens e confirme normalmente.');
 }
-function imprimirEtiquetas(id){
-  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
-  if(!(p.itens||[]).length)return toast('Esse pedido não tem itens.',true);
-  const cli=p.cliente_id?clienteById(p.cliente_id):null;
-  const nomeCli=cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'');
+// Tamanho de etiqueta TRAVADO (medido com régua pelo usuário): rolo redondo de 5cm de diâmetro,
+// 58mm de largura de bobina, 56,5mm de altura por etiqueta (já incluindo o espaço entre uma e
+// outra — não importa se esse respiro fica mais pra cima, mais pra baixo ou dividido, o conteúdo
+// fica centralizado no bloco de 56,5mm mesmo). NÃO declarar isso como @page/tamanho de página —
+// essa impressora (POS58) só aceita os tamanhos fixos já cadastrados no driver, sem opção de
+// personalizado; por isso imprimimos tudo numa página contínua só, do tamanho que já existe no
+// driver (58 x 3276mm), e cada etiqueta é só um bloco de 56,5mm dentro dessa página.
+const ETIQUETA_LARGURA_MM=58, ETIQUETA_ALTURA_MM=56.5;
+function imprimirEtiquetasVarios(pedidos){
+  pedidos=(pedidos||[]).filter(p=>p&&(p.itens||[]).length);
+  if(!pedidos.length)return toast('Nenhum pedido com itens pra imprimir etiqueta.',true);
+  const multiplo=pedidos.length>1;
   const emp0=getEmpresaInfo(); const idn0=getIdent();
   const nomeEmp0=emp0.nome_loja||idn0.nome||'Food ERP';
   prepararLogoImpressao(nomeEmp0,function(logoPB){
-  const emp=emp0, idn=idn0;
   const nomeEmp=nomeEmp0;
   const hoje_=new Date(); const fmt=d=>d.toLocaleDateString('pt-BR');
   const validade=new Date(hoje_); validade.setDate(validade.getDate()+30);
-  const etiquetas=[];
   const rotuloRefeicao={almoco:'ALMOÇO',janta:'JANTA'};
-  p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
-    for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||''}); });
-  const linhaCorte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
-  const blocos=linhaCorte+etiquetas.map((et,i)=>`${i>0?linhaCorte:''}<div class="et">
-    <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
-    ${nomeCli?`<div class="et-cliente">${esc(nomeCli)}</div>`:''}
-    <div class="et-sabor">${esc(et.nome)}</div>
-    ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
-    <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
-  </div>`).join('')+linhaCorte;
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas ${p.id}</title><style>
-    @page{ margin:3mm; }
+  const etiquetas=[];
+  pedidos.forEach(p=>{
+    const cli=p.cliente_id?clienteById(p.cliente_id):null;
+    const nomeCli=cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'');
+    const pedidoLabel=p.numero?'#'+p.numero:p.id;
+    p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
+      for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||'',nomeCli,pedidoLabel}); });
+  });
+  const blocos=etiquetas.map(et=>`<div class="et">
+    <div class="et-conteudo">
+      <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
+      ${et.nomeCli||multiplo?`<div class="et-cliente">${esc(et.nomeCli||'')}${multiplo?(et.nomeCli?' · ':'')+esc(et.pedidoLabel):''}</div>`:''}
+      <div class="et-sabor">${esc(et.nome)}</div>
+      ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
+      <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
+    </div>
+  </div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas${multiplo?' — confirmados':' '+pedidos[0].id}</title><style>
+    @page{ size:${ETIQUETA_LARGURA_MM}mm 3276mm; margin:0; }
     *{box-sizing:border-box}
-    html,body{width:100%}
-    body{font-family:Arial,Helvetica,sans-serif;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
-    .et{padding:3mm 0;text-align:center}
-    .et-topo{margin-bottom:1.5mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:15px;line-height:1.2;letter-spacing:.02em} .et-topo img{max-height:8mm;max-width:44mm}
-    .et-cliente{font-size:10px;color:#333;margin-bottom:1.5mm}
-    .et-sabor{font-size:14px;font-weight:bold;line-height:1.2;margin-bottom:1.5mm}
-    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:8px;letter-spacing:.05em;padding:0.6mm 2mm;border-radius:2px;margin-bottom:1.5mm}
-    .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
-    .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
+    html,body{width:${ETIQUETA_LARGURA_MM}mm}
+    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
+    .et{width:${ETIQUETA_LARGURA_MM}mm;height:${ETIQUETA_ALTURA_MM}mm;display:flex;align-items:center;justify-content:center;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+    .et-conteudo{width:40mm;text-align:center}
+    .et-topo{margin-bottom:1mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;line-height:1.15;letter-spacing:.02em} .et-topo img{max-height:7mm;max-width:38mm}
+    .et-cliente{font-size:9px;color:#333;margin-bottom:1mm}
+    .et-sabor{font-size:12.5px;font-weight:bold;line-height:1.15;margin-bottom:1mm}
+    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:7px;letter-spacing:.05em;padding:0.5mm 1.6mm;border-radius:2px;margin-bottom:1mm}
+    .et-datas{display:flex;justify-content:center;gap:3mm;font-size:9px;font-weight:bold}
   </style></head><body>
     ${blocos}
     <script>window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
@@ -2679,6 +2693,21 @@ function imprimirEtiquetas(id){
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
   });
+}
+function imprimirEtiquetas(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  if(!(p.itens||[]).length)return toast('Esse pedido não tem itens.',true);
+  imprimirEtiquetasVarios([p]);
+}
+function imprimirEtiquetasConfirmados(){
+  const lista=S.pedidos.filter(p=>p.status==='confirmado').sort((a,b)=>(a.numero||0)-(b.numero||0));
+  if(!lista.length)return toast('Nenhum pedido confirmado agora.',true);
+  imprimirEtiquetasVarios(lista);
+}
+function imprimirPedidosConfirmados(){
+  const lista=S.pedidos.filter(p=>p.status==='confirmado').sort((a,b)=>(a.numero||0)-(b.numero||0));
+  if(!lista.length)return toast('Nenhum pedido confirmado agora.',true);
+  imprimirRecibosVarios(lista);
 }
 function modalCompartilharPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
@@ -2861,18 +2890,41 @@ function modalRecibo(id){
   </div>
   <div class="m-f"><button class="btn" onclick="closeModal()">Fechar</button><button class="btn primary" onclick="imprimirPedido('${id}')">🖨 Imprimir (bobina 54mm)</button></div>`);
 }
-function imprimirPedido(id){
-  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+function imprimirRecibosVarios(pedidos){
+  pedidos=(pedidos||[]).filter(Boolean);
+  if(!pedidos.length)return;
+  const multiplo=pedidos.length>1;
   const idn0=getIdent(); const emp0=getEmpresaInfo();
   const nomeEmp0=emp0.nome_loja||idn0.nome||'Food ERP';
   prepararLogoImpressao(nomeEmp0,function(logoPB){
-  const cli=p.cliente_id?clienteById(p.cliente_id):null;
-  const idn=idn0, emp=emp0;
-  const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
-  const linhas=p.itens.map(l=>`<tr><td>${l.quantidade}x ${esc(nomeLinha(l))}</td><td class="r">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
+  const idn=idn0, emp=emp0, nomeEmp=nomeEmp0;
   const agora=new Date(); const dataHoraExtenso=agora.toLocaleDateString('pt-BR',{day:'numeric',month:'long',year:'numeric'})+' às '+agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-  const nomeEmp=nomeEmp0;
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Recibo ${p.id}</title>
+  const recibos=pedidos.map((p,i)=>{
+    const cli=p.cliente_id?clienteById(p.cliente_id):null;
+    const nItens=(p.itens||[]).reduce((a,l)=>a+l.quantidade,0);
+    const linhas=p.itens.map(l=>`<tr><td>${l.quantidade}x ${esc(nomeLinha(l))}</td><td class="r">${money(l.quantidade*l.preco_unitario)}</td></tr>`).join('');
+    return `<div class="recibo"${multiplo&&i>0?' style="page-break-before:always;break-before:page"':''}>
+    <div class="center">
+      ${logoPB?`<img src="${logoPB}" class="logo">`:`<div class="nome-loja">${esc(nomeEmp)}</div>`}
+    </div>
+    <div class="center small">RECIBO #${esc(p.id)}</div>
+    <hr>
+    <div class="small">${esc(nomeEmp)}<br>${esc(emp.endereco||'')}${emp.complemento?' - '+esc(emp.complemento):''}${emp.telefone?' - '+esc(emp.telefone):''}</div>
+    <hr>
+    <div>${p.itens.length} itens (Qtd.: ${nItens})</div>
+    <table>${linhas}</table>
+    <hr>
+    <table><tr class="tot"><td>Total</td><td class="r">${money(p.valor_total)}</td></tr></table>
+    <hr>
+    <div><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>Tel: '+esc(cli.telefone):''}${cli&&cli.endereco?'<br>End: '+esc(cli.endereco):''}</div>
+    ${p.observacao?`<div class="obs"><b>OBS:</b> ${esc(p.observacao)}</div>`:''}
+    <hr>
+    <div class="center small">${esc(nomeEmp)}${emp.documento?' - '+esc(emp.documento):''}<br>${dataHoraExtenso}</div>
+    ${idn.link_pesquisa_satisfacao?`<div class="pesquisa"><div id="qr-pesquisa-${i}"></div><small>Como foi sua marmita? Aponte a câmera<br>e conta pra gente 💚</small></div>`:''}
+    </div>`;
+  }).join('');
+  const qrScripts=idn.link_pesquisa_satisfacao?pedidos.map((p,i)=>`new QRCode(document.getElementById('qr-pesquisa-${i}'),{text:${JSON.stringify(idn.link_pesquisa_satisfacao)},width:90,height:90,correctLevel:QRCode.CorrectLevel.M});`).join(''):'';
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${multiplo?'Recibos — confirmados':'Recibo '+pedidos[0].id}</title>
     ${idn.link_pesquisa_satisfacao?'<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>':''}
     <style>
     @page{ margin:3mm; }
@@ -2892,28 +2944,16 @@ function imprimirPedido(id){
     .pesquisa #qr-pesquisa{display:flex;justify-content:center;margin-bottom:1mm}
     .pesquisa small{display:block;font-size:8.5px;line-height:1.3}
   </style></head><body>
-    <div class="center">
-      ${logoPB?`<img src="${logoPB}" class="logo">`:`<div class="nome-loja">${esc(nomeEmp)}</div>`}
-    </div>
-    <div class="center small">RECIBO #${esc(p.id)}</div>
-    <hr>
-    <div class="small">${esc(nomeEmp)}<br>${esc(emp.endereco||'')}${emp.complemento?' - '+esc(emp.complemento):''}${emp.telefone?' - '+esc(emp.telefone):''}</div>
-    <hr>
-    <div>${p.itens.length} itens (Qtd.: ${nItens})</div>
-    <table>${linhas}</table>
-    <hr>
-    <table><tr class="tot"><td>Total</td><td class="r">${money(p.valor_total)}</td></tr></table>
-    <hr>
-    <div><b>${esc(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||'Cliente avulso'))}</b>${cli&&cli.telefone?'<br>Tel: '+esc(cli.telefone):''}${cli&&cli.endereco?'<br>End: '+esc(cli.endereco):''}</div>
-    ${p.observacao?`<div class="obs"><b>OBS:</b> ${esc(p.observacao)}</div>`:''}
-    <hr>
-    <div class="center small">${esc(nomeEmp)}${emp.documento?' - '+esc(emp.documento):''}<br>${dataHoraExtenso}</div>
-    ${idn.link_pesquisa_satisfacao?`<div class="pesquisa"><div id="qr-pesquisa"></div><small>Como foi sua marmita? Aponte a câmera<br>e conta pra gente 💚</small></div>`:''}
-    <script>${idn.link_pesquisa_satisfacao?`new QRCode(document.getElementById('qr-pesquisa'),{text:${JSON.stringify(idn.link_pesquisa_satisfacao)},width:90,height:90,correctLevel:QRCode.CorrectLevel.M});`:''}window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
+    ${recibos}
+    <script>${qrScripts}window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
   const w=window.open('','_blank','width=320,height=640');
   if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
   w.document.write(html); w.document.close();
   });
+}
+function imprimirPedido(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  imprimirRecibosVarios([p]);
 }
 </script>
 <script>

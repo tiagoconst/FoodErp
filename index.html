@@ -2646,6 +2646,11 @@ async function duplicarPedido(id){
 // personalizado; por isso imprimimos tudo numa página contínua só, do tamanho que já existe no
 // driver (58 x 3276mm), e cada etiqueta é só um bloco de 56,5mm dentro dessa página.
 const ETIQUETA_LARGURA_MM=58, ETIQUETA_ALTURA_MM=56.5;
+// Impressão contínua muito longa nessa impressora (POS58) acumula um pequeno erro de avanço de
+// papel que cresce etiqueta após etiqueta (confirmado por medição física). Lotes de até 3
+// etiquetas por job de impressão ficam dentro da margem segura — por isso dividimos em lotes e
+// pedimos confirmação (clique) entre um lote e outro, pra evitar bloqueio de pop-up do navegador.
+const ETIQUETAS_POR_LOTE=3;
 function imprimirEtiquetasVarios(pedidos){
   pedidos=(pedidos||[]).filter(p=>p&&(p.itens||[]).length);
   if(!pedidos.length)return toast('Nenhum pedido com itens pra imprimir etiqueta.',true);
@@ -2665,34 +2670,53 @@ function imprimirEtiquetasVarios(pedidos){
     p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
       for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||'',nomeCli,pedidoLabel}); });
   });
-  const blocos=etiquetas.map(et=>`<div class="et">
-    <div class="et-conteudo">
-      <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
-      <div class="et-cliente">${(et.nomeCli||multiplo)?esc(et.nomeCli||'')+(multiplo?(et.nomeCli?' · ':'')+esc(et.pedidoLabel):''):''}</div>
-      <div class="et-sabor">${esc(et.nome)}</div>
-      <div class="et-tarja-slot">${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}</div>
-      <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
-    </div>
-  </div>`).join('');
-  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas${multiplo?' — confirmados':' '+pedidos[0].id}</title><style>
-    @page{ size:${ETIQUETA_LARGURA_MM}mm 3276mm; margin:0; }
-    *{box-sizing:border-box}
-    html,body{width:${ETIQUETA_LARGURA_MM}mm}
-    body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
-    .et{width:${ETIQUETA_LARGURA_MM}mm;height:${ETIQUETA_ALTURA_MM}mm;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
-    .et-conteudo{width:40mm;text-align:center;margin-top:4mm}
-    .et-topo{margin-bottom:1mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;line-height:1.15;letter-spacing:.02em} .et-topo img{max-height:7mm;max-width:38mm}
-    .et-cliente{font-size:9px;color:#333;margin-bottom:1mm;min-height:1.1em}
-    .et-sabor{font-size:12.5px;font-weight:bold;line-height:1.15;margin-bottom:1mm;min-height:2.3em;display:flex;align-items:center;justify-content:center}
-    .et-tarja-slot{min-height:3.2mm;margin-bottom:1mm;display:flex;align-items:center;justify-content:center}
-    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:7px;letter-spacing:.05em;padding:0.5mm 1.6mm;border-radius:2px}
-    .et-datas{display:flex;justify-content:center;gap:3mm;font-size:9px;font-weight:bold}
-  </style></head><body>
-    ${blocos}
-    <script>window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
-  const w=window.open('','_blank','width=320,height=500');
-  if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
-  w.document.write(html); w.document.close();
+  const lotes=[];
+  for(let i=0;i<etiquetas.length;i+=ETIQUETAS_POR_LOTE)lotes.push(etiquetas.slice(i,i+ETIQUETAS_POR_LOTE));
+  function construirHtmlLote(loteEtiquetas,numLote,totalLotes){
+    const blocos=loteEtiquetas.map(et=>`<div class="et">
+      <div class="et-conteudo">
+        <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
+        <div class="et-cliente">${(et.nomeCli||multiplo)?esc(et.nomeCli||'')+(multiplo?(et.nomeCli?' · ':'')+esc(et.pedidoLabel):''):''}</div>
+        <div class="et-sabor">${esc(et.nome)}</div>
+        <div class="et-tarja-slot">${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}</div>
+        <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
+      </div>
+    </div>`).join('');
+    return `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas${multiplo?' — confirmados':' '+pedidos[0].id} (lote ${numLote}/${totalLotes})</title><style>
+      @page{ size:${ETIQUETA_LARGURA_MM}mm 3276mm; margin:0; }
+      *{box-sizing:border-box}
+      html,body{width:${ETIQUETA_LARGURA_MM}mm}
+      body{font-family:Arial,Helvetica,sans-serif;color:#000;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word}
+      .et{width:${ETIQUETA_LARGURA_MM}mm;height:${ETIQUETA_ALTURA_MM}mm;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+      .et-conteudo{width:40mm;text-align:center;margin-top:4mm}
+      .et-topo{margin-bottom:1mm} .et-topo b{font-size:12px} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;line-height:1.15;letter-spacing:.02em} .et-topo img{max-height:7mm;max-width:38mm}
+      .et-cliente{font-size:9px;color:#333;margin-bottom:1mm;min-height:1.1em}
+      .et-sabor{font-size:12.5px;font-weight:bold;line-height:1.15;margin-bottom:1mm;min-height:2.3em;display:flex;align-items:center;justify-content:center}
+      .et-tarja-slot{min-height:3.2mm;margin-bottom:1mm;display:flex;align-items:center;justify-content:center}
+      .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:7px;letter-spacing:.05em;padding:0.5mm 1.6mm;border-radius:2px}
+      .et-datas{display:flex;justify-content:center;gap:3mm;font-size:9px;font-weight:bold}
+    </style></head><body>
+      ${blocos}
+      <script>window.onload=function(){function ir(){window.print()} if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}}<\/script></body></html>`;
+  }
+  function abrirLote(i){
+    if(i>=lotes.length){ closeModal(); toast('Etiquetas impressas — '+lotes.length+' lote(s) de até '+ETIQUETAS_POR_LOTE+'.'); return; }
+    const html=construirHtmlLote(lotes[i],i+1,lotes.length);
+    const w=window.open('','_blank','width=320,height=500');
+    if(!w){ toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true); return; }
+    w.document.write(html); w.document.close();
+    if(i+1<lotes.length){
+      openModal(`<div class="m-h"><h3>🏷️ Lote ${i+1} de ${lotes.length}</h3><button class="x" onclick="closeModal()">✕</button></div>
+      <div class="m-b">
+        <p class="subtle" style="margin-bottom:16px">Esse lote tem ${lotes[i].length} etiqueta(s). Depois de confirmar a impressão na janela que abriu, clique abaixo pra seguir com o próximo lote (evita o desvio de alinhamento em impressões muito longas).</p>
+        <button class="btn primary" onclick="window._proximoLoteEtiquetas&&window._proximoLoteEtiquetas()">Imprimir próximo lote (${i+2}/${lotes.length}) →</button>
+      </div>`);
+      window._proximoLoteEtiquetas=function(){ closeModal(); abrirLote(i+1); };
+    } else {
+      toast('Último lote ('+lotes.length+'/'+lotes.length+') aberto pra impressão.');
+    }
+  }
+  abrirLote(0);
   });
 }
 function imprimirEtiquetas(id){

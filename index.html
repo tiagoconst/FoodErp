@@ -2676,14 +2676,14 @@ function imprimirEtiquetasVarios(pedidos){
     .et-cliente{font-size:10px;color:#333}
     .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:9px;letter-spacing:.05em;padding:0.7mm 2.2mm;border-radius:2px}
     .et-sabor-wrap{width:100%;max-width:42mm}
-    .et-sabor{font-size:18px;font-weight:bold;line-height:1.2;white-space:nowrap}
-    .et-datas{display:flex;justify-content:center;gap:4mm;font-size:10px;font-weight:bold}
+    .et-sabor{font-size:14.5px;font-weight:bold;line-height:1.2;white-space:nowrap}
+    .et-datas{display:flex;flex-wrap:nowrap;justify-content:center;gap:2.5mm;font-size:8px;font-weight:bold;white-space:nowrap}
   </style></head><body>
     ${blocos}
     <script>window.onload=function(){
       function ajustarNomes(){
         document.querySelectorAll('.et-sabor').forEach(function(el){
-          var tam=18;
+          var tam=14.5;
           el.style.fontSize=tam+'px';
           while(el.scrollWidth>el.clientWidth&&tam>4){ tam-=0.5; el.style.fontSize=tam+'px'; }
         });

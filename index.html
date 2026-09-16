@@ -2663,9 +2663,11 @@ function imprimirEtiquetasVarios(pedidos){
   const blocos=linhaCorte+etiquetas.map((et,i)=>`${i>0?linhaCorte:''}<div class="et">
     <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
     <div class="et-cliente">${esc(et.nomeCli||'')}${et.nomeCli&&et.pedidoLabel?' · ':''}${esc(et.pedidoLabel||'')}</div>
-    ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
+    <hr>
+    <div class="et-tarja">${et.sobMedida?'SOB MEDIDA'+(et.refeicao?' · '+et.refeicao:''):'PADRÃO'}</div>
     <div class="et-sabor-wrap"><div class="et-sabor">${esc(et.nome)}</div></div>
-    <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
+    <hr>
+    <div class="et-datas"><span><b>Fab:</b> ${fmt(hoje_)}</span><span class="sep">|</span><span><b>Val:</b> ${fmt(validade)}</span></div>
   </div>`).join('')+linhaCorte;
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas${multiplo?' — confirmados':' '+pedidos[0].id}</title><style>
     @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
@@ -2673,11 +2675,13 @@ function imprimirEtiquetasVarios(pedidos){
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
     .et{height:25mm;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;overflow:hidden;padding:0.5mm 1mm}
     .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:14px;color:#000;line-height:1.15;letter-spacing:.03em;text-transform:uppercase} .et-topo img{max-height:6.5mm;max-width:36mm}
-    .et-cliente{font-size:10px;color:#333}
-    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:9px;letter-spacing:.05em;padding:0.7mm 2.2mm;border-radius:2px}
+    .et-cliente{font-size:10px;color:#333;font-weight:300}
+    hr{width:88%;border:none;border-top:0.5px solid #000;margin:0}
+    .et-tarja{font-size:8px;letter-spacing:.25em;color:#333;font-weight:400}
     .et-sabor-wrap{width:100%;max-width:42mm}
     .et-sabor{font-size:14.5px;font-weight:bold;line-height:1.2;white-space:nowrap}
-    .et-datas{display:flex;flex-wrap:nowrap;justify-content:center;gap:2.5mm;font-size:8px;font-weight:bold;white-space:nowrap}
+    .et-datas{display:flex;flex-wrap:nowrap;align-items:center;justify-content:center;gap:2mm;font-size:8px;font-weight:400;white-space:nowrap}
+    .et-datas .sep{color:#999}
   </style></head><body>
     ${blocos}
     <script>window.onload=function(){

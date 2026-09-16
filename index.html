@@ -2658,32 +2658,33 @@ function imprimirEtiquetasVarios(pedidos){
     p.itens.forEach(l=>{ const n=Math.max(1,Math.round(l.quantidade||1));
       for(let k=0;k<n;k++)etiquetas.push({nome:nomeLinha(l),sobMedida:!!l.nome_custom,refeicao:rotuloRefeicao[l.refeicao]||'',nomeCli}); });
   });
-  const blocos=etiquetas.map((et,i)=>`${i>0?'<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>':''}<div class="et">
+  const linhaCorte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
+  const blocos=linhaCorte+etiquetas.map((et,i)=>`${i>0?linhaCorte:''}<div class="et">
     <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
     ${multiplo&&et.nomeCli?`<div class="et-cliente">${esc(et.nomeCli)}</div>`:''}
     ${et.sobMedida?`<div class="et-tarja">SOB MEDIDA${et.refeicao?' · '+et.refeicao:''}</div>`:''}
     <div class="et-sabor-wrap"><div class="et-sabor">${esc(et.nome)}</div></div>
     <div class="et-datas"><span>Fab: ${fmt(hoje_)}</span><span>Val: ${fmt(validade)}</span></div>
-  </div>`).join('');
+  </div>`).join('')+linhaCorte;
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas${multiplo?' — confirmados':' '+pedidos[0].id}</title><style>
     @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
     body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word;text-align:center}
     .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
     .et{height:25mm;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;padding:0 1mm}
-    .et-topo{margin-bottom:0.6mm} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:13px;line-height:1.15;letter-spacing:.02em} .et-topo img{max-height:6mm;max-width:38mm}
+    .et-topo{margin-bottom:0.8mm} .et-topo .nome-loja{font-family:Arial,Helvetica,sans-serif;font-weight:600;font-size:9px;color:#444;line-height:1.15;letter-spacing:.02em;text-transform:uppercase} .et-topo img{max-height:4.5mm;max-width:32mm}
     .et-cliente{font-size:8.5px;color:#333;margin-bottom:0.6mm}
-    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:7.5px;letter-spacing:.05em;padding:0.5mm 1.8mm;border-radius:2px;margin-bottom:0.6mm}
-    .et-sabor-wrap{width:100%;max-width:40mm;margin-bottom:0.6mm}
-    .et-sabor{font-size:12.5px;font-weight:bold;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .et-tarja{display:inline-block;background:#000;color:#fff;font-weight:800;font-size:7.5px;letter-spacing:.05em;padding:0.5mm 1.8mm;border-radius:2px;margin-bottom:0.8mm}
+    .et-sabor-wrap{width:100%;max-width:42mm;margin-bottom:0.8mm}
+    .et-sabor{font-size:16px;font-weight:bold;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .et-datas{display:flex;justify-content:center;gap:3mm;font-size:8.5px;font-weight:bold}
   </style></head><body>
     ${blocos}
     <script>window.onload=function(){
       function ajustarNomes(){
         document.querySelectorAll('.et-sabor').forEach(function(el){
-          var tam=12.5;
+          var tam=16;
           el.style.fontSize=tam+'px';
-          while(el.scrollWidth>el.clientWidth&&tam>6.5){ tam-=0.5; el.style.fontSize=tam+'px'; }
+          while(el.scrollWidth>el.clientWidth&&tam>9){ tam-=0.5; el.style.fontSize=tam+'px'; }
         });
       }
       function ir(){ ajustarNomes(); window.print(); }

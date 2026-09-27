@@ -295,6 +295,7 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <div class="nav-label">Vendas</div>
     <button class="nav-btn" data-view="pedidos"><span class="nav-dot" style="background:var(--m-pedidos)"></span>Pedidos<span class="count" id="cnt-pedidos"></span></button>
     <button class="nav-btn" data-view="clientes"><span class="nav-dot" style="background:var(--m-clientes)"></span>Clientes</button>
+    <button class="nav-btn" data-view="vales"><span class="nav-dot" style="background:var(--m-clientes)"></span>Vale Marmitas<span class="count" id="cnt-vales"></span></button>
     <div class="nav-label">Cadastro</div>
     <button class="nav-btn" data-view="itens"><span class="nav-dot" style="background:var(--m-itens)"></span>Itens<span class="count" id="cnt-itens"></span></button>
     <button class="nav-btn" data-view="composicoes"><span class="nav-dot" style="background:var(--m-composicao)"></span>Composições</button>
@@ -389,13 +390,14 @@ const EVENTO_CORES = {
   CLIENTE_CRIADO:'var(--m-itens)', CLIENTE_ATUALIZADO:'var(--m-itens)', CREDITO_CLIENTE:'var(--m-financeiro)',
   PEDIDO_EM_PRODUCAO:'var(--m-producao)', PEDIDO_DISPONIVEL:'var(--m-pedidos)', FORMA_PAGAMENTO:'var(--m-financeiro)',
   FORNECEDOR_CRIADO:'var(--m-fornecedores)', FORNECEDOR_ATUALIZADO:'var(--m-fornecedores)',
-  CANAL_CONFIGURADO:'var(--m-integracoes)', FUNCIONARIO_CRIADO:'var(--m-funcionarios)', FUNCIONARIO_ATUALIZADO:'var(--m-funcionarios)', VALE_FUNCIONARIO:'var(--m-financeiro)', PAGAMENTO_FUNCIONARIO:'var(--m-financeiro)', PEDIDO_CANAL_RECEBIDO:'var(--m-integracoes)', REPASSE_CANAL:'var(--m-financeiro)'
+  CANAL_CONFIGURADO:'var(--m-integracoes)', FUNCIONARIO_CRIADO:'var(--m-funcionarios)', FUNCIONARIO_ATUALIZADO:'var(--m-funcionarios)', VALE_FUNCIONARIO:'var(--m-financeiro)', PAGAMENTO_FUNCIONARIO:'var(--m-financeiro)', PEDIDO_CANAL_RECEBIDO:'var(--m-integracoes)', REPASSE_CANAL:'var(--m-financeiro)',
+  VALE_MARMITA_CRIADO:'var(--m-clientes)', VALE_MARMITA_USADO:'var(--m-clientes)', VALE_MARMITA_CANCELADO:'var(--m-clientes)'
 };
 
 var S = {
   empresa:{nome:'Meu Restaurante'},
   itens:[], categorias:[], composicoes:[], custos_fixos:[], status_personalizados:[], perfis_marmita:[], movimentos:[], compras:[], producoes:[],
-  pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], entregas:[], seq:{}
+  pedidos:[], lancamentos:[], eventos:[], clientes:[], clientes_mov:[], formas:[], fornecedores:[], canais:[], funcionarios:[], funcionarios_mov:[], config:[], entregas:[], vales:[], seq:{}
 };
 let currentView='dashboard';
 let saveTimer=null;
@@ -757,6 +759,7 @@ function render(){
   $('#cnt-pedidos').textContent=S.pedidos.filter(p=>p.status==='confirmado').length||'';
   $('#cnt-eventos').textContent=S.eventos.length>99?'99+':(S.eventos.length||'');
   $('#cnt-custos').textContent=auditoriaCustos().semCusto.length||'';
+  $('#cnt-vales').textContent=(S.vales||[]).filter(v=>v.status==='ativo'&&(v.quantidade_total-v.quantidade_usada)>0).length||'';
 }
 function header(titulo,corVar,sub,acoesHtml){
   return `<div class="topbar"><div><h1><span class="mod-chip" style="background:${corVar}"></span>${titulo}</h1>
@@ -2961,6 +2964,153 @@ function imprimirPedido(id){
   const p=S.pedidos.find(x=>x.id===id); if(!p)return;
   imprimirRecibosVarios([p]);
 }
+
+/* ================= VALE MARMITAS ================= */
+function saldoVale(v){ return Math.max(0,(v.quantidade_total||0)-(v.quantidade_usada||0)); }
+function statusVale(v){
+  if(v.status==='cancelado')return '<span class="tag bad">cancelado</span>';
+  if(saldoVale(v)<=0)return '<span class="tag mut">usado</span>';
+  if(v.validade&&v.validade<hoje())return '<span class="tag bad">vencido</span>';
+  return '<span class="tag f">ativo</span>';
+}
+let filtroVales='';
+VIEWS.vales=function(){
+  const lista=S.vales.slice().sort((a,b)=>(b.criado_em||'').localeCompare(a.criado_em||''))
+    .filter(v=>{ if(!filtroVales)return true; const c=clienteById(v.cliente_id);
+      return (c?nomeProprio(c.nome):'').toLowerCase().includes(filtroVales)||v.id.toLowerCase().includes(filtroVales); });
+  const rows=lista.map(v=>{
+    const c=clienteById(v.cliente_id);
+    const saldo=saldoVale(v);
+    return `<tr>
+      <td><span class="mono-id">${esc(v.id)}</span></td>
+      <td><b>${esc(c?nomeProprio(c.nome):'(cliente removido)')}</b></td>
+      <td class="r num">${saldo} / ${v.quantidade_total} marmita${v.quantidade_total>1?'s':''}</td>
+      <td>${v.validade?dBR(v.validade):'—'}</td>
+      <td>${statusVale(v)}</td>
+      <td class="r">
+        ${v.status!=='cancelado'&&saldo>0?`<button class="btn sm primary" onclick="usarVale('${v.id}')">Usar 1</button>`:''}
+        <button class="btn sm" onclick="imprimirVale('${v.id}')">Imprimir</button>
+        ${v.status!=='cancelado'?`<button class="btn sm ghost" onclick="cancelarVale('${v.id}')">Cancelar</button>`:''}
+      </td></tr>`;
+  }).join('')||`<tr><td colspan="6"><div class="empty"><b>Nenhum vale encontrado</b>Crie um vale-marmitas pra um cliente e imprima na bobina — ele fica registrado aqui pra controle de uso e validade.</div></td></tr>`;
+  const ativos=S.vales.filter(v=>v.status!=='cancelado'&&saldoVale(v)>0&&(!v.validade||v.validade>=hoje()));
+  const marmitasEmAberto=ativos.reduce((a,v)=>a+saldoVale(v),0);
+  return header('Vale Marmitas','var(--m-clientes)','Crie, imprima e controle o saldo de vales-marmita por cliente.',
+    `<button class="btn primary" onclick="modalVale()">+ Novo vale</button>`)+
+  `<div class="grid g2" style="margin-bottom:16px">
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Vales ativos</div><div class="k-value num">${ativos.length}</div></div>
+    <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--ok)"></span>Marmitas em aberto</div><div class="k-value num">${marmitasEmAberto}</div></div>
+  </div>
+  <div class="card">
+    <input placeholder="Buscar por cliente ou código…" style="margin-bottom:10px;width:100%;padding:8px 10px;border:1px solid var(--line,#ccc);border-radius:6px" value="${esc(filtroVales)}" oninput="filtroVales=this.value.toLowerCase();render()">
+    <table><thead><tr><th>Código</th><th>Cliente</th><th class="r">Saldo</th><th>Validade</th><th>Status</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+};
+function modalVale(){
+  const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
+  if(!S.clientes.filter(c=>c.ativo!==false).length)return toast('Cadastre um cliente antes de criar um vale.',true);
+  const validadePadrao=new Date(); validadePadrao.setDate(validadePadrao.getDate()+90);
+  openModal(`<div class="m-h"><h3>Novo vale-marmitas</h3><button class="x" onclick="closeModal()">✕</button></div>
+  <div class="m-b">
+    <div class="field"><label>Cliente *</label><select id="vl-cliente"><option value="">Selecione…</option>${cliOpts}</select></div>
+    <div class="frow c2">
+      <div class="field"><label>Quantidade de marmitas *</label><input id="vl-qtd" type="number" min="1" step="1" value="1"></div>
+      <div class="field"><label>Válido até</label><input id="vl-validade" type="date" value="${validadePadrao.toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="field"><label>Observação</label><input id="vl-obs" placeholder="ex.: Presente de aniversário, promoção fidelidade…"></div>
+  </div>
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarVale()">Criar e imprimir</button></div>`);
+}
+function salvarVale(){
+  const clienteId=$('#vl-cliente').value;
+  const qtd=parseInt($('#vl-qtd').value,10);
+  if(!clienteId)return toast('Selecione o cliente.',true);
+  if(!qtd||qtd<1)return toast('Informe uma quantidade válida de marmitas.',true);
+  const v={
+    id:uid('VALE'), cliente_id:clienteId, quantidade_total:qtd, quantidade_usada:0,
+    validade:$('#vl-validade').value||null, observacao:$('#vl-obs').value.trim()||null,
+    status:'ativo', criado_em:new Date().toISOString()
+  };
+  S.vales.push(v);
+  const c=clienteById(clienteId);
+  registrarEvento('VALE_MARMITA_CRIADO',`Vale de ${qtd} marmita${qtd>1?'s':''} para ${c?nomeProprio(c.nome):''} · ${v.id}`,v.id);
+  scheduleSave(); closeModal(); nav('vales'); toast('Vale criado! Abrindo impressão…');
+  imprimirVale(v.id);
+}
+function usarVale(id){
+  const v=S.vales.find(x=>x.id===id); if(!v)return;
+  if(saldoVale(v)<=0)return toast('Esse vale já não tem saldo.',true);
+  if(!confirm('Debitar 1 marmita deste vale?'))return;
+  v.quantidade_usada=(v.quantidade_usada||0)+1;
+  const c=clienteById(v.cliente_id);
+  registrarEvento('VALE_MARMITA_USADO',`1 marmita usada do vale ${v.id} de ${c?nomeProprio(c.nome):''} · restam ${saldoVale(v)}`,v.id);
+  scheduleSave(); render(); toast('Uso registrado — restam '+saldoVale(v)+' marmita(s).');
+}
+function cancelarVale(id){
+  const v=S.vales.find(x=>x.id===id); if(!v)return;
+  if(!confirm('Cancelar este vale? Ele deixa de poder ser usado.'))return;
+  v.status='cancelado';
+  registrarEvento('VALE_MARMITA_CANCELADO',`Vale ${v.id} cancelado`,v.id);
+  scheduleSave(); render(); toast('Vale cancelado.');
+}
+// Ticket de bobina 44mm no mesmo padrão visual da etiqueta/recibo: logo em P&B, tarja com letter-spacing,
+// número de marmitas em destaque (é a informação que mais importa pro balcão) e corte no topo/base.
+function imprimirVale(id){
+  const v=S.vales.find(x=>x.id===id); if(!v)return;
+  const c=clienteById(v.cliente_id);
+  const emp0=getEmpresaInfo(); const idn0=getIdent();
+  const nomeEmp0=emp0.nome_loja||idn0.nome||'Food ERP';
+  prepararLogoImpressao(nomeEmp0,function(logoPB){
+    const fmt=iso=>iso?new Date(iso+'T12:00:00').toLocaleDateString('pt-BR'):'sem vencimento';
+    const codigo=v.id.replace('VALE-','');
+    const linhaCorte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
+    const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Vale ${esc(v.id)}</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+    <style>
+      @page{ margin:3mm; } *{box-sizing:border-box} html,body{width:100%}
+      body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;word-break:break-word;overflow-wrap:break-word;text-align:center}
+      .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
+      .vl{display:flex;flex-direction:column;align-items:center;gap:1.6mm;padding:1mm 1.5mm}
+      .vl-topo .nome-loja{font-weight:800;font-size:14px;color:#000;line-height:1.15;letter-spacing:.03em;text-transform:uppercase} .vl-topo img{max-height:7mm;max-width:36mm}
+      hr{width:88%;border:none;border-top:0.5px solid #000;margin:0}
+      .vl-tarja{font-size:9.5px;letter-spacing:.3em;color:#333;font-weight:700;margin-top:.5mm}
+      .vl-cliente{font-size:12px;font-weight:700;margin-top:.5mm}
+      .vl-qtd-wrap{margin:1.5mm 0}
+      .vl-qtd{font-size:30px;font-weight:800;line-height:1}
+      .vl-qtd-label{font-size:9px;letter-spacing:.15em;color:#333;text-transform:uppercase}
+      .vl-info{font-size:9.5px}
+      .vl-obs{font-size:9px;color:#333;border:1px dashed #000;padding:1.5mm;margin-top:1mm;max-width:40mm}
+      .vl-cod{font-family:'Courier New',monospace;font-size:12px;font-weight:700;letter-spacing:.12em;border:1px solid #000;border-radius:2mm;padding:1mm 2mm;margin-top:.5mm}
+      #vl-qr{margin-top:1mm}
+    </style></head><body>
+      ${linhaCorte}
+      <div class="vl">
+        <div class="vl-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp0)}</span>`}</div>
+        <div class="vl-tarja">VALE MARMITAS</div>
+        <hr>
+        <div class="vl-cliente">${esc(c?nomeProprio(c.nome):'Cliente avulso')}</div>
+        <div class="vl-qtd-wrap">
+          <div class="vl-qtd">${v.quantidade_total}</div>
+          <div class="vl-qtd-label">marmita${v.quantidade_total>1?'s':''}</div>
+        </div>
+        <hr>
+        <div class="vl-info"><b>Válido até:</b> ${fmt(v.validade)}</div>
+        ${v.observacao?`<div class="vl-obs">${esc(v.observacao)}</div>`:''}
+        <div id="vl-qr"></div>
+        <div class="vl-cod">${esc(codigo)}</div>
+        <div class="vl-info" style="margin-top:1mm">${esc(nomeEmp0)}${emp0.telefone?' · '+esc(emp0.telefone):''}</div>
+      </div>
+      ${linhaCorte}
+      <script>window.onload=function(){
+        try{ new QRCode(document.getElementById('vl-qr'),{text:${JSON.stringify(v.id)},width:80,height:80,correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
+        function ir(){ window.print(); }
+        if(document.fonts&&document.fonts.ready){document.fonts.ready.then(ir,ir); setTimeout(ir,1200);} else {ir();}
+      }<\/script></body></html>`;
+    const w=window.open('','_blank','width=320,height=560');
+    if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups para este arquivo.',true);
+    w.document.write(html); w.document.close();
+  });
+}
 </script>
 <script>
 'use strict';
@@ -5046,7 +5196,7 @@ const DEFAULT_SUPABASE = {
   url: 'https://jaytdbwaoduefrbragsw.supabase.co',
   key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpheXRkYndhb2R1ZWZyYnJhZ3N3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTMwNjgsImV4cCI6MjA5ODU4OTA2OH0.3TBjN82_7bqYRiiuU2b6yNJS1xfJyGtD6bEh7q89kwY'
 };
-const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas','cupons','pesquisas'];
+const TABLES=['itens','categorias','composicoes','custos_fixos','status_personalizados','perfis_marmita','movimentos','compras','producoes','pedidos','lancamentos','eventos','clientes','clientes_mov','formas','fornecedores','canais','funcionarios','funcionarios_mov','config','entregas','cupons','pesquisas','vales'];
 var sb=null, sessao=null, empresa=null, snapshot=null;
 let rtChan=null, rtTimer=null, syncing=false, syncPendente=false;
 
@@ -5179,7 +5329,7 @@ async function entrarNoSistema(){
         TABLES.forEach(t=>{ S[t]=p[t]||[]; }); await cloudPersist(); }
     }catch(e){} }
   }
-  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[]; if(!S.cupons)S.cupons=[]; if(!S.pesquisas)S.pesquisas=[];
+  if(!S.formas)S.formas=[]; if(!S.clientes)S.clientes=[]; if(!S.clientes_mov)S.clientes_mov=[]; if(!S.config)S.config=[]; if(!S.fornecedores)S.fornecedores=[]; if(!S.canais)S.canais=[]; if(!S.funcionarios)S.funcionarios=[]; if(!S.funcionarios_mov)S.funcionarios_mov=[]; if(!S.categorias)S.categorias=[]; if(!S.custos_fixos)S.custos_fixos=[]; if(!S.status_personalizados)S.status_personalizados=[]; if(!S.perfis_marmita)S.perfis_marmita=[]; if(!S.cupons)S.cupons=[]; if(!S.pesquisas)S.pesquisas=[]; if(!S.vales)S.vales=[];
   garantirCategoriasPadrao();
   aplicarIdentidade();
   if(!S.formas.length){ garantirFormasPadrao(); cloudPersist(); }

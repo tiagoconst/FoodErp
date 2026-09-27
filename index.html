@@ -2965,11 +2965,15 @@ function imprimirPedido(id){
   imprimirRecibosVarios([p]);
 }
 
-/* ================= VALE MARMITAS ================= */
-function saldoVale(v){ return Math.max(0,(v.quantidade_total||0)-(v.quantidade_usada||0)); }
-function statusVale(v){
+/* ================= VALE MARMITAS =================
+   Atenção: já existe modalVale(fid)/salvarVale(fid) mais abaixo no arquivo, usado pro "vale/adiantamento"
+   de FUNCIONÁRIO (Financeiro). São conceitos diferentes que só coincidem no nome "vale" em português —
+   por isso aqui embaixo tudo usa o prefixo ValeMarmita, pra não colidir com aquelas funções (JS clássico:
+   a função declarada depois no arquivo vence, então um nome igual faria o botão abrir o modal errado). */
+function saldoValeMarmita(v){ return Math.max(0,(v.quantidade_total||0)-(v.quantidade_usada||0)); }
+function statusValeMarmita(v){
   if(v.status==='cancelado')return '<span class="tag bad">cancelado</span>';
-  if(saldoVale(v)<=0)return '<span class="tag mut">usado</span>';
+  if(saldoValeMarmita(v)<=0)return '<span class="tag mut">usado</span>';
   if(v.validade&&v.validade<hoje())return '<span class="tag bad">vencido</span>';
   return '<span class="tag f">ativo</span>';
 }
@@ -2980,23 +2984,23 @@ VIEWS.vales=function(){
       return (c?nomeProprio(c.nome):'').toLowerCase().includes(filtroVales)||v.id.toLowerCase().includes(filtroVales); });
   const rows=lista.map(v=>{
     const c=clienteById(v.cliente_id);
-    const saldo=saldoVale(v);
+    const saldo=saldoValeMarmita(v);
     return `<tr>
       <td><span class="mono-id">${esc(v.id)}</span></td>
       <td><b>${esc(c?nomeProprio(c.nome):'(cliente removido)')}</b></td>
       <td class="r num">${saldo} / ${v.quantidade_total} marmita${v.quantidade_total>1?'s':''}</td>
       <td>${v.validade?dBR(v.validade):'—'}</td>
-      <td>${statusVale(v)}</td>
+      <td>${statusValeMarmita(v)}</td>
       <td class="r">
-        ${v.status!=='cancelado'&&saldo>0?`<button class="btn sm primary" onclick="usarVale('${v.id}')">Usar 1</button>`:''}
-        <button class="btn sm" onclick="imprimirVale('${v.id}')">Imprimir</button>
-        ${v.status!=='cancelado'?`<button class="btn sm ghost" onclick="cancelarVale('${v.id}')">Cancelar</button>`:''}
+        ${v.status!=='cancelado'&&saldo>0?`<button class="btn sm primary" onclick="usarValeMarmita('${v.id}')">Usar 1</button>`:''}
+        <button class="btn sm" onclick="imprimirValeMarmita('${v.id}')">Imprimir</button>
+        ${v.status!=='cancelado'?`<button class="btn sm ghost" onclick="cancelarValeMarmita('${v.id}')">Cancelar</button>`:''}
       </td></tr>`;
   }).join('')||`<tr><td colspan="6"><div class="empty"><b>Nenhum vale encontrado</b>Crie um vale-marmitas pra um cliente e imprima na bobina — ele fica registrado aqui pra controle de uso e validade.</div></td></tr>`;
-  const ativos=S.vales.filter(v=>v.status!=='cancelado'&&saldoVale(v)>0&&(!v.validade||v.validade>=hoje()));
-  const marmitasEmAberto=ativos.reduce((a,v)=>a+saldoVale(v),0);
+  const ativos=S.vales.filter(v=>v.status!=='cancelado'&&saldoValeMarmita(v)>0&&(!v.validade||v.validade>=hoje()));
+  const marmitasEmAberto=ativos.reduce((a,v)=>a+saldoValeMarmita(v),0);
   return header('Vale Marmitas','var(--m-clientes)','Crie, imprima e controle o saldo de vales-marmita por cliente.',
-    `<button class="btn primary" onclick="modalVale()">+ Novo vale</button>`)+
+    `<button class="btn primary" onclick="modalValeMarmita()">+ Novo vale</button>`)+
   `<div class="grid g2" style="margin-bottom:16px">
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-clientes)"></span>Vales ativos</div><div class="k-value num">${ativos.length}</div></div>
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--ok)"></span>Marmitas em aberto</div><div class="k-value num">${marmitasEmAberto}</div></div>
@@ -3006,7 +3010,7 @@ VIEWS.vales=function(){
     <table><thead><tr><th>Código</th><th>Cliente</th><th class="r">Saldo</th><th>Validade</th><th>Status</th><th class="r"></th></tr></thead><tbody>${rows}</tbody></table>
   </div>`;
 };
-function modalVale(){
+function modalValeMarmita(){
   const cliOpts=clientesOrdenados(S.clientes.filter(c=>c.ativo!==false)).map(c=>`<option value="${c.id}">${esc(nomeProprio(c.nome))}</option>`).join('');
   if(!S.clientes.filter(c=>c.ativo!==false).length)return toast('Cadastre um cliente antes de criar um vale.',true);
   const validadePadrao=new Date(); validadePadrao.setDate(validadePadrao.getDate()+90);
@@ -3019,9 +3023,9 @@ function modalVale(){
     </div>
     <div class="field"><label>Observação</label><input id="vl-obs" placeholder="ex.: Presente de aniversário, promoção fidelidade…"></div>
   </div>
-  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarVale()">Criar e imprimir</button></div>`);
+  <div class="m-f"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn primary" onclick="salvarValeMarmita()">Criar e imprimir</button></div>`);
 }
-function salvarVale(){
+function salvarValeMarmita(){
   const clienteId=$('#vl-cliente').value;
   const qtd=parseInt($('#vl-qtd').value,10);
   if(!clienteId)return toast('Selecione o cliente.',true);
@@ -3035,18 +3039,18 @@ function salvarVale(){
   const c=clienteById(clienteId);
   registrarEvento('VALE_MARMITA_CRIADO',`Vale de ${qtd} marmita${qtd>1?'s':''} para ${c?nomeProprio(c.nome):''} · ${v.id}`,v.id);
   scheduleSave(); closeModal(); nav('vales'); toast('Vale criado! Abrindo impressão…');
-  imprimirVale(v.id);
+  imprimirValeMarmita(v.id);
 }
-function usarVale(id){
+function usarValeMarmita(id){
   const v=S.vales.find(x=>x.id===id); if(!v)return;
-  if(saldoVale(v)<=0)return toast('Esse vale já não tem saldo.',true);
+  if(saldoValeMarmita(v)<=0)return toast('Esse vale já não tem saldo.',true);
   if(!confirm('Debitar 1 marmita deste vale?'))return;
   v.quantidade_usada=(v.quantidade_usada||0)+1;
   const c=clienteById(v.cliente_id);
-  registrarEvento('VALE_MARMITA_USADO',`1 marmita usada do vale ${v.id} de ${c?nomeProprio(c.nome):''} · restam ${saldoVale(v)}`,v.id);
-  scheduleSave(); render(); toast('Uso registrado — restam '+saldoVale(v)+' marmita(s).');
+  registrarEvento('VALE_MARMITA_USADO',`1 marmita usada do vale ${v.id} de ${c?nomeProprio(c.nome):''} · restam ${saldoValeMarmita(v)}`,v.id);
+  scheduleSave(); render(); toast('Uso registrado — restam '+saldoValeMarmita(v)+' marmita(s).');
 }
-function cancelarVale(id){
+function cancelarValeMarmita(id){
   const v=S.vales.find(x=>x.id===id); if(!v)return;
   if(!confirm('Cancelar este vale? Ele deixa de poder ser usado.'))return;
   v.status='cancelado';
@@ -3055,7 +3059,7 @@ function cancelarVale(id){
 }
 // Ticket de bobina 44mm no mesmo padrão visual da etiqueta/recibo: logo em P&B, tarja com letter-spacing,
 // número de marmitas em destaque (é a informação que mais importa pro balcão) e corte no topo/base.
-function imprimirVale(id){
+function imprimirValeMarmita(id){
   const v=S.vales.find(x=>x.id===id); if(!v)return;
   const c=clienteById(v.cliente_id);
   const emp0=getEmpresaInfo(); const idn0=getIdent();

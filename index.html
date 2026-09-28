@@ -1666,23 +1666,58 @@ function statusDisponiveis(){
 }
 function pedidoPago(p){ return !!(p.pago ?? p.recebido); }
 // Dispara a pesquisa de satisfação por WhatsApp quando o pedido vira pago+finalizado.
-// Só chama a Edge Function (que por sua vez já é idempotente via pesquisa_wpp_enviada_em),
-// nunca bloqueia a UI — falha de envio não deve travar o fluxo de pagamento do ERP.
+// Não manda mais direto: abre uma janelinha de confirmação, porque tem cliente que pede
+// 2x na semana e ficava recebendo a pesquisa toda hora. Se o pedido não tem telefone, avisa
+// e deixa preencher ali mesmo, na hora — antes isso falhava calado.
 function dispararPesquisaSatisfacaoWpp(id){
   const p=S.pedidos.find(x=>x.id===id);
   if(!p||p.status!=='finalizado'||!p.pago||p.pesquisa_wpp_enviada_em)return;
-  if(!p.telefone){
-    // Sem telefone no pedido a automação não tem pra quem mandar — antes isso falhava calado
-    // (o cliente simplesmente nunca recebia a pesquisa e ninguém percebia). Agora avisa na hora.
-    toast('Pedido finalizado sem telefone — a pesquisa de satisfação não será enviada automaticamente pra esse cliente.',true);
-    return;
+  abrirConfirmacaoPesquisaWpp(id);
+}
+function abrirConfirmacaoPesquisaWpp(id){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return;
+  if(p.telefone){
+    openModal(`<div class="m-h"><h3>Pesquisa de satisfação</h3><button class="x" onclick="closeModal()">✕</button></div>
+    <div class="m-b">
+      <p class="subtle">Pedido de <b>${esc(p.cliente||id)}</b> finalizado. Enviar a pesquisa de satisfação por WhatsApp pro telefone <b>${esc(p.telefone)}</b>?</p>
+    </div>
+    <div class="m-f">
+      <button class="btn" onclick="pularPesquisaWpp()">Não enviar</button>
+      <button class="btn primary" onclick="confirmarEnvioPesquisaWpp('${id}')">Enviar WhatsApp</button>
+    </div>`);
+  } else {
+    openModal(`<div class="m-h"><h3>Cliente sem telefone</h3><button class="x" onclick="closeModal()">✕</button></div>
+    <div class="m-b">
+      <p class="subtle">Pedido de <b>${esc(p.cliente||id)}</b> finalizado, mas esse cliente não tem telefone cadastrado — sem número não dá pra mandar a pesquisa de satisfação por WhatsApp. Pode preencher aqui pra enviar agora, ou só pular.</p>
+      <div class="field"><label>Telefone</label><input id="pwpp-tel" placeholder="(42) 9....-....."></div>
+    </div>
+    <div class="m-f">
+      <button class="btn" onclick="pularPesquisaWpp()">Não enviar</button>
+      <button class="btn primary" onclick="confirmarEnvioPesquisaWpp('${id}',true)">Salvar telefone e enviar</button>
+    </div>`);
   }
+}
+function pularPesquisaWpp(){
+  closeModal();
+  // Só fecha e não manda — sem marcar pesquisa_wpp_enviada_em, então se o pedido for
+  // reaberto/pago de novo por algum motivo a pergunta pode voltar, mas cada pedido novo
+  // (inclusive de cliente recorrente) sempre pergunta de novo, nunca envia sozinho.
+}
+function confirmarEnvioPesquisaWpp(id,usarTelInformado){
+  const p=S.pedidos.find(x=>x.id===id); if(!p)return closeModal();
+  if(usarTelInformado){
+    const tel=($('#pwpp-tel')?.value||'').trim();
+    if(!tel){ toast('Informe um telefone ou clique em "Não enviar".',true); return; }
+    p.telefone=tel; scheduleSave();
+  }
+  closeModal();
   sb.functions.invoke('whatsapp-enviar-pesquisa',{body:{empresa_id:empresa.empresa_id,pedido_id:id}})
     .then(({data,error})=>{
-      if(error||(data&&data.error)){ console.error('Pesquisa WhatsApp não enviada:',error||data.error); return; }
+      if(error||(data&&data.error)){ console.error('Pesquisa WhatsApp não enviada:',error||data.error); toast('Falha ao enviar pesquisa de satisfação.',true); return; }
       p.pesquisa_wpp_enviada_em=new Date().toISOString(); scheduleSave();
+      toast('Pesquisa de satisfação enviada por WhatsApp.');
     })
-    .catch(e=>console.error('Pesquisa WhatsApp não enviada:',e));
+    .catch(e=>{ console.error('Pesquisa WhatsApp não enviada:',e); toast('Falha ao enviar pesquisa de satisfação.',true); });
 }
 function totalEntregue(p){ return (p.itens||[]).every(l=>(l.quantidade_entregue||0)>=l.quantidade); }
 function qtdPendente(l){ return Math.max(0,l.quantidade-(l.quantidade_entregue||0)); }

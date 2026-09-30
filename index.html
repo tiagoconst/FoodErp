@@ -1570,6 +1570,80 @@ function salvarAjuste(itemId){
 }
 
 /* ================= PRODUÇÃO ================= */
+// Necessidade de proteína pros pedidos "Em produção".
+// IMPORTANTE (corrigido depois de bater com o Planejamento): a "qtd de proteína" precisa ser a
+// ficha técnica explodida em TODOS os níveis, não só o componente direto do prato vendido — porque
+// alguns pré-preparos de proteína usam OUTRO pré-preparo de proteína como ingrediente (ex.: o
+// pré-preparo "Picadinho com Legumes" leva "Bife Acebolado" dentro da receita; "Peito de Frango ao
+// Limão Siciliano"/"ao Molho Caseiro"/"Xadrez" são feitos a partir de "Peito de Frango Grelhado" já
+// pronto). Se parar no primeiro nível, subestima quanto precisa produzir daquele preparo-base — foi
+// exatamente esse o bug que o usuário pegou comparando com a tela de Planejamento.
+// Por isso aqui tem duas contagens separadas por item de proteína (categoria "Proteína" no cadastro):
+//  - gramas: soma explodindo recursivamente pela ficha técnica inteira (igual o motor de Planejamento/MRP).
+//  - marmitas: só conta as marmitas em que esse item é a proteína DIRETA do prato vendido/sob medida
+//    (não soma marmitas de outro prato que só usa esse preparo como ingrediente interno) — é a contagem
+//    de "quantas marmitas desse prato eu vou montar", não de produção de insumo.
+function nomeDaLinhaPedido(l){
+  return l.item_id==='PRD-SOB-MEDIDA'?(l.nome_custom||'Marmita sob medida'):nomeItem(l.item_id);
+}
+function ehProteina(itemId){ const it=itemById(itemId); return !!(it&&(it.categoria||'').trim()==='Proteína'); }
+function explodirProteina(itemId,qtdGramas,acc,chain){
+  if(!itemId||chain.has(itemId)||!(qtdGramas>0))return;
+  if(ehProteina(itemId)){
+    const it=itemById(itemId);
+    if(!acc[itemId])acc[itemId]={nome:it.nome,gramas:0,marmitas:0,unidade:it.unidade_base||'g'};
+    acc[itemId].gramas+=qtdGramas;
+  }
+  const comps=componentesDe(itemId);
+  if(!comps.length)return;
+  const rend=rendimentoDe(itemId)||1;
+  const nchain=new Set(chain); nchain.add(itemId);
+  comps.forEach(c=>{
+    const need=c.quantidade*qtdGramas/rend*(1+((c.perda_percentual||0)/100));
+    explodirProteina(c.item_filho_id,need,acc,nchain);
+  });
+}
+function calcularNecessidadeProteina(statusFiltro){
+  const alvo=statusFiltro||'em_producao';
+  const acc={}; // item_id da proteína -> {nome, gramas, marmitas, unidade}
+  (S.pedidos||[]).filter(p=>p.status===alvo).forEach(p=>{
+    (p.itens||[]).forEach(l=>{
+      const qtdMarmitas=l.quantidade||0; if(qtdMarmitas<=0)return;
+      if(l.item_id==='PRD-SOB-MEDIDA'){
+        (l.componentes||[]).forEach(c=>{
+          explodirProteina(c.item_id,(c.quantidade||0)*qtdMarmitas,acc,new Set());
+          if(ehProteina(c.item_id))acc[c.item_id].marmitas+=qtdMarmitas;
+        });
+      } else {
+        explodirProteina(l.item_id,qtdMarmitas,acc,new Set());
+        componentesDe(l.item_id).forEach(c=>{ if(ehProteina(c.item_filho_id))acc[c.item_filho_id].marmitas+=qtdMarmitas; });
+      }
+    });
+  });
+  return Object.values(acc).filter(r=>r.gramas>0).sort((a,b)=>b.gramas-a.gramas);
+}
+function imprimirNecessidadeProteina(){
+  const linhas=calcularNecessidadeProteina('em_producao');
+  if(!linhas.length)return toast('Nenhum pedido "Em produção" com proteína pendente.',true);
+  const emp=getEmpresaInfo();const idn=getIdent();const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const agora=new Date();
+  const corpo=linhas.map(r=>`<div class="item"><div class="item-txt">${esc(r.nome)}${r.marmitas?` <span class="small">(${qty(r.marmitas,'un')})</span>`:''}</div><b class="num">${qty(Math.round(r.gramas*100)/100,r.unidade||'g')}</b></div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Proteína a produzir</title><style>
+    @page{margin:3mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto}
+    h1{font-size:12px;margin:1mm 0}.center{text-align:center}.small{font-size:9px;color:#333}
+    .item{display:flex;justify-content:space-between;gap:6px;padding:1.2mm 0;border-bottom:1px dashed #ccc}.num{white-space:nowrap}</style></head>
+    <body><div class="center"><h1>${esc(nomeEmp)}</h1><div class="small">Proteína a produzir — pedidos "Em produção"<br>${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div></div>
+    ${corpo}</body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300);
+}
+function tabelaNecessidadeProteina(){
+  const linhas=calcularNecessidadeProteina('em_producao');
+  if(!linhas.length)return `<div class="empty"><b>Nenhum pedido "Em produção" com proteína pendente</b>Assim que um pedido entrar com o status "Em produção", ele aparece aqui.</div>`;
+  const rows=linhas.map(r=>`<tr><td><b>${esc(r.nome)}</b></td>
+    <td class="r num">${qty(Math.round(r.gramas*100)/100,r.unidade||'g')}</td>
+    <td class="r num">${r.marmitas?qty(r.marmitas,'un'):'<span class="subtle">— (só insumo interno)</span>'}</td></tr>`).join('');
+  return `<table><thead><tr><th>Prato / pré-preparo</th><th class="r">Qtd de proteína (total a produzir)</th><th class="r">Unidades vendidas diretas</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
 VIEWS.producao=function(){
   const rows=S.producoes.slice().reverse().map(p=>`<tr>
     <td><b>${esc(nomeItem(p.item_produzido_id))}</b><div class="mono-id">${p.id} · ${dBR(p.data)}</div></td>
@@ -1580,7 +1654,10 @@ VIEWS.producao=function(){
     `<tr><td colspan="5"><div class="empty"><b>Nenhuma produção registrada</b>Produção consome os componentes da composição (insumos, embalagens) e gera entrada do item produzido — com custo fotografado no momento.</div></td></tr>`;
   return header('Produção','var(--m-producao)','Produção realizada → baixa insumos e gera itens produzidos.',
     `<button class="btn primary" onclick="modalProducao()">+ Registrar produção</button>`)+
-  `<div class="card"><table><thead><tr><th>Item produzido</th><th class="r">Qtd</th><th class="r">Custo unit.</th><th class="r">Custo total</th><th>Obs.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  `<div class="card section-gap"><div class="card-h"><h3>Proteína a produzir — pedidos "Em produção"</h3>
+      <button class="btn sm" onclick="imprimirNecessidadeProteina()">🖨 Imprimir</button></div>
+    <div class="card-b" style="padding-top:0">${tabelaNecessidadeProteina()}</div></div>
+  <div class="card"><table><thead><tr><th>Item produzido</th><th class="r">Qtd</th><th class="r">Custo unit.</th><th class="r">Custo total</th><th>Obs.</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 function modalProducao(preId,preQtd){
   const produziveis=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'produzivel')&&componentesDe(i.id).length);

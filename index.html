@@ -941,18 +941,23 @@ function modalItem(id){
   setTimeout(()=>$('#it-nome').focus(),50);
 }
 // Reduz o tamanho da imagem antes de enviar pro Storage — diminui muito o consumo de banda
-// (egress) do Supabase, já que fotos direto do celular costumam vir enormes (3-5MB) sem
-// necessidade nenhuma pra exibir num cardápio na tela. Redimensiona pro máximo de largura/altura
-// informado. Fotos comuns (JPEG) viram JPEG comprimido; imagens com transparência (PNG/WebP —
-// logos, ícones) continuam no formato original, senão a transparência vira fundo preto sólido.
-// Se por algum motivo a compressão falhar, usa o arquivo original (nunca trava o envio da foto).
+// (egress) do Supabase, que cobra cada vez que alguém abre o site e baixa a foto.
+// Regra (out/2026, depois de estourar a cota do plano grátis): olha os pixels de verdade, não a
+// extensão do arquivo. Foto SEM transparência (prato, mesmo que venha em .png) vira JPEG
+// comprimido — antes um PNG de foto ficava com ~1,5MB, em JPEG fica ~80KB. Só imagem COM
+// transparência real (logo, ícone) continua transparente: em WebP (bem mais leve que PNG) e, se
+// o navegador não souber gerar WebP, em PNG. Se a compressão falhar, usa o original.
+function canvasTemTransparencia(ctx,w,h){
+  try{
+    const px=ctx.getImageData(0,0,w,h).data;
+    for(let i=3;i<px.length;i+=4){ if(px[i]<250)return true; }
+    return false;
+  }catch(e){ return true; } // na dúvida, preserva transparência
+}
 function comprimirImagem(file,maxDim,qualidade){
-  maxDim=maxDim||1000; qualidade=qualidade||0.78;
+  maxDim=maxDim||800; qualidade=qualidade||0.8;
   return new Promise((resolve)=>{
     if(!file||!file.type||!file.type.startsWith('image/')||file.type==='image/gif'){ resolve(file); return; }
-    const manterTransparencia=file.type==='image/png'||file.type==='image/webp';
-    const tipoSaida=manterTransparencia?file.type:'image/jpeg';
-    const extSaida=manterTransparencia?(file.type==='image/png'?'png':'webp'):'jpg';
     const img=new Image();
     const url=URL.createObjectURL(file);
     img.onload=()=>{
@@ -964,13 +969,20 @@ function comprimirImagem(file,maxDim,qualidade){
         }
         const canvas=document.createElement('canvas');
         canvas.width=w; canvas.height=h;
-        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img,0,0,w,h);
+        const transparente=(file.type==='image/png'||file.type==='image/webp')&&canvasTemTransparencia(ctx,w,h);
+        const tipoPedido=transparente?'image/webp':'image/jpeg';
         canvas.toBlob((blob)=>{
           URL.revokeObjectURL(url);
           if(!blob){ resolve(file); return; }
+          // navegador sem suporte a WebP devolve PNG — aceita, mas com a extensão certa
+          const tipoReal=blob.type||tipoPedido;
+          const ext=tipoReal==='image/jpeg'?'jpg':tipoReal==='image/webp'?'webp':'png';
           const nomeBase=(file.name||'foto').replace(/\.[a-zA-Z0-9]+$/,'');
-          resolve(new File([blob],nomeBase+'.'+extSaida,{type:tipoSaida}));
-        },tipoSaida,manterTransparencia?undefined:qualidade);
+          const final=new File([blob],nomeBase+'.'+ext,{type:tipoReal});
+          resolve(final.size<file.size?final:file);
+        },tipoPedido,qualidade);
       }catch(e){ URL.revokeObjectURL(url); resolve(file); }
     };
     img.onerror=()=>{ URL.revokeObjectURL(url); resolve(file); };

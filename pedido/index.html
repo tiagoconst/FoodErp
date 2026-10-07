@@ -313,13 +313,13 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 <div class="wrap" id="cardapio"><div class="loading">Carregando cardápio…</div></div>
 
 <div class="site-footer">
-  <img class="foot-logo" src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-Z7EOLN94.png" alt="Sabores da Ana">
+  <img class="foot-logo" src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-Z7EOLN94.png" alt="Sabores da Ana" loading="lazy" decoding="async">
   <div class="foot-social">
     <a href="https://www.instagram.com/marmitariasaboresdaana/" target="_blank" rel="noopener" aria-label="Instagram">
-      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-Z6ZXNHXQ.jpg" alt="Instagram">
+      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-Z6ZXNHXQ.jpg" alt="Instagram" loading="lazy" decoding="async">
     </a>
     <a href="https://wa.me/5542991282970?text=Ol%C3%A1!%20Vim%20pelo%20site%20e%20gostaria%20de%20fazer%20um%20pedido." target="_blank" rel="noopener" aria-label="WhatsApp">
-      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-Z70BD0KW.jpg" alt="WhatsApp">
+      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-Z70BD0KW.jpg" alt="WhatsApp" loading="lazy" decoding="async">
     </a>
   </div>
   <div class="foot-links"><a onclick="abrirPrivacidade()">Política de Privacidade</a><span class="foot-sep">·</span><a onclick="abrirTermos()">Termos de Uso</a></div>
@@ -438,7 +438,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
       <p>Seja bem-vindo(a) a essa nova jornada comigo.<br>Comida feita com propósito, de coração para coração.</p>
     </div>
     <div class="sobre-foto">
-      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-WDP1H9NA.jpg" alt="Ana, fundadora da Sabores da Ana">
+      <img src="https://jaytdbwaoduefrbragsw.supabase.co/storage/v1/object/public/fotos-produtos/dd8275c9-e88f-4633-bfd0-bfa262eaf857/site/IMG-WDP1H9NA.jpg" alt="Ana, fundadora da Sabores da Ana" loading="lazy" decoding="async">
     </div>
   </div>
 </div>
@@ -1061,7 +1061,7 @@ function cardHtml(i){
   const foto=i.foto_url||FOTO_PADRAO;
   const peso=pesoTotalG(i.id);
   return `<div class="card">
-    ${foto?`<img src="${esc(foto)}" alt="">`:`<div class="thumb-fallback" style="background:${bg}">${emojiPrato(i.nome,i.categoria)}</div>`}
+    ${foto?`<img src="${esc(foto)}" alt="" loading="lazy" decoding="async">`:`<div class="thumb-fallback" style="background:${bg}">${emojiPrato(i.nome,i.categoria)}</div>`}
     ${composicaoHtml(i.id)}
     <div class="card-body">
       <div class="card-info">

@@ -438,6 +438,31 @@ const itemById=id=>S.itens.find(i=>i.id===id);
 const nomeItem=id=>{ const i=itemById(id); return i?i.nome:'(item removido)'; };
 const nomeLinha=l=>{ if(l.nome_custom)return l.nome_custom; const i=itemById(l.item_id); return i?i.nome:(l.descricao||'(item não mapeado)'); };
 const temFuncao=(item,f)=>item&&item.funcoes&&item.funcoes.includes(f);
+// Vários itens têm o mesmo nome em estágios diferentes da cadeia MAT→PRE→PRD (ex.: "Carne Moída"
+// existe crua, como matéria-prima comprada — MAT-CARNE_MOIDA —, e já temperada/pronta, como
+// pré-preparo — PRE-CARNE_MOIDA). Num <select> só com o nome, os dois ficam idênticos e dá pra
+// escolher o errado sem perceber (ficha técnica apontando pra matéria-prima crua ao invés do
+// pré-preparo, subestimando o custo real). Esses dois helpers existem pra sempre deixar explícito
+// o tipo e o código do item em qualquer seletor de componente.
+function tipoPorPrefixoId(id){
+  if(!id)return'Item';
+  if(id.startsWith('MAT-'))return'Matéria-prima';
+  if(id.startsWith('PRE-'))return'Pré-preparo';
+  if(id.startsWith('PRD-'))return'Produto';
+  return'Item';
+}
+const rotuloItemComCodigo=i=>`${i.nome} (${i.unidade_base}) · ${i.id}`;
+// Agrupa uma lista de itens em <optgroup> por tipo (Matéria-prima/Pré-preparo/Produto/Item), na
+// ordem MAT→PRE→PRD, cada opção já com o código do item no rótulo — usar em qualquer seletor de
+// componente/ficha técnica em vez de montar os <option> na mão.
+function optgroupsPorTipoItem(lista){
+  const ordem=['Matéria-prima','Pré-preparo','Produto','Item'];
+  const grupos={}; ordem.forEach(t=>grupos[t]=[]);
+  lista.forEach(i=>grupos[tipoPorPrefixoId(i.id)].push(i));
+  return ordem.filter(t=>grupos[t].length).map(t=>
+    `<optgroup label="${t}">${grupos[t].map(i=>`<option value="${i.id}">${esc(rotuloItemComCodigo(i))}</option>`).join('')}</optgroup>`
+  ).join('');
+}
 
 /* ---------- Núcleo de eventos (tudo gira em torno disso) ---------- */
 function registrarEvento(tipo,descricao,ref){
@@ -1384,7 +1409,11 @@ function modalComposicao(paiId,tipo){
   drawCompLines();
 }
 function drawCompLines(){
-  const opts=S.itens.filter(i=>i.ativo!==false).map(i=>`<option value="${i.id}">${esc(i.nome)} (${i.unidade_base})</option>`).join('');
+  // Agrupado por tipo (Matéria-prima/Pré-preparo/Produto) e com o código no rótulo — ver
+  // optgroupsPorTipoItem, criado depois de um caso real de ficha técnica apontando pra matéria-prima
+  // crua (MAT-) quando devia apontar pro pré-preparo (PRE-) com o mesmo nome.
+  const itensOrdenados=S.itens.filter(i=>i.ativo!==false).slice().sort((a,b)=>a.nome.localeCompare(b.nome,'pt')||a.id.localeCompare(b.id));
+  const opts=optgroupsPorTipoItem(itensOrdenados);
   $('#cp-lines').innerHTML=compLinhas.map((l,k)=>`<div class="line" style="grid-template-columns:1fr 110px 100px 34px">
     <select onchange="compLinhas[${k}].item=this.value"><option value="">Componente…</option>${opts}</select>
     <input type="number" step="any" min="0" placeholder="Qtd" value="${l.qtd}" oninput="compLinhas[${k}].qtd=this.value">
@@ -2389,7 +2418,13 @@ function cmProdutoBaseAlterado(id){
 function cmAddComponente(){ construtorComponentes.push({item_id:'',quantidade:100}); cmDesenharComponentes(); }
 function cmDesenharComponentes(){
   const disp=componentesDisponiveis();
-  const opts=disp.map(i=>`<option value="${i.id}">${esc(i.nome)} (${money(custoItem(i.id)||0)}/${i.unidade_base})</option>`).join('');
+  // Mesmo cuidado de drawCompLines(): agrupa por tipo e mostra o código, pra não confundir itens
+  // de mesmo nome (ex.: "Carne Moída" matéria-prima crua vs. já pronta como pré-preparo).
+  const grupos={}; ['Matéria-prima','Pré-preparo','Produto','Item'].forEach(t=>grupos[t]=[]);
+  disp.forEach(i=>grupos[tipoPorPrefixoId(i.id)].push(i));
+  const opts=['Matéria-prima','Pré-preparo','Produto','Item'].filter(t=>grupos[t].length).map(t=>
+    `<optgroup label="${t}">${grupos[t].map(i=>`<option value="${i.id}">${esc(i.nome)} (${money(custoItem(i.id)||0)}/${i.unidade_base}) · ${i.id}</option>`).join('')}</optgroup>`
+  ).join('');
   $('#cm-componentes').innerHTML=construtorComponentes.map((c,k)=>`<div class="cm-line">
     <select onchange="construtorComponentes[${k}].item_id=this.value;cmRecalcular()"><option value="">Escolha…</option>${opts}</select>
     <input type="number" min="0" step="any" placeholder="qtd" value="${c.quantidade}" oninput="construtorComponentes[${k}].quantidade=parseFloat(this.value)||0;cmRecalcular()">

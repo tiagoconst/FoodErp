@@ -1610,16 +1610,16 @@ function salvarAjuste(itemId){
 // Por isso aqui tem duas contagens separadas por item de proteína (categoria "Proteína" no cadastro):
 //  - gramas: soma explodindo recursivamente pela ficha técnica inteira (igual o motor de Planejamento/MRP) —
 //    isso garante que o total bate com o que o Planejamento mostra, mesmo sem exibir os níveis intermediários.
-//  - marmitas ("unidades a produzir"): quantas vezes a receita desse pré-preparo precisa RODAR pra cobrir
-//    a demanda em gramas — gramas_total / rendimento (rendimento = quanto 1 execução da receita produz,
-//    já existente em rendimentoDe()). Bug corrigido em out/2026: a versão anterior só contava a marmita
-//    quando esse item era a proteína DIRETA do prato vendido (ex.: "Peito de Frango Grelhado" vendido como
-//    "Peito de Frango"/"Frango Grelhado"), e ficava de fora toda vez que o mesmo preparo é usado por BAIXO
-//    de outro pré-preparo (ex.: "Frango Xadrez"/"ao Curry"/"ao Molho Caseiro"/"ao Limão Siciliano"/
-//    "Estrogonoff Frango" são todos feitos a partir de "Peito de Frango Grelhado" já pronto) — um pedido
-//    com 45 marmitas de frango (todas passando por Grelhado) mostrava só "10 un" porque só 2 dos 9 pratos
-//    tinham Grelhado como filho direto. gramas/rendimento resolve isso igual pros dois casos, sem precisar
-//    saber se o consumo veio direto da venda ou de dentro de outra receita.
+//  - marmitas ("unidades a produzir"): quantas marmitas foram vendidas EXATAMENTE com esse nome como proteína
+//    direta do prato (ex.: "Peito de Frango" + "Frango Grelhado" são dois produtos diferentes no cardápio,
+//    mas os dois usam a mesma proteína-base "Peito de Frango Grelhado" — por isso a linha soma as marmitas
+//    dos dois). NÃO conta marmitas de outro prato que usa esse preparo só como ingrediente interno da
+//    própria receita (ex.: "Frango Xadrez"/"ao Curry"/"Estrogonoff Frango" também consomem "Peito de Frango
+//    Grelhado" por dentro, e isso já está refletido nos gramas — mas não vira "unidade" aqui, senão a conta
+//    de unidades fica sem relação nenhuma com marmita de verdade vendida, só uma conta de lote de receita
+//    (tentativa anterior, revertida: "gramas ÷ rendimento" virava números como 36un/8un que não
+//    correspondem a nenhuma contagem real da cozinha). Por isso os gramas e as unidades nem sempre têm uma
+//    relação direta entre si quando tem receita aninhada — é esperado, não é bug.
 // Pedido explícito do usuário: essa tela é só "prato | qtd proteína | qtd a produzir", pensada pra bater o
 // olho rápido na cozinha — sem entrar em matéria-prima crua (MAT-) nem detalhar a cascata de pré-preparo
 // dentro de pré-preparo (isso já existe na tela Planejamento). Por isso o resultado final só mostra os
@@ -1652,20 +1652,18 @@ function calcularNecessidadeProteina(statusFiltro){
     (p.itens||[]).forEach(l=>{
       const qtdMarmitas=l.quantidade||0; if(qtdMarmitas<=0)return;
       if(l.item_id==='PRD-SOB-MEDIDA'){
-        (l.componentes||[]).forEach(c=>explodirProteina(c.item_id,(c.quantidade||0)*qtdMarmitas,acc,new Set()));
+        (l.componentes||[]).forEach(c=>{
+          explodirProteina(c.item_id,(c.quantidade||0)*qtdMarmitas,acc,new Set());
+          if(ehProteina(c.item_id))acc[c.item_id].marmitas+=qtdMarmitas;
+        });
       } else {
         explodirProteina(l.item_id,qtdMarmitas,acc,new Set());
+        componentesDe(l.item_id).forEach(c=>{ if(ehProteina(c.item_filho_id))acc[c.item_filho_id].marmitas+=qtdMarmitas; });
       }
     });
   });
   // só prato/pré-preparo pronto (PRE-) — matéria-prima crua (MAT-) fica de fora, isso é assunto de Compras/Planejamento
-  return Object.entries(acc).filter(([id,r])=>id.startsWith('PRE-')&&r.gramas>0).map(([id,r])=>{
-    const rend=rendimentoDe(id)||1;
-    // -1e-9 evita que uma imprecisão de ponto flutuante (ex.: 35,00000000001 por causa de divisões
-    // em cadeia) arredonde pra cima sem necessidade — sem isso, 35 execuções exatas da receita
-    // podiam virar "36 un" na tela à toa.
-    return {...r,marmitas:Math.ceil((r.gramas/rend)-1e-9)};
-  }).sort((a,b)=>b.gramas-a.gramas);
+  return Object.entries(acc).filter(([id,r])=>id.startsWith('PRE-')&&r.gramas>0).map(([id,r])=>r).sort((a,b)=>b.gramas-a.gramas);
 }
 function imprimirNecessidadeProteina(){
   const linhas=calcularNecessidadeProteina('em_producao');

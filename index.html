@@ -1687,6 +1687,61 @@ function tabelaNecessidadeProteina(){
     <td class="r num">${r.marmitas?qty(r.marmitas,'un'):'—'}</td></tr>`).join('');
   return `<table><thead><tr><th>Prato</th><th class="r">Qtd proteína</th><th class="r">Qtd a produzir</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
+// Pratos em produção — pedido explícito do usuário depois que a tabela de cima (agregada pela
+// proteína-base compartilhada) não bateu com o que ele queria enxergar. Aqui NÃO agrupa por
+// pré-preparo nenhum: é uma linha por PRATO vendido (o nome que aparece no pedido, ex. "Peito de
+// Frango" e "Frango Grelhado" ficam em linhas separadas mesmo os dois usando a mesma proteína-base
+// por baixo), com a proteína DIRETA daquele prato (1 nível só, sem recursão pra dentro da receita do
+// pré-preparo) × quantidade vendida. Soma entre TODOS os pedidos "Em produção", não só um pedido.
+function calcularPratosEmProducao(statusFiltro){
+  const alvo=statusFiltro||'em_producao';
+  const acc={}; // chave -> {nome, gramas, marmitas}
+  (S.pedidos||[]).filter(p=>p.status===alvo).forEach(p=>{
+    (p.itens||[]).forEach(l=>{
+      const qtdMarmitas=l.quantidade||0; if(qtdMarmitas<=0)return;
+      if(l.item_id==='PRD-SOB-MEDIDA'){
+        (l.componentes||[]).forEach(c=>{
+          if(!ehProteina(c.item_id))return;
+          const it=itemById(c.item_id); if(!it)return;
+          const chave=c.item_id;
+          if(!acc[chave])acc[chave]={nome:it.nome,gramas:0,marmitas:0};
+          acc[chave].gramas+=(c.quantidade||0)*qtdMarmitas;
+          acc[chave].marmitas+=qtdMarmitas;
+        });
+      } else {
+        const comps=componentesDe(l.item_id).filter(c=>ehProteina(c.item_filho_id));
+        if(!comps.length)return;
+        const chave=l.item_id;
+        if(!acc[chave])acc[chave]={nome:nomeDaLinhaPedido(l),gramas:0,marmitas:0};
+        comps.forEach(c=>{ acc[chave].gramas+=(c.quantidade||0)*qtdMarmitas*(1+((c.perda_percentual||0)/100)); });
+        acc[chave].marmitas+=qtdMarmitas;
+      }
+    });
+  });
+  return Object.values(acc).filter(r=>r.gramas>0).sort((a,b)=>b.gramas-a.gramas);
+}
+function tabelaPratosEmProducao(){
+  const linhas=calcularPratosEmProducao('em_producao');
+  if(!linhas.length)return `<div class="empty"><b>Nenhum pedido "Em produção" com proteína pendente</b>Assim que um pedido entrar com o status "Em produção", ele aparece aqui.</div>`;
+  const rows=linhas.map(r=>`<tr><td><b>${esc(r.nome)}</b></td>
+    <td class="r num">${qty(Math.round(r.gramas*100)/100,'g')}</td>
+    <td class="r num">${qty(r.marmitas,'un')}</td></tr>`).join('');
+  return `<table><thead><tr><th>Prato</th><th class="r">Gramas de proteína</th><th class="r">Quantidade</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function imprimirPratosEmProducao(){
+  const linhas=calcularPratosEmProducao('em_producao');
+  if(!linhas.length)return toast('Nenhum pedido "Em produção" com proteína pendente.',true);
+  const emp=getEmpresaInfo();const idn=getIdent();const nomeEmp=emp.nome_loja||idn.nome||'Food ERP';
+  const agora=new Date();
+  const corpo=linhas.map(r=>`<div class="item"><div class="item-txt">${esc(r.nome)} <span class="small">(${qty(r.marmitas,'un')})</span></div><b class="num">${qty(Math.round(r.gramas*100)/100,'g')}</b></div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Pratos em produção</title><style>
+    @page{margin:3mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto}
+    h1{font-size:12px;margin:1mm 0}.center{text-align:center}.small{font-size:9px;color:#333}
+    .item{display:flex;justify-content:space-between;gap:6px;padding:1.2mm 0;border-bottom:1px dashed #ccc}.num{white-space:nowrap}</style></head>
+    <body><div class="center"><h1>${esc(nomeEmp)}</h1><div class="small">Pratos em produção — pedidos "Em produção"<br>${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div></div>
+    ${corpo}</body></html>`;
+  const w=window.open('','_blank');w.document.write(html);w.document.close();w.focus();setTimeout(()=>w.print(),300);
+}
 VIEWS.producao=function(){
   const rows=S.producoes.slice().reverse().map(p=>`<tr>
     <td><b>${esc(nomeItem(p.item_produzido_id))}</b><div class="mono-id">${p.id} · ${dBR(p.data)}</div></td>
@@ -1697,7 +1752,10 @@ VIEWS.producao=function(){
     `<tr><td colspan="5"><div class="empty"><b>Nenhuma produção registrada</b>Produção consome os componentes da composição (insumos, embalagens) e gera entrada do item produzido — com custo fotografado no momento.</div></td></tr>`;
   return header('Produção','var(--m-producao)','Produção realizada → baixa insumos e gera itens produzidos.',
     `<button class="btn primary" onclick="modalProducao()">+ Registrar produção</button>`)+
-  `<div class="card section-gap"><div class="card-h"><h3>Proteína a produzir — pedidos "Em produção"</h3>
+  `<div class="card section-gap"><div class="card-h"><h3>Pratos em produção — proteína por prato</h3>
+      <button class="btn sm" onclick="imprimirPratosEmProducao()">🖨 Imprimir</button></div>
+    <div class="card-b" style="padding-top:0">${tabelaPratosEmProducao()}</div></div>
+  <div class="card section-gap"><div class="card-h"><h3>Proteína a produzir (agregado por preparo-base) — pedidos "Em produção"</h3>
       <button class="btn sm" onclick="imprimirNecessidadeProteina()">🖨 Imprimir</button></div>
     <div class="card-b" style="padding-top:0">${tabelaNecessidadeProteina()}</div></div>
   <div class="card"><table><thead><tr><th>Item produzido</th><th class="r">Qtd</th><th class="r">Custo unit.</th><th class="r">Custo total</th><th>Obs.</th></tr></thead><tbody>${rows}</tbody></table></div>`;

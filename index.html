@@ -5610,7 +5610,7 @@ function devMontarPotes(){
         const extras=DEV_ESTACOES.flatMap(tp=>DEV_BASE.includes(tp)?[]:cs.filter(c=>c.tipo===tp&&!c.tirado));
         potes.push({pedido:p,nomeCli,pedidoLabel,prato,sm,refeicao:DEV_REFEICAO[l.refeicao]||'',zona,comps:cs,tirados,base,assin,extras,
           assinExtras:extras.map(c=>c.item_id+':'+Math.round(c.g)).join('|'),
-          grupoKey:devChaveGrupo(zona,cs)});
+          grupoKey:devChaveGrupo(zona,cs),combo:devCombo(cs)});
       }
     });
     Object.keys(rem).forEach(k=>{ if(!remUsadas.has(k))alertas.push(`Pedido ${pedidoLabel} (${nomeCli}): remoção na observação pra um prato que não está no pedido — confira.`); });
@@ -5621,6 +5621,8 @@ function devMontarPotes(){
   const tem=(pt,tp)=>pt.comps.some(c=>c.tipo===tp&&!c.tirado);
   const primeiro=(pt,tp)=>{ const c=pt.comps.find(c=>c.tipo===tp&&!c.tirado); return c?nomeItem(c.item_id):'~'; };
   potes.sort((a,b)=>zIdx[a.zona]-zIdx[b.zona]||(a.sm-b.sm)
+    ||(a.sm?(devComboRank(a.combo)-devComboRank(b.combo)||a.combo.localeCompare(b.combo)
+        ||a.assin.localeCompare(b.assin,'pt',{numeric:true})||a.nomeCli.localeCompare(b.nomeCli,'pt')):0)
     ||(a.sm?0:(tamGrupo[kG(b)]-tamGrupo[kG(a)]||a.grupoKey.localeCompare(b.grupoKey)
       ||(tem(b,'feijao')-tem(a,'feijao'))          // com feijão primeiro (sem feijão no fim)
       ||(tem(a,'pure')-tem(b,'pure'))              // purê no fim do grupo
@@ -5652,6 +5654,14 @@ function devBlocos(potes){
 function devTituloBloco(b){ return `${DEV_ZONA_NOME[b.zona].toUpperCase()} — ${b.sm?'SOB MEDIDA':'PADRÃO'} (${b.potes.length})`; }
 function devTiradosTxt(pt){ return pt.tirados.map(t=>'sem '+DEV_ESTACAO_NOME[t]).join(', '); }
 
+// Combinação de base de um pote (usada pra separar o sob medida): "Arroz + Feijão", "Só Arroz", "Só Purê"…
+const DEV_COMBO_ORDEM=[['arroz','Arroz'],['arroz_integral','Integral'],['feijao','Feijão'],['pure','Purê'],['massa','Massa']];
+function devCombo(cs){
+  const tem=DEV_COMBO_ORDEM.filter(([tp])=>cs.some(c=>c.tipo===tp&&!c.tirado)).map(([,n])=>n);
+  if(!tem.length)return 'Sem base';
+  return tem.length===1?'Só '+tem[0]:tem.join(' + ');
+}
+function devComboRank(c){ const r={'Arroz + Feijão':0,'Só Arroz':1,'Integral + Feijão':2,'Só Integral':3,'Só Purê':4}; return c in r?r[c]:5; }
 // Base principal de cada zona: é a MEDIDA dela que define o grupo (Grupo A = arroz 100g, B = arroz 150g…).
 const DEV_BASE_ZONA={arroz:'arroz',integral:'arroz_integral',pure:'pure',massa:'massa'};
 function devChaveGrupo(zona,cs){
@@ -5722,7 +5732,7 @@ VIEWS.desenvolvimento=function(){
           ${g.tirados.length?`<div style="margin-top:6px">${g.tirados.map(x=>`<span class="tag" style="background:#B3372C;color:#fff;margin:2px">${g.letra}·${x.num} ${esc(x.txt.toUpperCase())}</span>`).join('')}</div>`:''}
         </div>`).join('');
     } else {
-      corpo=b.potes.map(pt=>`<div style="border:1px dashed var(--line,#ddd);border-radius:8px;padding:8px 10px;margin-bottom:6px">
+      corpo=b.potes.map((pt,i)=>(i===0||b.potes[i-1].combo!==pt.combo?`<div style="background:var(--soft,#f1efe8);border-radius:8px;padding:6px 10px;margin:8px 0 6px"><b>${esc(pt.combo)}</b> · ${b.potes.filter(x=>x.combo===pt.combo).length} pote(s)</div>`:'')+`<div style="border:1px dashed var(--line,#ddd);border-radius:8px;padding:8px 10px;margin-bottom:6px">
           <b>${pt.codigo}</b> · ${esc(pt.nomeCli)} <span class="subtle">${esc(pt.pedidoLabel)}${pt.refeicao?' · '+pt.refeicao:''} · ${esc(pt.prato)}</span><br>
           ${DEV_ESTACOES.map(t=>pt.comps.filter(c=>c.tipo===t).map(c=>`${esc(nomeItem(c.item_id))} <b>${devG(c.g)}</b>`).join(' · ')).filter(Boolean).join(' · ')}
         </div>`).join('');
@@ -5784,7 +5794,10 @@ function devImprimirMapa(){
         g.tirados.forEach(x=>{ h+=`<div class="pular">${g.letra}·${x.num} ${esc(x.prato)}: ${esc(x.txt.toUpperCase())}</div>`; });
       });
     } else {
+      let comboAtual=null;
       b.potes.forEach(pt=>{
+        if(pt.combo!==comboAtual){ comboAtual=pt.combo; const n=b.potes.filter(x=>x.combo===pt.combo).length;
+          h+=`<div class="grp">${esc(pt.combo.toUpperCase())} · ${n} ${n>1?'POTES':'POTE'}</div>`; }
         h+=`<div class="sm"><b>${pt.codigo}</b> · ${esc(pt.nomeCli)} ${esc(pt.pedidoLabel)}${pt.refeicao?' · '+pt.refeicao:''}`;
         DEV_ESTACOES.forEach(t=>pt.comps.filter(c=>c.tipo===t).forEach(c=>{
           h+=`<div class="lin"><span>${esc(nomeItem(c.item_id))}</span><b>${devG(c.g)}</b></div>`; }));

@@ -5520,6 +5520,7 @@ const DEV_ZONAS=[
 const DEV_ZONA_NOME=Object.fromEntries(DEV_ZONAS);
 // ordem em que você passa com cada componente na mesa (proteína sempre por último, na balança)
 const DEV_ESTACOES=['feijao','arroz','arroz_integral','massa','pure','legumes','molho','outro','proteina'];
+const DEV_BASE=['feijao','arroz','arroz_integral','pure','massa']; // vai igual em todos os potes do grupo
 const DEV_ESTACAO_NOME={arroz:'Arroz',arroz_integral:'Arroz integral',feijao:'Feijão',massa:'Massa',pure:'Purê',
   legumes:'Legumes',molho:'Molho',outro:'Outros',proteina:'Proteína'};
 const DEV_REFEICAO={almoco:'ALMOÇO',janta:'JANTA'};
@@ -5604,15 +5605,30 @@ function devMontarPotes(){
         if(!sm&&zona==='pure'&&!temBase(['pure']))zona='sembase';
         const tirados=[...new Set(cs.filter(c=>c.tirado).map(c=>c.tipo))]
           .map(t=>t==='arroz_integral'?'arroz':t).filter((t,i,a)=>a.indexOf(t)===i);
-        potes.push({pedido:p,nomeCli,pedidoLabel,prato,sm,refeicao:DEV_REFEICAO[l.refeicao]||'',zona,comps:cs,tirados});
+        const base=DEV_ESTACOES.flatMap(tp=>DEV_BASE.includes(tp)?cs.filter(c=>c.tipo===tp&&!c.tirado):[]);
+        const assin=base.map(c=>c.item_id+':'+Math.round(c.g)).join('|');
+        const extras=DEV_ESTACOES.flatMap(tp=>DEV_BASE.includes(tp)?[]:cs.filter(c=>c.tipo===tp&&!c.tirado));
+        potes.push({pedido:p,nomeCli,pedidoLabel,prato,sm,refeicao:DEV_REFEICAO[l.refeicao]||'',zona,comps:cs,tirados,base,assin,extras,
+          assinExtras:extras.map(c=>c.item_id+':'+Math.round(c.g)).join('|')});
       }
     });
     Object.keys(rem).forEach(k=>{ if(!remUsadas.has(k))alertas.push(`Pedido ${pedidoLabel} (${nomeCli}): remoção na observação pra um prato que não está no pedido — confira.`); });
   });
   const zIdx=Object.fromEntries(DEV_ZONAS.map(([k],i)=>[k,i]));
-  potes.sort((a,b)=>zIdx[a.zona]-zIdx[b.zona]||(a.sm-b.sm)||a.prato.localeCompare(b.prato,'pt')
-    ||a.tirados.length-b.tirados.length||a.tirados.join().localeCompare(b.tirados.join())||(a.pedido.numero||0)-(b.pedido.numero||0));
-  let sm=0; potes.forEach(pt=>{ if(pt.sm)pt.codigo='SM-'+(++sm); });
+  const tamGrupo={}; potes.forEach(pt=>{ const k=pt.zona+'#'+pt.sm+'#'+pt.assin; tamGrupo[k]=(tamGrupo[k]||0)+1; });
+  const kG=pt=>pt.zona+'#'+pt.sm+'#'+pt.assin;
+  potes.sort((a,b)=>zIdx[a.zona]-zIdx[b.zona]||(a.sm-b.sm)
+    ||(a.sm?0:(tamGrupo[kG(b)]-tamGrupo[kG(a)]||a.assin.localeCompare(b.assin)))
+    ||a.prato.localeCompare(b.prato,'pt')||a.assinExtras.localeCompare(b.assinExtras)
+    ||a.tirados.join().localeCompare(b.tirados.join())||(a.pedido.numero||0)-(b.pedido.numero||0));
+  // numeração: SM-n no sob medida; no padrão, nº do pote dentro da zona + letra do grupo de base
+  let sm=0, zonaAtual=null, num=0, letra=0, assinAtual=null;
+  potes.forEach(pt=>{
+    if(pt.sm){ pt.codigo='SM-'+(++sm); return; }
+    if(pt.zona!==zonaAtual){ zonaAtual=pt.zona; num=0; letra=0; assinAtual=null; }
+    if(pt.assin!==assinAtual){ assinAtual=pt.assin; letra++; }
+    pt.num=++num; pt.grupo=String.fromCharCode(64+letra); pt.codigo=pt.grupo+'·'+pt.num;
+  });
   return {potes,alertas,nPedidos:pedidos.length};
 }
 // Agrupa em blocos: zona + padrão/sob medida, na ordem do mapa
@@ -5628,30 +5644,23 @@ function devBlocos(potes){
 function devTituloBloco(b){ return `${DEV_ZONA_NOME[b.zona].toUpperCase()} — ${b.sm?'SOB MEDIDA':'PADRÃO'} (${b.potes.length})`; }
 function devTiradosTxt(pt){ return pt.tirados.map(t=>'sem '+DEV_ESTACAO_NOME[t]).join(', '); }
 
-// Conteúdo de um bloco PADRÃO: ordem dos potes + cada estação com medida × quantidade + quem pular
-function devLinhasPadrao(b){
-  const ordem=[];
+// Bloco PADRÃO dividido em grupos de mesma base (A, B, C...): a base vai igual em todos os potes do
+// grupo; depois, por faixa de potes, o que muda (legumes, molho, proteína).
+function devGruposPadrao(b){
+  const grupos=[];
   b.potes.forEach(pt=>{
-    const rot=pt.prato+(pt.tirados.length?' ('+devTiradosTxt(pt)+')':'');
-    const last=ordem[ordem.length-1];
-    if(last&&last.rot===rot)last.n++; else ordem.push({rot,n:1});
+    let g=grupos[grupos.length-1];
+    if(!g||g.letra!==pt.grupo){ g={letra:pt.grupo,de:pt.num,ate:pt.num,base:pt.base,runs:[]}; grupos.push(g); }
+    g.ate=pt.num;
+    const chave=pt.prato+'#'+pt.assinExtras+'#'+pt.tirados.join();
+    const r=g.runs[g.runs.length-1];
+    if(r&&r.chave===chave)r.ate=pt.num;
+    else g.runs.push({chave,de:pt.num,ate:pt.num,prato:pt.prato,tirados:pt.tirados,extras:pt.extras});
   });
-  const estacoes=[];
-  DEV_ESTACOES.forEach(tipo=>{
-    const porItem={}; // item_id -> {nome, porG:{g:n}, pular:[...]}
-    b.potes.forEach(pt=>pt.comps.filter(c=>c.tipo===tipo).forEach(c=>{
-      const r=porItem[c.item_id]||(porItem[c.item_id]={nome:nomeItem(c.item_id),porG:{},pular:{},total:0});
-      if(c.tirado){ const q=`${pt.prato} (${pt.nomeCli})`; r.pular[q]=(r.pular[q]||0)+1; return; }
-      const g=Math.round(c.g); r.porG[g]=(r.porG[g]||0)+1; r.total+=c.g;
-    }));
-    const itens=Object.values(porItem).filter(r=>Object.keys(r.porG).length)
-      .map(r=>({...r,nPular:Object.values(r.pular).reduce((a,b)=>a+b,0),
-        pularTxt:Object.entries(r.pular).map(([q,n])=>n>1?q+' ×'+n:q).join(', ')}));
-    if(itens.length)estacoes.push({tipo,itens});
-  });
-  return {ordem,estacoes};
+  return grupos;
 }
-
+function devFaixa(de,ate){ return de===ate?String(de):de+'–'+ate; }
+function devBaseTxt(g){ return g.base.length?g.base.map(c=>`${nomeItem(c.item_id)} ${devG(c.g)}`).join(' + '):'sem base'; }
 /* ---------- Tela ---------- */
 VIEWS.desenvolvimento=function(){
   const {potes,alertas,nPedidos}=devMontarPotes();
@@ -5669,13 +5678,12 @@ VIEWS.desenvolvimento=function(){
   const blocosHtml=blocos.map(b=>{
     let corpo;
     if(!b.sm){
-      const {ordem,estacoes}=devLinhasPadrao(b);
-      corpo=`<p class="subtle" style="margin-bottom:8px"><b>Ordem dos potes (= ordem das etiquetas):</b> ${ordem.map(o=>esc(o.rot)+' ×'+o.n).join(' · ')}</p>
-        <table><thead><tr><th>Estação</th><th>Item</th><th>Medida × potes</th><th>Pular</th></tr></thead><tbody>
-        ${estacoes.map(e=>e.itens.map((r,i)=>`<tr><td>${i?'':'<b>'+esc(DEV_ESTACAO_NOME[e.tipo])+'</b>'}</td><td>${esc(r.nome)}</td>
-          <td class="num">${Object.entries(r.porG).map(([g,n])=>`<b>${g}g × ${n}</b>`).join(' · ')||'—'}</td>
-          <td>${r.nPular?`<span class="tag" style="background:#B3372C;color:#fff">PULAR ${r.nPular}</span> <span class="subtle">${esc(r.pularTxt)}</span>`:''}</td></tr>`).join('')).join('')}
-        </tbody></table>`;
+      corpo=devGruposPadrao(b).map(g=>`<div style="margin-bottom:12px">
+          <div style="background:var(--soft,#f1efe8);border-radius:8px;padding:8px 10px;margin-bottom:6px"><b>Grupo ${g.letra} · ${g.de===g.ate?'pote':'potes'} ${devFaixa(g.de,g.ate)}</b> (${g.ate-g.de+1}) — base em todos: <b>${esc(devBaseTxt(g))}</b></div>
+          <table><tbody>${g.runs.map(r=>`<tr><td class="num" style="width:70px"><b>${devFaixa(r.de,r.ate)}</b></td>
+            <td><b>${esc(r.prato)}</b>${r.tirados.length?` <span class="tag" style="background:#B3372C;color:#fff">${esc(devTiradosTxt(r).toUpperCase())}</span>`:''}</td>
+            <td class="subtle">${r.extras.map(c=>`${esc(nomeItem(c.item_id))} <b>${devG(c.g)}</b>`).join(' · ')}</td></tr>`).join('')}</tbody></table>
+        </div>`).join('');
     } else {
       corpo=b.potes.map(pt=>`<div style="border:1px dashed var(--line,#ddd);border-radius:8px;padding:8px 10px;margin-bottom:6px">
           <b>${pt.codigo}</b> · ${esc(pt.nomeCli)} <span class="subtle">${esc(pt.pedidoLabel)}${pt.refeicao?' · '+pt.refeicao:''} · ${esc(pt.prato)}</span><br>
@@ -5703,6 +5711,11 @@ function devJanelaImpressao(titulo,corpo,cssExtra){
     .zona{background:#000;color:#fff;font-weight:800;font-size:11px;padding:1.2mm 1.5mm;margin:2mm 0 1mm;text-align:center}
     .est{font-weight:800;font-size:10px;margin-top:1.8mm;border-bottom:1px solid #000}
     .lin{display:flex;justify-content:space-between;gap:4px;padding:.6mm 0}.lin span{min-width:0}.lin b{white-space:nowrap}.lin.med{padding:.2mm 0 .2mm 4mm}
+    .grp{font-weight:800;font-size:10.5px;border:1.5px solid #000;padding:.8mm 1.2mm;margin:2.2mm 0 .8mm;text-align:center}
+    .base{border-bottom:1.5px solid #000;padding-bottom:.8mm;margin-bottom:.8mm}.base .lin{font-weight:700}
+    .run{margin-top:1.4mm;font-size:10.5px}.run b{font-size:11.5px;margin-right:1mm}
+    .semtag{background:#000;color:#fff;padding:0 1mm;font-weight:800;font-size:8.5px}
+    .lin.ext{padding:.2mm 0 .2mm 4mm;font-size:9.5px}
     .pular{border:1.5px solid #000;padding:.8mm 1mm;margin:.6mm 0;font-weight:700;font-size:9.5px}
     .ordem{font-size:9px;margin:1mm 0}.sm{border:1px dashed #000;padding:1mm 1.2mm;margin:1.2mm 0}
     .corte{text-align:center;font-size:9px;color:#444;margin:2mm 0;white-space:nowrap;overflow:hidden}
@@ -5725,15 +5738,12 @@ function devImprimirMapa(){
   const partes=blocos.map(b=>{
     let h=`<div class="zona">${esc(devTituloBloco(b))}</div>`;
     if(!b.sm){
-      const {ordem,estacoes}=devLinhasPadrao(b);
-      h+=`<div class="ordem"><b>Ordem:</b> ${ordem.map(o=>esc(o.rot)+' ×'+o.n).join(' · ')}</div>`;
-      estacoes.forEach(e=>{
-        h+=`<div class="est">${esc(DEV_ESTACAO_NOME[e.tipo].toUpperCase())}</div>`;
-        e.itens.forEach(r=>{
-          const med=Object.entries(r.porG).map(([g,n])=>`${g}g × ${n}`);
-          if(med.length<=1)h+=`<div class="lin"><span>${esc(r.nome)}</span><b>${med[0]||'—'}</b></div>`;
-          else h+=`<div class="lin"><span>${esc(r.nome)}</span></div>`+med.map(m=>`<div class="lin med"><span></span><b>${m}</b></div>`).join('');
-          if(r.nPular)h+=`<div class="pular">PULAR ${r.nPular}: ${esc(r.pularTxt)}</div>`;
+      devGruposPadrao(b).forEach(g=>{
+        h+=`<div class="grp">GRUPO ${g.letra} · ${g.de===g.ate?'POTE':'POTES'} ${devFaixa(g.de,g.ate)} (${g.ate-g.de+1})</div>`;
+        h+=`<div class="base">${g.base.length?g.base.map(c=>`<div class="lin"><span>${esc(nomeItem(c.item_id))}</span><b>${devG(c.g)}</b></div>`).join(''):'<div class="lin"><span>sem base</span></div>'}<div class="small">↑ em todos os potes do grupo</div></div>`;
+        g.runs.forEach(r=>{
+          h+=`<div class="run"><b>${devFaixa(r.de,r.ate)}</b> ${esc(r.prato)}${r.tirados.length?` <span class="semtag">${esc(devTiradosTxt(r).toUpperCase())}</span>`:''}</div>`;
+          r.extras.forEach(c=>{ h+=`<div class="lin ext"><span>${esc(nomeItem(c.item_id))}</span><b>${devG(c.g)}</b></div>`; });
         });
       });
     } else {
@@ -5779,7 +5789,7 @@ function devImprimirEtiquetas(){
       html+=corte+`<div class="et sep"><div class="sep-t">▼ ${esc(DEV_ZONA_NOME[b.zona].toUpperCase())}</div><div class="sep-s">${b.sm?'SOB MEDIDA':'PADRÃO'} · ${b.potes.length} etiqueta(s)</div></div>`;
       b.potes.forEach(pt=>{
         const tarja=pt.sm?`<div class="et-sm">${pt.codigo}${pt.refeicao?' · '+pt.refeicao:''}</div>`
-          :(pt.tirados.length?`<div class="et-sem">${esc(devTiradosTxt(pt).toUpperCase())}</div>`:`<div class="et-tarja">PADRÃO</div>`);
+          :(pt.tirados.length?`<div class="et-sem">${pt.codigo} · ${esc(devTiradosTxt(pt).toUpperCase())}</div>`:`<div class="et-num">${pt.codigo}</div>`);
         html+=corte+`<div class="et">
           <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
           <div class="et-cliente">${esc(pt.nomeCli)} · ${esc(pt.pedidoLabel)}</div><hr>
@@ -5801,7 +5811,7 @@ function devImprimirEtiquetas(){
       hr{width:88%;border:none;border-top:.5px solid #000;margin:0}
       .et-tarja{font-size:8px;letter-spacing:.25em;color:#333}
       .et-sm{font-size:12px;font-weight:800;letter-spacing:.06em;border:1.5px solid #000;padding:0 2mm}
-      .et-sem{font-size:10px;font-weight:800;background:#000;color:#fff;padding:.3mm 2mm;letter-spacing:.04em}
+      .et-num{font-size:12px;font-weight:800;letter-spacing:.08em}.et-sem{font-size:10px;font-weight:800;background:#000;color:#fff;padding:.3mm 2mm;letter-spacing:.04em}
       .et-sabor-wrap{width:100%;max-width:42mm}.et-sabor{font-size:14.5px;font-weight:bold;line-height:1.2;white-space:nowrap}
       .et-datas{display:flex;align-items:center;justify-content:center;gap:2mm;font-size:8px;white-space:nowrap}.sep2{color:#999}
     </style></head><body>${html}

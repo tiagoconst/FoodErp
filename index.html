@@ -5519,7 +5519,7 @@ const DEV_ZONAS=[
 ];
 const DEV_ZONA_NOME=Object.fromEntries(DEV_ZONAS);
 // ordem em que você passa com cada componente na mesa (proteína sempre por último, na balança)
-const DEV_ESTACOES=['arroz','arroz_integral','feijao','massa','pure','legumes','molho','outro','proteina'];
+const DEV_ESTACOES=['feijao','arroz','arroz_integral','massa','pure','legumes','molho','outro','proteina'];
 const DEV_ESTACAO_NOME={arroz:'Arroz',arroz_integral:'Arroz integral',feijao:'Feijão',massa:'Massa',pure:'Purê',
   legumes:'Legumes',molho:'Molho',outro:'Outros',proteina:'Proteína'};
 const DEV_REFEICAO={almoco:'ALMOÇO',janta:'JANTA'};
@@ -5698,11 +5698,11 @@ VIEWS.desenvolvimento=function(){
 /* ---------- Impressões (bobina 44 mm, mesmo padrão das outras) ---------- */
 function devJanelaImpressao(titulo,corpo,cssExtra){
   const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${esc(titulo)}</title><style>
-    @page{margin:3mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;color:#000;max-width:44mm;margin:0 auto;word-break:break-word}
+    @page{margin:3mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;color:#000;max-width:44mm;margin:0 auto;word-break:break-word}
     .center{text-align:center}.small{font-size:9px;color:#222}h1{font-size:12px;margin:1mm 0}
     .zona{background:#000;color:#fff;font-weight:800;font-size:11px;padding:1.2mm 1.5mm;margin:2mm 0 1mm;text-align:center}
     .est{font-weight:800;font-size:10px;margin-top:1.8mm;border-bottom:1px solid #000}
-    .lin{display:flex;justify-content:space-between;gap:4px;padding:.6mm 0}.lin b{white-space:nowrap}
+    .lin{display:flex;justify-content:space-between;gap:4px;padding:.6mm 0}.lin span{min-width:0}.lin b{white-space:nowrap}.lin.med{padding:.2mm 0 .2mm 4mm}
     .pular{border:1.5px solid #000;padding:.8mm 1mm;margin:.6mm 0;font-weight:700;font-size:9.5px}
     .ordem{font-size:9px;margin:1mm 0}.sm{border:1px dashed #000;padding:1mm 1.2mm;margin:1.2mm 0}
     .corte{text-align:center;font-size:9px;color:#444;margin:2mm 0;white-space:nowrap;overflow:hidden}
@@ -5730,8 +5730,9 @@ function devImprimirMapa(){
       estacoes.forEach(e=>{
         h+=`<div class="est">${esc(DEV_ESTACAO_NOME[e.tipo].toUpperCase())}</div>`;
         e.itens.forEach(r=>{
-          const medidas=Object.entries(r.porG).map(([g,n])=>`${g}g × ${n}`).join(' · ');
-          h+=`<div class="lin"><span>${esc(r.nome)}</span><b>${medidas||'—'}</b></div>`;
+          const med=Object.entries(r.porG).map(([g,n])=>`${g}g × ${n}`);
+          if(med.length<=1)h+=`<div class="lin"><span>${esc(r.nome)}</span><b>${med[0]||'—'}</b></div>`;
+          else h+=`<div class="lin"><span>${esc(r.nome)}</span></div>`+med.map(m=>`<div class="lin med"><span></span><b>${m}</b></div>`).join('');
           if(r.nPular)h+=`<div class="pular">PULAR ${r.nPular}: ${esc(r.pularTxt)}</div>`;
         });
       });
@@ -5790,7 +5791,7 @@ function devImprimirEtiquetas(){
     });
     html+=corte;
     const doc=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas — ordem do mapa</title><style>
-      @page{margin:3mm}*{box-sizing:border-box}html,body{width:100%}
+      @page{margin:3mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}html,body{width:100%}
       body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;text-align:center}
       .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
       .et{height:25mm;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;overflow:hidden;padding:.5mm 1mm}

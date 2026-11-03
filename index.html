@@ -315,6 +315,8 @@ details.comp-tree .tree-b{padding:2px 14px 12px}
     <button class="nav-btn" data-view="margens"><span class="nav-dot" style="background:var(--m-margens)"></span>Margens</button>
     <button class="nav-btn" data-view="integracoes"><span class="nav-dot" style="background:var(--m-integracoes)"></span>Integrações</button>
     <button class="nav-btn" data-view="dados"><span class="nav-dot" style="background:#6E7468"></span>Dados &amp; Backup</button>
+    <div class="nav-label">Desenvolvimento</div>
+    <button class="nav-btn" data-view="desenvolvimento"><span class="nav-dot" style="background:#6E4FB0"></span>🧪 Mapa de Montagem</button>
     <div id="cloud-bar" style="display:none">
       <div id="sync-status"></div>
       <div id="user-line" style="word-break:break-all"></div>
@@ -5494,6 +5496,324 @@ function closeMobileNav(){
   document.getElementById('mobile-backdrop').classList.remove('show');
 }
 /* inicialização movida para o módulo de nuvem (último bloco do arquivo) */
+</script>
+<script>
+'use strict';
+/* ================= DESENVOLVIMENTO — Mapa de Montagem (em teste) =================
+   Guia separada pra testar a montagem por zona sem mexer em nada do fluxo atual.
+   SÓ LÊ os pedidos — não grava, não muda status, não baixa estoque.
+
+   Ideia: em vez de montar por cliente, monta por ZONA (base da marmita):
+     Arroz e feijão · Purê · Integral · Sopa · Massa · Outros · Padrão sem base
+   e dentro de cada zona primeiro o PADRÃO (medidas fixas, no automático) e depois o
+   SOB MEDIDA (pote a pote, na balança, cada um com código SM-n).
+   As etiquetas saem na MESMA ordem do mapa; o cliente só volta na conferência final.
+
+   "sem Feijão" etc. vem do site de pedidos, escrito no início da observação do pedido
+   no formato "Prato (2x): sem Feijão, sem Arroz | Outro prato (1x): sem Purê — obs livre". */
+
+let devStatus={confirmado:true,em_producao:true};
+const DEV_ZONAS=[
+  ['arroz','Arroz e feijão'],['pure','Purê'],['integral','Integral'],['sopa','Sopa / Caldo'],
+  ['massa','Massa'],['outros','Outros'],['sembase','Padrão sem base']
+];
+const DEV_ZONA_NOME=Object.fromEntries(DEV_ZONAS);
+// ordem em que você passa com cada componente na mesa (proteína sempre por último, na balança)
+const DEV_ESTACOES=['arroz','arroz_integral','feijao','massa','pure','legumes','molho','outro','proteina'];
+const DEV_ESTACAO_NOME={arroz:'Arroz',arroz_integral:'Arroz integral',feijao:'Feijão',massa:'Massa',pure:'Purê',
+  legumes:'Legumes',molho:'Molho',outro:'Outros',proteina:'Proteína'};
+const DEV_REFEICAO={almoco:'ALMOÇO',janta:'JANTA'};
+
+function devNorm(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
+function devG(v){ return Math.round(v)+'g'; }
+
+// Tipo de cada componente da ficha técnica (1º nível = o que vai dentro do pote).
+// Embalagem/etiqueta (unidade "un") ficam de fora.
+function devTipoComp(itemId){
+  const it=itemById(itemId); if(!it)return null;
+  if(!['g','ml','kg'].includes(it.unidade_base))return null;
+  const n=devNorm(it.nome), cat=devNorm(it.categoria);
+  if(cat==='embalagem')return null;
+  if(cat==='proteina')return 'proteina';
+  if(/arroz/.test(n))return /integral/.test(n)?'arroz_integral':'arroz';
+  if(/feijao/.test(n))return 'feijao';
+  if(/pure/.test(n))return 'pure';
+  if(cat==='massas'||/penne|talharim|nhoque|espaguete|macarr|lasanha|ravioli|fusilli|massa/.test(n))return 'massa';
+  if(cat.startsWith('legume')||/legume|cenoura|brocol|abobrinha|vagem|couve|chuchu|ervilha|seleta|jardineira/.test(n))return 'legumes';
+  if(cat==='molho'||/molho/.test(n))return 'molho';
+  return 'outro';
+}
+function devZona(tipos,categoriaPrato){
+  const cat=devNorm(categoriaPrato);
+  if(/caldo|sopa/.test(cat))return 'sopa';
+  if(tipos.has('arroz'))return 'arroz';          // arroz e feijão (com ou sem purê junto)
+  if(tipos.has('arroz_integral'))return 'integral';
+  if(tipos.has('pure'))return 'pure';
+  if(tipos.has('massa')||/massa/.test(cat))return 'massa';
+  if(tipos.has('feijao'))return 'arroz';
+  return 'outros';
+}
+// Lê as remoções que o site escreve na observação: {nome do prato normalizado: Set(tipos tirados)}
+function devRemocoes(p){
+  const out={};
+  String(p.observacao||'').split(/ — | \| /).forEach(seg=>{
+    const m=seg.trim().match(/^(.+?) \((\d+)x\): (.+)$/); if(!m)return;
+    const tirar=m[3].split(',').map(s=>s.trim()).filter(s=>/^sem /i.test(s)).map(s=>devNorm(s.slice(4)));
+    if(!tirar.length)return;
+    const tipos=new Set();
+    tirar.forEach(t=>{
+      if(t==='arroz'){ tipos.add('arroz'); tipos.add('arroz_integral'); }
+      else if(t==='feijao')tipos.add('feijao');
+      else if(t==='pure')tipos.add('pure');
+      else if(t==='legumes')tipos.add('legumes');
+    });
+    if(tipos.size)out[devNorm(m[1])]={tipos,n:parseInt(m[2])||1};
+  });
+  return out;
+}
+
+// Monta a lista de potes (1 por marmita), já ordenada na ordem do mapa/etiquetas.
+function devMontarPotes(){
+  const pedidos=(S.pedidos||[]).filter(p=>devStatus[p.status]).sort((a,b)=>(a.numero||0)-(b.numero||0));
+  const potes=[], alertas=[];
+  pedidos.forEach(p=>{
+    const cli=p.cliente_id?clienteById(p.cliente_id):null;
+    const nomeCli=(cli?nomeProprio(cli.nome):nomeProprio(p.cliente||''))||'Sem nome';
+    const pedidoLabel=p.numero?'#'+p.numero:p.id;
+    const rem=devRemocoes(p), remUsadas=new Set();
+    (p.itens||[]).forEach(l=>{
+      const n=Math.max(1,Math.round(l.quantidade||1));
+      const sm=!!(l.componentes&&l.componentes.length&&(l.item_id===ITEM_ID_SOB_MEDIDA||l.nome_custom));
+      let comps;
+      if(sm)comps=l.componentes.map(c=>({item_id:c.item_id,g:parseFloat(c.quantidade??c.gramas)||0}));
+      else{ const rend=rendimentoDe(l.item_id)||1; comps=componentesDe(l.item_id).map(c=>({item_id:c.item_filho_id,g:(c.quantidade||0)/rend})); }
+      comps=comps.map(c=>({...c,tipo:devTipoComp(c.item_id)})).filter(c=>c.tipo&&c.g>0);
+      const prato=sm?(l.nome_custom||'Marmita sob medida'):nomeItem(l.item_id);
+      const it=itemById(l.item_id);
+      if(!comps.length)alertas.push(`${prato} (${nomeCli} ${pedidoLabel}) está sem ficha técnica — entrou em "Outros".`);
+      const tiposPrato=new Set(comps.map(c=>c.tipo));
+      const r=sm?null:rem[devNorm(prato)];
+      if(r)remUsadas.add(devNorm(prato));
+      for(let k=0;k<n;k++){
+        // a remoção vale pra quantidade escrita na observação ("(2x)"), não necessariamente todas as unidades
+        const aplica=!!(r&&r.n>0); if(aplica)r.n--;
+        const cs=comps.map(c=>({...c,tirado:aplica&&r.tipos.has(c.tipo)}));
+        let zona=devZona(tiposPrato,sm?'':(it&&it.categoria));
+        const temBase=tt=>cs.some(c=>!c.tirado&&tt.includes(c.tipo));
+        if(!sm&&(zona==='arroz'||zona==='integral')&&!temBase(['arroz','arroz_integral','feijao']))zona='sembase';
+        if(!sm&&zona==='pure'&&!temBase(['pure']))zona='sembase';
+        const tirados=[...new Set(cs.filter(c=>c.tirado).map(c=>c.tipo))]
+          .map(t=>t==='arroz_integral'?'arroz':t).filter((t,i,a)=>a.indexOf(t)===i);
+        potes.push({pedido:p,nomeCli,pedidoLabel,prato,sm,refeicao:DEV_REFEICAO[l.refeicao]||'',zona,comps:cs,tirados});
+      }
+    });
+    Object.keys(rem).forEach(k=>{ if(!remUsadas.has(k))alertas.push(`Pedido ${pedidoLabel} (${nomeCli}): remoção na observação pra um prato que não está no pedido — confira.`); });
+  });
+  const zIdx=Object.fromEntries(DEV_ZONAS.map(([k],i)=>[k,i]));
+  potes.sort((a,b)=>zIdx[a.zona]-zIdx[b.zona]||(a.sm-b.sm)||a.prato.localeCompare(b.prato,'pt')
+    ||a.tirados.length-b.tirados.length||a.tirados.join().localeCompare(b.tirados.join())||(a.pedido.numero||0)-(b.pedido.numero||0));
+  let sm=0; potes.forEach(pt=>{ if(pt.sm)pt.codigo='SM-'+(++sm); });
+  return {potes,alertas,nPedidos:pedidos.length};
+}
+// Agrupa em blocos: zona + padrão/sob medida, na ordem do mapa
+function devBlocos(potes){
+  const blocos=[];
+  potes.forEach(pt=>{
+    const last=blocos[blocos.length-1];
+    if(last&&last.zona===pt.zona&&last.sm===pt.sm)last.potes.push(pt);
+    else blocos.push({zona:pt.zona,sm:pt.sm,potes:[pt]});
+  });
+  return blocos;
+}
+function devTituloBloco(b){ return `${DEV_ZONA_NOME[b.zona].toUpperCase()} — ${b.sm?'SOB MEDIDA':'PADRÃO'} (${b.potes.length})`; }
+function devTiradosTxt(pt){ return pt.tirados.map(t=>'sem '+DEV_ESTACAO_NOME[t]).join(', '); }
+
+// Conteúdo de um bloco PADRÃO: ordem dos potes + cada estação com medida × quantidade + quem pular
+function devLinhasPadrao(b){
+  const ordem=[];
+  b.potes.forEach(pt=>{
+    const rot=pt.prato+(pt.tirados.length?' ('+devTiradosTxt(pt)+')':'');
+    const last=ordem[ordem.length-1];
+    if(last&&last.rot===rot)last.n++; else ordem.push({rot,n:1});
+  });
+  const estacoes=[];
+  DEV_ESTACOES.forEach(tipo=>{
+    const porItem={}; // item_id -> {nome, porG:{g:n}, pular:[...]}
+    b.potes.forEach(pt=>pt.comps.filter(c=>c.tipo===tipo).forEach(c=>{
+      const r=porItem[c.item_id]||(porItem[c.item_id]={nome:nomeItem(c.item_id),porG:{},pular:{},total:0});
+      if(c.tirado){ const q=`${pt.prato} (${pt.nomeCli})`; r.pular[q]=(r.pular[q]||0)+1; return; }
+      const g=Math.round(c.g); r.porG[g]=(r.porG[g]||0)+1; r.total+=c.g;
+    }));
+    const itens=Object.values(porItem).filter(r=>Object.keys(r.porG).length)
+      .map(r=>({...r,nPular:Object.values(r.pular).reduce((a,b)=>a+b,0),
+        pularTxt:Object.entries(r.pular).map(([q,n])=>n>1?q+' ×'+n:q).join(', ')}));
+    if(itens.length)estacoes.push({tipo,itens});
+  });
+  return {ordem,estacoes};
+}
+
+/* ---------- Tela ---------- */
+VIEWS.desenvolvimento=function(){
+  const {potes,alertas,nPedidos}=devMontarPotes();
+  const blocos=devBlocos(potes);
+  const chip=(k,rot)=>`<button class="btn sm ${devStatus[k]?'primary':''}" onclick="devStatus['${k}']=!devStatus['${k}'];render()">${devStatus[k]?'✓ ':''}${rot}</button>`;
+  const acoes=`<button class="btn" onclick="devImprimirMapa()">🗺 Imprimir mapa</button>
+    <button class="btn" onclick="devImprimirEtiquetas()">🏷 Etiquetas na ordem do mapa</button>
+    <button class="btn" onclick="devImprimirConferencia()">✅ Conferência por cliente</button>`;
+  const totais={};
+  potes.forEach(pt=>pt.comps.forEach(c=>{ if(c.tirado||c.tipo==='proteina')return;
+    const r=totais[c.item_id]||(totais[c.item_id]={nome:nomeItem(c.item_id),tipo:c.tipo,g:0}); r.g+=c.g; }));
+  const totaisHtml=Object.values(totais).sort((a,b)=>DEV_ESTACOES.indexOf(a.tipo)-DEV_ESTACOES.indexOf(b.tipo)||b.g-a.g)
+    .map(r=>`<tr><td>${esc(r.nome)}</td><td class="r num">${qty(Math.round(r.g),'g')}</td></tr>`).join('');
+  const resumo=blocos.map(b=>`<span class="tag ${b.sm?'info':''}" style="margin:2px">${esc(devTituloBloco(b))}</span>`).join('');
+  const blocosHtml=blocos.map(b=>{
+    let corpo;
+    if(!b.sm){
+      const {ordem,estacoes}=devLinhasPadrao(b);
+      corpo=`<p class="subtle" style="margin-bottom:8px"><b>Ordem dos potes (= ordem das etiquetas):</b> ${ordem.map(o=>esc(o.rot)+' ×'+o.n).join(' · ')}</p>
+        <table><thead><tr><th>Estação</th><th>Item</th><th>Medida × potes</th><th>Pular</th></tr></thead><tbody>
+        ${estacoes.map(e=>e.itens.map((r,i)=>`<tr><td>${i?'':'<b>'+esc(DEV_ESTACAO_NOME[e.tipo])+'</b>'}</td><td>${esc(r.nome)}</td>
+          <td class="num">${Object.entries(r.porG).map(([g,n])=>`<b>${g}g × ${n}</b>`).join(' · ')||'—'}</td>
+          <td>${r.nPular?`<span class="tag" style="background:#B3372C;color:#fff">PULAR ${r.nPular}</span> <span class="subtle">${esc(r.pularTxt)}</span>`:''}</td></tr>`).join('')).join('')}
+        </tbody></table>`;
+    } else {
+      corpo=b.potes.map(pt=>`<div style="border:1px dashed var(--line,#ddd);border-radius:8px;padding:8px 10px;margin-bottom:6px">
+          <b>${pt.codigo}</b> · ${esc(pt.nomeCli)} <span class="subtle">${esc(pt.pedidoLabel)}${pt.refeicao?' · '+pt.refeicao:''} · ${esc(pt.prato)}</span><br>
+          ${DEV_ESTACOES.map(t=>pt.comps.filter(c=>c.tipo===t).map(c=>`${esc(nomeItem(c.item_id))} <b>${devG(c.g)}</b>`).join(' · ')).filter(Boolean).join(' · ')}
+        </div>`).join('');
+    }
+    return `<div class="card section-gap"><div class="card-h"><h3>${esc(devTituloBloco(b))}</h3></div><div class="card-b">${corpo}</div></div>`;
+  }).join('');
+  return header('Mapa de Montagem <span class="tag" style="margin-left:6px">em teste</span>','#6E4FB0',
+      `Montagem por zona (padrão → sob medida), etiquetas na mesma ordem e conferência por cliente no fim. Só lê os pedidos — não altera nada.`,acoes)+
+    `<div class="card section-gap"><div class="card-b" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="subtle">Pedidos com status:</span>${chip('confirmado','Confirmado')}${chip('em_producao','Em produção')}
+      <span class="subtle" style="margin-left:auto">${nPedidos} pedido(s) · ${potes.length} marmita(s)</span></div></div>`+
+    (alertas.length?`<div class="card section-gap" style="border-color:#E0A63C"><div class="card-b"><b>⚠ Conferir:</b><ul style="margin:6px 0 0 18px">${alertas.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div></div>`:'')+
+    (potes.length?`<div class="card section-gap"><div class="card-b">${resumo}</div></div>
+      <div class="card section-gap"><div class="card-h"><h3>Total na montagem (pra comparar com as panelas)</h3></div><div class="card-b" style="padding-top:0"><table><tbody>${totaisHtml}</tbody></table></div></div>`+blocosHtml
+    :`<div class="card section-gap"><div class="card-b"><div class="empty"><b>Nenhum pedido nos status marcados</b>Marque Confirmado e/ou Em produção acima.</div></div></div>`);
+};
+
+/* ---------- Impressões (bobina 44 mm, mesmo padrão das outras) ---------- */
+function devJanelaImpressao(titulo,corpo,cssExtra){
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>${esc(titulo)}</title><style>
+    @page{margin:3mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.35;color:#000;max-width:44mm;margin:0 auto;word-break:break-word}
+    .center{text-align:center}.small{font-size:9px;color:#222}h1{font-size:12px;margin:1mm 0}
+    .zona{background:#000;color:#fff;font-weight:800;font-size:11px;padding:1.2mm 1.5mm;margin:2mm 0 1mm;text-align:center}
+    .est{font-weight:800;font-size:10px;margin-top:1.8mm;border-bottom:1px solid #000}
+    .lin{display:flex;justify-content:space-between;gap:4px;padding:.6mm 0}.lin b{white-space:nowrap}
+    .pular{border:1.5px solid #000;padding:.8mm 1mm;margin:.6mm 0;font-weight:700;font-size:9.5px}
+    .ordem{font-size:9px;margin:1mm 0}.sm{border:1px dashed #000;padding:1mm 1.2mm;margin:1.2mm 0}
+    .corte{text-align:center;font-size:9px;color:#444;margin:2mm 0;white-space:nowrap;overflow:hidden}
+    ${cssExtra||''}</style></head><body>${corpo}
+    <script>window.onload=function(){setTimeout(function(){window.print()},300)}<\/script></body></html>`;
+  const w=window.open('','_blank','width=340,height=560');
+  if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups.',true);
+  w.document.write(html); w.document.close();
+}
+function devCabecalho(sub){
+  const emp=getEmpresaInfo(), idn=getIdent(), agora=new Date();
+  return `<div class="center"><h1>${esc(emp.nome_loja||idn.nome||'Food ERP')}</h1><div class="small">${esc(sub)}<br>${agora.toLocaleDateString('pt-BR')} ${agora.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div></div>`;
+}
+const DEV_CORTE='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - -</div>';
+
+function devImprimirMapa(){
+  const {potes}=devMontarPotes();
+  if(!potes.length)return toast('Nenhuma marmita nos status marcados.',true);
+  const blocos=devBlocos(potes);
+  const partes=blocos.map(b=>{
+    let h=`<div class="zona">${esc(devTituloBloco(b))}</div>`;
+    if(!b.sm){
+      const {ordem,estacoes}=devLinhasPadrao(b);
+      h+=`<div class="ordem"><b>Ordem:</b> ${ordem.map(o=>esc(o.rot)+' ×'+o.n).join(' · ')}</div>`;
+      estacoes.forEach(e=>{
+        h+=`<div class="est">${esc(DEV_ESTACAO_NOME[e.tipo].toUpperCase())}</div>`;
+        e.itens.forEach(r=>{
+          const medidas=Object.entries(r.porG).map(([g,n])=>`${g}g × ${n}`).join(' · ');
+          h+=`<div class="lin"><span>${esc(r.nome)}</span><b>${medidas||'—'}</b></div>`;
+          if(r.nPular)h+=`<div class="pular">PULAR ${r.nPular}: ${esc(r.pularTxt)}</div>`;
+        });
+      });
+    } else {
+      b.potes.forEach(pt=>{
+        h+=`<div class="sm"><b>${pt.codigo}</b> · ${esc(pt.nomeCli)} ${esc(pt.pedidoLabel)}${pt.refeicao?' · '+pt.refeicao:''}`;
+        DEV_ESTACOES.forEach(t=>pt.comps.filter(c=>c.tipo===t).forEach(c=>{
+          h+=`<div class="lin"><span>${esc(nomeItem(c.item_id))}</span><b>${devG(c.g)}</b></div>`; }));
+        h+=`</div>`;
+      });
+    }
+    return h;
+  });
+  devJanelaImpressao('Mapa de montagem',devCabecalho('MAPA DE MONTAGEM · '+potes.length+' marmitas')+DEV_CORTE+partes.join(DEV_CORTE)+DEV_CORTE);
+}
+
+function devImprimirConferencia(){
+  const {potes}=devMontarPotes();
+  if(!potes.length)return toast('Nenhuma marmita nos status marcados.',true);
+  const porPed=new Map();
+  potes.forEach(pt=>{ const k=pt.pedido.id; if(!porPed.has(k))porPed.set(k,{pt,lista:[]}); porPed.get(k).lista.push(pt); });
+  const corpo=[...porPed.values()].sort((a,b)=>a.pt.nomeCli.localeCompare(b.pt.nomeCli,'pt')).map(({pt,lista})=>{
+    const cont={};
+    lista.forEach(x=>{ const rot=x.sm?`${x.codigo} (${x.prato})`:x.prato+(x.tirados.length?' — '+devTiradosTxt(x):''); cont[rot]=(cont[rot]||0)+1; });
+    return `<div class="sm"><b>☐ ${esc(pt.nomeCli)}</b> ${esc(pt.pedidoLabel)} · <b>${lista.length} un</b>
+      ${Object.entries(cont).map(([r,n])=>`<div class="lin"><span>${esc(r)}</span><b>${n}×</b></div>`).join('')}</div>`;
+  }).join('');
+  devJanelaImpressao('Conferência por cliente',devCabecalho('CONFERÊNCIA POR CLIENTE')+corpo);
+}
+
+// Etiquetas: mesmo visual das etiquetas atuais, mas na ordem do mapa, com separador por bloco,
+// código SM grande no sob medida e tarja invertida "SEM FEIJÃO" etc. no padrão com remoção.
+function devImprimirEtiquetas(){
+  const {potes}=devMontarPotes();
+  if(!potes.length)return toast('Nenhuma marmita nos status marcados.',true);
+  const blocos=devBlocos(potes);
+  const emp0=getEmpresaInfo(), idn0=getIdent(), nomeEmp=emp0.nome_loja||idn0.nome||'Food ERP';
+  prepararLogoImpressao(nomeEmp,function(logoPB){
+    const hoje_=new Date(), fmt=d=>d.toLocaleDateString('pt-BR');
+    const validade=new Date(hoje_); validade.setDate(validade.getDate()+30);
+    const corte='<div class="corte">✂ - - - - - - - - - - - - - - - - - - - - - - - - - -</div>';
+    let html='';
+    blocos.forEach(b=>{
+      html+=corte+`<div class="et sep"><div class="sep-t">▼ ${esc(DEV_ZONA_NOME[b.zona].toUpperCase())}</div><div class="sep-s">${b.sm?'SOB MEDIDA':'PADRÃO'} · ${b.potes.length} etiqueta(s)</div></div>`;
+      b.potes.forEach(pt=>{
+        const tarja=pt.sm?`<div class="et-sm">${pt.codigo}${pt.refeicao?' · '+pt.refeicao:''}</div>`
+          :(pt.tirados.length?`<div class="et-sem">${esc(devTiradosTxt(pt).toUpperCase())}</div>`:`<div class="et-tarja">PADRÃO</div>`);
+        html+=corte+`<div class="et">
+          <div class="et-topo">${logoPB?`<img src="${logoPB}">`:`<span class="nome-loja">${esc(nomeEmp)}</span>`}</div>
+          <div class="et-cliente">${esc(pt.nomeCli)} · ${esc(pt.pedidoLabel)}</div><hr>
+          ${tarja}
+          <div class="et-sabor-wrap"><div class="et-sabor">${esc(pt.prato)}</div></div><hr>
+          <div class="et-datas"><span><b>Fab:</b> ${fmt(hoje_)}</span><span class="sep2">|</span><span><b>Val:</b> ${fmt(validade)}</span></div>
+        </div>`;
+      });
+    });
+    html+=corte;
+    const doc=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Etiquetas — ordem do mapa</title><style>
+      @page{margin:3mm}*{box-sizing:border-box}html,body{width:100%}
+      body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;line-height:1.4;color:#000;max-width:44mm;margin:0 auto;padding:0;text-align:center}
+      .corte{text-align:center;font-size:9px;color:#555;white-space:nowrap;overflow:hidden;margin:1mm 0}
+      .et{height:25mm;display:flex;flex-direction:column;align-items:center;justify-content:space-evenly;overflow:hidden;padding:.5mm 1mm}
+      .et.sep{height:12mm;border:2px solid #000;border-radius:2mm}.sep-t{font-weight:800;font-size:13px}.sep-s{font-size:9px;letter-spacing:.08em}
+      .et-topo .nome-loja{font-weight:800;font-size:14px;letter-spacing:.03em;text-transform:uppercase}.et-topo img{max-height:6.5mm;max-width:36mm}
+      .et-cliente{font-size:10px;color:#333;font-weight:300}
+      hr{width:88%;border:none;border-top:.5px solid #000;margin:0}
+      .et-tarja{font-size:8px;letter-spacing:.25em;color:#333}
+      .et-sm{font-size:12px;font-weight:800;letter-spacing:.06em;border:1.5px solid #000;padding:0 2mm}
+      .et-sem{font-size:10px;font-weight:800;background:#000;color:#fff;padding:.3mm 2mm;letter-spacing:.04em}
+      .et-sabor-wrap{width:100%;max-width:42mm}.et-sabor{font-size:14.5px;font-weight:bold;line-height:1.2;white-space:nowrap}
+      .et-datas{display:flex;align-items:center;justify-content:center;gap:2mm;font-size:8px;white-space:nowrap}.sep2{color:#999}
+    </style></head><body>${html}
+      <script>window.onload=function(){
+        document.querySelectorAll('.et-sabor').forEach(function(el){ var t=14.5; el.style.fontSize=t+'px';
+          while(el.scrollWidth>el.clientWidth&&t>4){ t-=.5; el.style.fontSize=t+'px'; } });
+        setTimeout(function(){window.print()},400);
+      }<\/script></body></html>`;
+    const w=window.open('','_blank','width=320,height=500');
+    if(!w)return toast('O navegador bloqueou a janela de impressão — permita pop-ups.',true);
+    w.document.write(doc); w.document.close();
+  });
+}
 </script>
 <script>
 'use strict';

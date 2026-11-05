@@ -95,6 +95,14 @@ td.r,th.r{text-align:right}
 .qty-pill{font-weight:600}
 .neg{color:var(--danger);font-weight:600}
 .pos{color:var(--primary-dark);font-weight:600}
+.tbl-margens{table-layout:fixed}
+.tbl-margens th.grp{text-align:center;font-size:10px;padding:7px 10px;border-bottom:1px solid var(--line)}
+.tbl-margens th.grp.a{background:#FBFAF7;color:var(--muted)}
+.tbl-margens th.grp.b{background:#EAF2ED;color:var(--primary-dark)}
+.tbl-margens td.a,.tbl-margens th.sub.a{background:#FBFAF7}
+.tbl-margens td.b,.tbl-margens th.sub.b{background:#EFF6F1}
+.tbl-margens th.sub{font-size:10.5px;padding:7px 10px}
+.tbl-margens .mini{display:block;font-size:10.5px;color:var(--muted);font-weight:400;margin-top:1px}
 
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:13px}
 .field label{font-size:12.5px;font-weight:600;color:#4B4F44}
@@ -4713,23 +4721,22 @@ VIEWS.margens=function(){
     receita:(a,b)=>b.recP-a.recP||a.i.nome.localeCompare(b.i.nome,'pt')
   };
   const dadosOrdenados=dados.slice().sort(ORDENACOES[margensOrdenacao]||ORDENACOES.nome);
+  const tagPct=mp=>mp==null?'—':(mp<0?'<span class="tag bad">'+Math.round(mp)+'%</span>':(mp<30?'<span class="tag warn">'+Math.round(mp)+'%</span>':'<span class="tag f">'+Math.round(mp)+'%</span>'));
   const rows=dadosOrdenados.map(({i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida,precoSugerido,precoMedioVendido,margemRealPct})=>{
-    const mtag=mp==null?'':(mp<0?'<span class="tag bad">'+Math.round(mp)+'%</span>':(mp<30?'<span class="tag warn">'+Math.round(mp)+'%</span>':'<span class="tag f">'+Math.round(mp)+'%</span>'));
+    const custoTotal=cmv!=null?cmv+cf:null;
+    const custoTip=cmv!=null?`CMV ${money(cmv)} + custo fixo ${money(cf)}`:'';
     const sugTag=precoSugerido==null?'—':(pv!=null&&precoSugerido>pv?`<b class="pos">${money(precoSugerido)}</b>`:(pv!=null&&precoSugerido<pv?`<b class="neg">${money(precoSugerido)}</b>`:money(precoSugerido)));
-    const margemRealTag=margemRealPct==null?'':(margemRealPct<0?'<span class="tag bad">'+Math.round(margemRealPct)+'%</span>':(margemRealPct<30?'<span class="tag warn">'+Math.round(margemRealPct)+'%</span>':'<span class="tag f">'+Math.round(margemRealPct)+'%</span>'));
+    const margemRealMoney=(qP&&temCmv)?money(recP-cmvP):'';
     return `<tr><td><b>${esc(i.nome)}</b>${ehSobMedida?`<div class="subtle" style="font-size:11px">${qP?'médias do período (varia por marmita montada)':'sem marmitas montadas no período'}</div>`:''}</td>
-      <td class="r num">${pv!=null?money(pv):'—'}</td>
-      <td class="r num">${cmv!=null?money(cmv):'—'}</td>
-      <td class="r num">${cf?money(cf):'—'}</td>
-      <td class="r num ${margem!=null&&margem<0?'neg':'pos'}">${margem!=null?money(margem):'—'}</td>
-      <td class="r">${mtag||'—'}</td>
-      <td class="r num">${sugTag}</td>
-      <td class="r num">${qP?qP.toLocaleString('pt-BR'):'—'}</td>
-      <td class="r num">${qP?money(recP):'—'}</td>
-      <td class="r num">${qP&&temCmv?money(recP-cmvP):'—'}</td>
-      <td class="r num">${precoMedioVendido!=null?money(precoMedioVendido):'—'}</td>
-      <td class="r">${margemRealTag||'—'}</td></tr>`;
-  }).join('')||`<tr><td colspan="12"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
+      <td class="r num a">${pv!=null?money(pv):'—'}</td>
+      <td class="r num a" ${custoTip?`title="${custoTip}"`:''}>${custoTotal!=null?money(custoTotal):'—'}</td>
+      <td class="r a">${tagPct(mp)}</td>
+      <td class="r num a">${sugTag}</td>
+      <td class="r num b">${qP?qP.toLocaleString('pt-BR'):'—'}</td>
+      <td class="r num b">${precoMedioVendido!=null?money(precoMedioVendido):'—'}</td>
+      <td class="r num b">${qP?money(recP):'—'}</td>
+      <td class="r b">${tagPct(margemRealPct)}${margemRealMoney?`<span class="mini">${margemRealMoney}</span>`:''}</td></tr>`;
+  }).join('')||`<tr><td colspan="9"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
   const resumo=totRec?`Receita: <b class="num">${money(totRec)}</b> · CMV+fixo: <b class="num">${money(totCmv)}</b> · Margem: <b class="num">${money(totRec-totCmv)} (${Math.round((totRec-totCmv)/totRec*100)}%)</b>`:`Sem vendas no período (${label}).`;
   const periodos=[['7d','7 dias'],['30d','30 dias'],['90d','90 dias'],['mes','Este mês'],['mespassado','Mês passado'],['ano','Este ano'],['tudo','Tudo']];
   const chipsPeriodo=periodos.map(([v,l])=>`<button class="cat-chip ${relPeriodo===v?'active':''}" style="${relPeriodo===v?'background:var(--primary)':''}" onclick="relPeriodo='${v}';render()">${l}</button>`).join('')+
@@ -4739,7 +4746,7 @@ VIEWS.margens=function(){
       <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
   const ordenacoesLabel=[['nome','Nome (A-Z)'],['vendidos','Mais vendida'],['margem','Maior margem'],['receita','Maior receita']];
   const chipsOrdenacao=ordenacoesLabel.map(([v,l])=>`<button class="cat-chip ${margensOrdenacao===v?'active':''}" style="${margensOrdenacao===v?'background:var(--m-margens)':''}" onclick="margensOrdenacao='${v}';render()">${l}</button>`).join('');
-  return header('Margens por produto','var(--m-margens)',`Custo total = CMV (matéria-prima, fotografado na entrega) + custo fixo rateado (definido em Custos Fixos). "Preço"/"Margem %" são de tabela (preço de venda cadastrado); "Preço médio vendido"/"Margem real %" já descontam combo, desconto manual e cupom — refletem o que entrou de fato. Período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
+  return header('Margens por produto','var(--m-margens)',`Tabela = preço/custo cadastrados. Realizado = o que entrou de fato, já com desconto de combo, manual e cupom. Período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
   `<div class="cat-chips" style="margin-top:6px">${chipsPeriodo}</div>${customFields}`+
   `<div class="grid g2 section-gap">
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-producao)"></span>Marmitas vendidas no período</div><div class="k-value num">${totMarmitas.toLocaleString('pt-BR')}</div></div>
@@ -4747,7 +4754,17 @@ VIEWS.margens=function(){
   </div>`+
   `<div class="card section-gap"><div class="card-h"><h3>Margem por item vendável</h3><span class="subtle">${resumo}</span></div>
     <div class="card-b" style="padding-top:0;padding-bottom:10px"><span class="subtle" style="margin-right:8px">Ordenar por:</span><span class="cat-chips" style="display:inline-flex;margin:0;vertical-align:middle">${chipsOrdenacao}</span></div>
-    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Preço sugerido (${MARGEM_ALVO_SUGESTAO}%)</th><th class="r">Vendidos</th><th class="r">Receita</th><th class="r">Margem</th><th class="r">Preço médio vendido</th><th class="r">Margem real %</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <table class="tbl-margens">
+      <colgroup><col style="width:24%"><col><col><col><col><col><col><col><col></colgroup>
+      <thead>
+        <tr><th rowspan="2" style="vertical-align:bottom">Item</th>
+          <th class="grp a" colspan="4">Tabela (preço cadastrado)</th>
+          <th class="grp b" colspan="4">Realizado no período (já com descontos)</th></tr>
+        <tr><th class="r sub a">Preço</th><th class="r sub a" title="CMV + custo fixo rateado">Custo total</th><th class="r sub a">Margem %</th><th class="r sub a">Preço sugerido (${MARGEM_ALVO_SUGESTAO}%)</th>
+          <th class="r sub b">Vendidos</th><th class="r sub b">Preço médio vendido</th><th class="r sub b">Receita</th><th class="r sub b">Margem real %</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
 };
 
 /* ================= RELATÓRIOS ================= */

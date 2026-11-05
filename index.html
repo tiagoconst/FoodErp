@@ -4662,15 +4662,26 @@ VIEWS.margens=function(){
   const vend=S.itens.filter(i=>i.ativo!==false&&temFuncao(i,'vendavel'));
   const cfPorUnidade=custoFixoPorUnidade();
   const {ini,fim,label}=relIntervalo(); // mesmo filtro de período do Dashboard (relPeriodo é global, compartilhado)
+  // Pedidos do período, calculados uma vez só (não por item). Pra cada um, um "fator" que representa
+  // o quanto do valor das linhas (já líquido do desconto de combo, que fica embutido no preco_unitario)
+  // ainda sobrou depois do desconto manual e do cupom — que são só do pedido, não de cada linha.
+  // Assim a Receita/Margem daqui passam a refletir o que o cliente pagou de fato, não o preço de tabela.
+  const pedidosPeriodo=S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim);
+  const fatorPedido={};
+  pedidosPeriodo.forEach(p=>{
+    const subtotal=(p.itens||[]).reduce((a,l)=>a+(l.quantidade*l.preco_unitario),0);
+    const descontoRestante=(p.desconto_manual||0)+(p.desconto_cupom||0);
+    fatorPedido[p.id]=subtotal>0?Math.max(0,(subtotal-descontoRestante)/subtotal):1;
+  });
   let totRec=0, totCmv=0, totMarmitas=0;
   const dados=vend.map(i=>{
     let cmv=custoItem(i.id), pv=i.preco_venda;
     const cf=cfPorUnidade*(i.unidades_equivalentes||1);
     const ehSobMedida=i.id===ITEM_ID_SOB_MEDIDA;
     let qP=0, recP=0, cmvP=0, temCmv=false;
-    S.pedidos.filter(p=>['entregue','finalizado'].includes(p.status)&&p.data_entrega&&p.data_entrega>=ini&&p.data_entrega<=fim)
-      .forEach(p=>p.itens.filter(l=>l.item_id===i.id).forEach(l=>{
-        qP+=l.quantidade; recP+=l.quantidade*l.preco_unitario;
+    pedidosPeriodo.forEach(p=>p.itens.filter(l=>l.item_id===i.id).forEach(l=>{
+        const fator=fatorPedido[p.id]!=null?fatorPedido[p.id]:1;
+        qP+=l.quantidade; recP+=l.quantidade*l.preco_unitario*fator;
         const cu=(l.cmv_unitario!=null)?l.cmv_unitario:cmv;
         if(cu!=null){ temCmv=true; cmvP+=(cu+cf)*l.quantidade; } }));
     totRec+=recP; totCmv+=temCmv?cmvP:0; totMarmitas+=qP*(i.unidades_equivalentes||1);
@@ -4688,7 +4699,12 @@ VIEWS.margens=function(){
     // Preço sugerido: custo total ÷ (1 − margem alvo), arredondado pro real cheio mais próximo
     // (ex.: 60% de margem sobre um custo que dá R$17,75 de preço → sugere R$18).
     const precoSugerido=custoTotal!=null?Math.round(custoTotal/(1-MARGEM_ALVO_SUGESTAO/100)):null;
-    return {i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida,precoSugerido};
+    // Preço médio vendido e margem real: com base no que entrou de fato (recP já líquido de todos os
+    // descontos — combo, manual e cupom), não no preço de tabela. É a resposta pra "o preço ali contempla
+    // desconto?" — na coluna "Preço" (tabela), não; aqui, sim.
+    const precoMedioVendido=qP>0?recP/qP:null;
+    const margemRealPct=(qP>0&&temCmv&&recP>0)?(recP-cmvP)/recP*100:null;
+    return {i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida,precoSugerido,precoMedioVendido,margemRealPct};
   });
   const ORDENACOES={
     nome:(a,b)=>a.i.nome.localeCompare(b.i.nome,'pt'),
@@ -4697,9 +4713,10 @@ VIEWS.margens=function(){
     receita:(a,b)=>b.recP-a.recP||a.i.nome.localeCompare(b.i.nome,'pt')
   };
   const dadosOrdenados=dados.slice().sort(ORDENACOES[margensOrdenacao]||ORDENACOES.nome);
-  const rows=dadosOrdenados.map(({i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida,precoSugerido})=>{
+  const rows=dadosOrdenados.map(({i,pv,cmv,cf,margem,mp,qP,recP,cmvP,temCmv,ehSobMedida,precoSugerido,precoMedioVendido,margemRealPct})=>{
     const mtag=mp==null?'':(mp<0?'<span class="tag bad">'+Math.round(mp)+'%</span>':(mp<30?'<span class="tag warn">'+Math.round(mp)+'%</span>':'<span class="tag f">'+Math.round(mp)+'%</span>'));
     const sugTag=precoSugerido==null?'—':(pv!=null&&precoSugerido>pv?`<b class="pos">${money(precoSugerido)}</b>`:(pv!=null&&precoSugerido<pv?`<b class="neg">${money(precoSugerido)}</b>`:money(precoSugerido)));
+    const margemRealTag=margemRealPct==null?'':(margemRealPct<0?'<span class="tag bad">'+Math.round(margemRealPct)+'%</span>':(margemRealPct<30?'<span class="tag warn">'+Math.round(margemRealPct)+'%</span>':'<span class="tag f">'+Math.round(margemRealPct)+'%</span>'));
     return `<tr><td><b>${esc(i.nome)}</b>${ehSobMedida?`<div class="subtle" style="font-size:11px">${qP?'médias do período (varia por marmita montada)':'sem marmitas montadas no período'}</div>`:''}</td>
       <td class="r num">${pv!=null?money(pv):'—'}</td>
       <td class="r num">${cmv!=null?money(cmv):'—'}</td>
@@ -4709,8 +4726,10 @@ VIEWS.margens=function(){
       <td class="r num">${sugTag}</td>
       <td class="r num">${qP?qP.toLocaleString('pt-BR'):'—'}</td>
       <td class="r num">${qP?money(recP):'—'}</td>
-      <td class="r num">${qP&&temCmv?money(recP-cmvP):'—'}</td></tr>`;
-  }).join('')||`<tr><td colspan="10"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
+      <td class="r num">${qP&&temCmv?money(recP-cmvP):'—'}</td>
+      <td class="r num">${precoMedioVendido!=null?money(precoMedioVendido):'—'}</td>
+      <td class="r">${margemRealTag||'—'}</td></tr>`;
+  }).join('')||`<tr><td colspan="12"><div class="empty"><b>Nenhum item vendável</b>Marque a função Vendável e informe o preço de venda para acompanhar margens.</div></td></tr>`;
   const resumo=totRec?`Receita: <b class="num">${money(totRec)}</b> · CMV+fixo: <b class="num">${money(totCmv)}</b> · Margem: <b class="num">${money(totRec-totCmv)} (${Math.round((totRec-totCmv)/totRec*100)}%)</b>`:`Sem vendas no período (${label}).`;
   const periodos=[['7d','7 dias'],['30d','30 dias'],['90d','90 dias'],['mes','Este mês'],['mespassado','Mês passado'],['ano','Este ano'],['tudo','Tudo']];
   const chipsPeriodo=periodos.map(([v,l])=>`<button class="cat-chip ${relPeriodo===v?'active':''}" style="${relPeriodo===v?'background:var(--primary)':''}" onclick="relPeriodo='${v}';render()">${l}</button>`).join('')+
@@ -4720,7 +4739,7 @@ VIEWS.margens=function(){
       <div class="field"><label>Até</label><input type="date" value="${relDataFim}" onchange="relDataFim=this.value;render()"></div></div>`:'';
   const ordenacoesLabel=[['nome','Nome (A-Z)'],['vendidos','Mais vendida'],['margem','Maior margem'],['receita','Maior receita']];
   const chipsOrdenacao=ordenacoesLabel.map(([v,l])=>`<button class="cat-chip ${margensOrdenacao===v?'active':''}" style="${margensOrdenacao===v?'background:var(--m-margens)':''}" onclick="margensOrdenacao='${v}';render()">${l}</button>`).join('');
-  return header('Margens por produto','var(--m-margens)',`Custo total = CMV (matéria-prima, fotografado na entrega) + custo fixo rateado (definido em Custos Fixos). Período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
+  return header('Margens por produto','var(--m-margens)',`Custo total = CMV (matéria-prima, fotografado na entrega) + custo fixo rateado (definido em Custos Fixos). "Preço"/"Margem %" são de tabela (preço de venda cadastrado); "Preço médio vendido"/"Margem real %" já descontam combo, desconto manual e cupom — refletem o que entrou de fato. Período: ${label} (${dBR(ini)} a ${dBR(fim)}).`)+
   `<div class="cat-chips" style="margin-top:6px">${chipsPeriodo}</div>${customFields}`+
   `<div class="grid g2 section-gap">
     <div class="card kpi"><div class="k-label"><span class="dot" style="background:var(--m-producao)"></span>Marmitas vendidas no período</div><div class="k-value num">${totMarmitas.toLocaleString('pt-BR')}</div></div>
@@ -4728,7 +4747,7 @@ VIEWS.margens=function(){
   </div>`+
   `<div class="card section-gap"><div class="card-h"><h3>Margem por item vendável</h3><span class="subtle">${resumo}</span></div>
     <div class="card-b" style="padding-top:0;padding-bottom:10px"><span class="subtle" style="margin-right:8px">Ordenar por:</span><span class="cat-chips" style="display:inline-flex;margin:0;vertical-align:middle">${chipsOrdenacao}</span></div>
-    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Preço sugerido (${MARGEM_ALVO_SUGESTAO}%)</th><th class="r">Vendidos</th><th class="r">Receita</th><th class="r">Margem</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <table><thead><tr><th>Item</th><th class="r">Preço</th><th class="r">CMV</th><th class="r">Custo fixo</th><th class="r">Margem un.</th><th class="r">Margem %</th><th class="r">Preço sugerido (${MARGEM_ALVO_SUGESTAO}%)</th><th class="r">Vendidos</th><th class="r">Receita</th><th class="r">Margem</th><th class="r">Preço médio vendido</th><th class="r">Margem real %</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 };
 
 /* ================= RELATÓRIOS ================= */

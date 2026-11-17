@@ -19,6 +19,59 @@
   --font-menu:'Helvetica Now Display',-apple-system,'Helvetica Neue',Helvetica,Arial,sans-serif;
   --radius:14px; --shadow:0 1px 2px rgba(62,46,32,.05),0 6px 18px rgba(62,46,32,.08);
 }
+/* Reskin temporário de Black Friday — ligado via data-tema="bf" na tag <html>, controlado pela
+   const BLACK_FRIDAY_ATIVO no script. Pra voltar ao visual normal depois da campanha, só trocar
+   essa const pra false (ou apagar este bloco todo, se quiser limpar de vez). */
+html[data-tema="bf"]{
+  --bg:#141414; --panel:#1E1E1E; --ink:#F2EDE3; --muted:#B7AD9C; --line:#3A352E; --soft:#262220;
+  --primary:#D4AF37; --primary-dark:#B8912B; --accent:#D4AF37; --danger:#E2574C;
+  --navbar-bg:#000000;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.5);
+}
+html[data-tema="bf"] body{background:var(--bg)}
+html[data-tema="bf"] .navbar .brand .txt{color:#D4AF37}
+html[data-tema="bf"] .stepper{background:var(--primary)}
+html[data-tema="bf"] .stepper button{color:#141414}
+html[data-tema="bf"] .stepper button.add{background:#141414;color:#D4AF37}
+html[data-tema="bf"] .stepper span{color:#141414}
+html[data-tema="bf"] .btn-add{background:#141414;border-color:var(--primary);color:var(--primary)}
+html[data-tema="bf"] .catpill{background:var(--panel);border-color:var(--line);color:var(--ink)}
+html[data-tema="bf"] .catpill.active{background:var(--primary);color:#141414;border-color:var(--primary)}
+html[data-tema="bf"] .card{border-color:var(--line)}
+html[data-tema="bf"] .card-info .preco{color:var(--primary)}
+html[data-tema="bf"] .promo-banner{background:linear-gradient(180deg,#1E1E1E,#161616);border-color:var(--primary)}
+html[data-tema="bf"] .promo-t1{color:var(--primary)}
+html[data-tema="bf"] .promo-t2,html[data-tema="bf"] .promo-t3{color:var(--ink)}
+html[data-tema="bf"] .promo-badge{background:var(--primary);color:#141414}
+.bf-ribbon{display:none}
+html[data-tema="bf"] .bf-ribbon{display:block;background:linear-gradient(90deg,#000,#1a1a1a);color:#D4AF37;text-align:center;font-family:var(--font-menu);font-weight:800;font-size:12.5px;letter-spacing:.08em;padding:8px 10px;border-bottom:1px solid #3A352E}
+.cbf-card{position:relative;background:var(--panel);border:1.5px solid var(--primary);border-radius:var(--radius);box-shadow:var(--shadow);display:flex;flex-direction:column;padding:16px 16px 14px;gap:8px}
+.cbf-tag{position:absolute;top:-10px;left:14px;background:var(--primary);color:#141414;font-family:var(--font-menu);font-weight:800;font-size:10.5px;letter-spacing:.06em;padding:3px 10px;border-radius:99px}
+.cbf-card .cbf-un{font-family:Fraunces,Georgia,serif;font-weight:700;font-size:22px;color:var(--ink);padding-right:82px}
+.cbf-card .cbf-desc{font-family:var(--font-menu);font-size:12px;color:var(--muted);line-height:1.4}
+.cbf-card .cbf-preco{font-family:var(--font-menu);font-weight:800;font-size:19px;color:var(--primary)}
+.cbf-preco-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.cbf-balao{position:relative;display:inline-block;background:var(--primary);color:#141414;font-family:var(--font-menu);font-weight:800;font-size:12px;padding:5px 11px;border-radius:99px;white-space:nowrap}
+.cbf-balao::after{content:'';position:absolute;left:-5px;top:50%;transform:translateY(-50%);border:5px solid transparent;border-right-color:var(--primary)}
+.cbf-etiqueta{position:absolute;top:-18px;right:-6px;transform:rotate(-7deg);z-index:2}
+.cbf-etiqueta .fio{position:absolute;top:-11px;right:9px;width:10px;height:13px;border:2px solid rgba(255,255,255,.55);border-bottom:none;border-radius:7px 7px 0 0;transform:rotate(10deg)}
+.cbf-etiqueta .tag{position:relative;display:flex;align-items:baseline;gap:1px;background:linear-gradient(145deg,#E2574C,#A82E22);border:1.5px dashed rgba(255,255,255,.55);border-radius:3px 9px 3px 3px;padding:3px 8px 3px 13px;box-shadow:0 3px 8px rgba(0,0,0,.4)}
+.cbf-etiqueta .furo{position:absolute;left:4px;top:50%;transform:translateY(-50%);width:5px;height:5px;border-radius:50%;background:#1a1a1a;box-shadow:0 0 0 1.5px rgba(255,255,255,.6) inset}
+.cbf-etiqueta .rs{color:#FBD98A;font-family:var(--font-menu);font-weight:700;font-size:8.5px}
+.cbf-etiqueta .num{color:#fff;font-family:var(--font-menu);font-weight:800;font-size:13px;white-space:nowrap}
+.cbf-etiqueta .un{color:#FBD98A;font-family:var(--font-menu);font-weight:700;font-size:8.5px;margin-left:1px}
+.cbf-card .cbf-de{font-size:11.5px;color:var(--muted);text-decoration:line-through;margin-left:6px;font-weight:400}
+.cbf-grupo-h{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;font-family:var(--font-menu)}
+.cbf-grupo-h .tit{font-weight:800;font-size:13px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink)}
+.cbf-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--soft);color:var(--muted)}
+.cbf-badge.ok{background:rgba(212,175,55,.18);color:var(--primary-dark)}
+.cbf-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--soft)}
+.cbf-row .nome{font-size:13.5px;color:var(--ink)}
+.cbf-row .stepper{flex:none;transform:scale(.92);transform-origin:right center}
+.cbf-foot{position:sticky;bottom:0;background:var(--panel);padding-top:12px;margin-top:4px;border-top:1px solid var(--line)}
+.toast-msg{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:#1A1A2E;color:#fff;font-family:var(--font-menu);font-size:13px;font-weight:600;padding:11px 18px;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:999;opacity:0;transition:opacity .2s,transform .2s;max-width:88vw;text-align:center}
+.toast-msg.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast-msg.err{background:var(--danger)}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{max-width:100vw;overflow-x:clip}
 body{background:var(--bg);color:var(--ink);font-family:Inter,Arial,sans-serif;padding-bottom:90px}
@@ -178,6 +231,7 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
 .field textarea{resize:vertical;min-height:60px}
 .btn{width:100%;padding:13px;border-radius:10px;border:none;background:var(--primary);color:#fff;font-weight:700;font-size:15px;margin-top:16px;cursor:pointer}
 .btn:disabled{opacity:.55;cursor:default}
+.btn-add:disabled,.stepper button:disabled{opacity:.4;cursor:not-allowed}
 .err{color:var(--danger);font-size:13px;margin-top:8px}
 .ok-screen{text-align:center;padding:50px 16px}
 .ok-screen .em{font-size:44px}
@@ -496,6 +550,17 @@ h1,h2,h3{font-family:Fraunces,Georgia,serif}
   </div>
 </div>
 
+<div class="sobre-overlay" id="combobf-overlay" onclick="if(event.target===this)fecharComboBf()">
+  <button class="sobre-close" onclick="fecharComboBf()">✕</button>
+  <div class="legal-card">
+    <div class="legal-head">
+      <h2>🖤 Combo Black Friday</h2>
+      <div class="muted">Monte seu combo escolhendo os sabores</div>
+    </div>
+    <div class="legal-body" id="combobf-body"></div>
+  </div>
+</div>
+
 <div class="sobre-overlay" id="contato-overlay" onclick="if(event.target===this)fecharContato()">
   <button class="sobre-close" onclick="fecharContato()">✕</button>
   <div class="contato-card">
@@ -605,10 +670,41 @@ const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const EMPRESA_ID='dd8275c9-e88f-4633-bfd0-bfa262eaf857';
 const LOJA_NOME='Sabores da Ana';
 
+/* ===== Black Friday (temporário) =====
+   Pra voltar ao site normal depois da campanha: troca BLACK_FRIDAY_ATIVO pra false (desliga o
+   reskin preto/dourado, a faixa no topo e os cards de combo — volta a mostrar Queridinhos) e
+   dá um git push. Os combos ficam com preço fechado validado no banco (erp_criar_pedido_publico),
+   então mesmo com o site fora do ar o pedido nunca sai com preço errado. */
+const BLACK_FRIDAY_ATIVO=true;
+const COMBOS_BF=[
+  {tipo:'10',unidades:10,carne:5,frango:5,preco:160},
+  {tipo:'15',unidades:15,carne:7,frango:8,preco:225},
+  {tipo:'20',unidades:20,carne:10,frango:10,preco:290}
+];
+const COMBO_BF_PRECO_MAX_ITEM=25; // mesmo limite validado no banco — só pratos até esse preço entram no combo
+if(BLACK_FRIDAY_ATIVO){
+  document.documentElement.setAttribute('data-tema','bf');
+  document.addEventListener('DOMContentLoaded',()=>{
+    const nav=document.querySelector('.navbar');
+    if(nav)nav.insertAdjacentHTML('beforebegin','<div class="bf-ribbon">🖤 BLACK FRIDAY · COMBOS COM PREÇO FECHADO ✨</div>');
+  });
+}
+
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const $=s=>document.querySelector(s);
 const money=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 document.title=LOJA_NOME+' — Faça seu pedido';
+// Mensagem rápida no rodapé da tela (usada em várias telas: Marmita Personalizada, Dia da Massa,
+// Combo Black Friday, cancelamento de pedido etc.). isErro=true deixa a cor de alerta.
+let _toastTimer=null;
+function toast(msg,isErro){
+  let el=document.querySelector('.toast-msg');
+  if(!el){ el=document.createElement('div'); el.className='toast-msg'; document.body.appendChild(el); }
+  el.textContent=msg; el.classList.toggle('err',!!isErro);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>el.classList.remove('show'),3200);
+}
 
 /* ===== Sobre nós ===== */
 function abrirPreparo(){ $('#preparo-overlay').classList.add('open'); document.body.style.overflow='hidden'; }
@@ -659,6 +755,12 @@ let carrinhoCustom=JSON.parse(localStorage.getItem(CART_CUSTOM_KEY)||'[]'); // [
 // Personalizada, cada escolha vira sua própria linha (não mescla automaticamente), porque linhas
 // com seleções diferentes precisam aparecer separadas na observação do pedido pra cozinha.
 let carrinhoMassa=JSON.parse(localStorage.getItem(CART_MASSA_KEY)||'[]'); // [{id,item_id,nome,preco,qtd,massa,molho,turno}]
+// Combo Black Friday: cada entrada é UM combo fechado (10/15/20un), com os pratos reais que o
+// cliente escolheu dentro da cota de carne/frango. Preço mostrado aqui é só referência — quem
+// manda de verdade é o banco (erp_criar_pedido_publico), que recalcula tudo e nunca confia no
+// preço que o navegador mandar.
+const CART_COMBOBF_KEY='pedido_carrinho_combobf_v1';
+let carrinhoComboBF=JSON.parse(localStorage.getItem(CART_COMBOBF_KEY)||'[]'); // [{id,tipo,preco,itens:[{item_id,nome,categoria,qtd}]}]
 // Itens que o cliente TIROU de cada prato: {item_id:['feijao','arroz']}. Só remoção — sem troca,
 // sem custo extra pra produção. Vale pra todas as unidades daquele prato no carrinho. Não muda
 // preço; vira instrução de montagem na observação do pedido.
@@ -707,8 +809,8 @@ function renderPromoBanner(desktopUrl,mobileUrl){
 renderPromoBanner();
 function brutoCarrinhoNormal(){ return Object.entries(carrinho).reduce((a,[id,q])=>{ const it=itemPorId(id); return a+(it?it.preco_venda*q:0); },0); }
 function qtdCarrinhoNormal(){ return Object.values(carrinho).reduce((a,q)=>a+q,0); }
-function brutoCarrinho(){ return brutoCarrinhoNormal()+brutoCarrinhoCustom()+brutoCarrinhoMassa(); }
-function qtdCarrinho(){ return qtdCarrinhoNormal()+qtdCarrinhoCustom()+qtdCarrinhoMassa(); }
+function brutoCarrinho(){ return brutoCarrinhoNormal()+brutoCarrinhoCustom()+brutoCarrinhoMassa()+brutoCarrinhoComboBF(); }
+function qtdCarrinho(){ return qtdCarrinhoNormal()+qtdCarrinhoCustom()+qtdCarrinhoMassa()+qtdCarrinhoComboBF(); }
 // Marmita Personalizada NÃO entra na contagem do desconto por quantidade (nem conta pro mínimo
 // de 5un, nem recebe o desconto) — ela já sai com a margem de 60% calculada em cima do custo
 // real, então o desconto de combo só corroeria essa margem sem necessidade. Isso é só a prévia
@@ -955,6 +1057,101 @@ function observacaoMassaTexto(){
   return carrinhoMassa.map(l=>`${l.nome} (${l.qtd}x): ${l.massa} + ${l.molho}, ${l.turno}`).join(' | ');
 }
 
+/* ===== Combo Black Friday (preço fechado, cota de carne/frango) =====
+   Mecânica: a pessoa escolhe os pratos dentro das categorias "Carnes" e "Frangos" até bater a
+   cota do combo (ex.: 5+5 no de 10 unidades). Só libera "Adicionar à sacola" com a cota EXATA —
+   nem mais, nem menos. O preço final de verdade é recalculado no banco; aqui é só a prévia. */
+function salvarCarrinhoComboBF(){ localStorage.setItem(CART_COMBOBF_KEY,JSON.stringify(carrinhoComboBF)); atualizarBarra(); }
+function qtdCarrinhoComboBF(){ return carrinhoComboBF.reduce((a,c)=>a+c.itens.reduce((b,x)=>b+x.qtd,0),0); }
+function brutoCarrinhoComboBF(){ return carrinhoComboBF.reduce((a,c)=>a+c.preco,0); }
+// categoria vem do cardápio público exatamente como cadastrada no admin ("Carnes"/"Frangos") —
+// comparo normalizando maiúsculas/minúsculas pra não quebrar se alguém digitar diferente.
+function itensElegiveisComboBf(categoria){
+  return cardapio.filter(i=>(i.categoria||'').trim().toLowerCase()===categoria && i.preco_venda<=COMBO_BF_PRECO_MAX_ITEM)
+    .sort((a,b)=>a.nome.localeCompare(b.nome,'pt'));
+}
+let comboBfAtual=null; // {tipo,unidades,carne,frango,preco,carnes:{item_id:qtd},frangos:{item_id:qtd}}
+function abrirComboBf(tipo){
+  const def=COMBOS_BF.find(c=>c.tipo===tipo); if(!def)return;
+  comboBfAtual={...def,carnes:{},frangos:{}};
+  renderComboBf();
+  $('#combobf-overlay').classList.add('open'); document.body.style.overflow='hidden';
+}
+function fecharComboBf(){ $('#combobf-overlay').classList.remove('open'); document.body.style.overflow=''; }
+function comboBfTotalGrupo(grupo){ return Object.values(comboBfAtual[grupo]).reduce((a,q)=>a+q,0); }
+function comboBfAlterarQtd(grupo,itemId,delta){
+  const max=grupo==='carnes'?comboBfAtual.carne:comboBfAtual.frango;
+  const atual=comboBfAtual[grupo][itemId]||0;
+  const totalGrupo=comboBfTotalGrupo(grupo);
+  if(delta>0&&totalGrupo>=max)return; // cota do grupo já tá cheia
+  const novo=Math.max(0,atual+delta);
+  if(novo<=0)delete comboBfAtual[grupo][itemId]; else comboBfAtual[grupo][itemId]=novo;
+  renderComboBf();
+}
+function comboBfLinhaHtml(grupo,it){
+  const qtd=comboBfAtual[grupo][it.id]||0;
+  const totalGrupo=comboBfTotalGrupo(grupo);
+  const max=grupo==='carnes'?comboBfAtual.carne:comboBfAtual.frango;
+  const podeAdd=totalGrupo<max;
+  return `<div class="cbf-row">
+    <span class="nome">${esc(it.nome)}</span>
+    ${qtd>0
+      ?`<div class="stepper"><button onclick="comboBfAlterarQtd('${grupo}','${it.id}',-1)">−</button><span>${qtd}</span><button class="add" ${podeAdd?'':'disabled'} onclick="comboBfAlterarQtd('${grupo}','${it.id}',1)">+</button></div>`
+      :`<button class="btn-add" style="width:auto;padding:6px 14px" ${podeAdd?'':'disabled'} onclick="comboBfAlterarQtd('${grupo}','${it.id}',1)">+ Adicionar</button>`}
+  </div>`;
+}
+function comboBfGrupoHtml(grupo,titulo,max){
+  const total=comboBfTotalGrupo(grupo);
+  const completo=total===max;
+  const itens=itensElegiveisComboBf(grupo==='carnes'?'carnes':'frangos');
+  return `<div class="cbf-grupo-h"><span class="tit">${titulo}</span><span class="cbf-badge ${completo?'ok':''}">${total}/${max} · ${completo?'✓ completo':'obrigatório'}</span></div>
+    ${itens.map(it=>comboBfLinhaHtml(grupo,it)).join('')}`;
+}
+function comboBfCompleto(){ return comboBfAtual&&comboBfTotalGrupo('carnes')===comboBfAtual.carne&&comboBfTotalGrupo('frangos')===comboBfAtual.frango; }
+function renderComboBf(){
+  const c=comboBfAtual; if(!c)return;
+  const completo=comboBfCompleto();
+  $('#combobf-body').innerHTML=`
+    <p class="subtle" style="font-family:var(--font-menu);font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.5"><b>Combo ${c.unidades} Unidades</b> — ${money(c.preco)} fechado (${c.carne} carnes + ${c.frango} frangos, à sua escolha) <span class="cbf-balao" style="margin-left:6px">${money(c.preco/c.unidades)} a marmita</span></p>
+    ${comboBfGrupoHtml('carnes','🥩 Carnes',c.carne)}
+    ${comboBfGrupoHtml('frangos','🍗 Frangos',c.frango)}
+    <div class="cbf-foot">
+      <div class="tot"><span>Total do combo</span><span>${money(c.preco)}</span></div>
+      <button class="btn" id="combobf-btn-add" ${completo?'':'disabled'} onclick="comboBfAdicionarAoCarrinho()">Adicionar à sacola</button>
+      ${!completo?'<p class="subtle" style="font-family:var(--font-menu);font-size:12px;color:var(--danger);margin-top:8px">Complete as duas cotas (carnes e frangos) pra continuar.</p>':''}
+    </div>`;
+}
+function comboBfAdicionarAoCarrinho(){
+  if(!comboBfCompleto())return toast('Complete a cota de carnes e frangos pra continuar.',true);
+  const itens=[];
+  ['carnes','frangos'].forEach(grupo=>{
+    Object.entries(comboBfAtual[grupo]).forEach(([itemId,qtd])=>{
+      const it=itemPorId(itemId); if(!it||!(qtd>0))return;
+      itens.push({item_id:itemId,nome:it.nome,categoria:grupo,qtd});
+    });
+  });
+  carrinhoComboBF.push({id:(crypto.randomUUID?crypto.randomUUID():'cbf-'+Date.now()+'-'+Math.random().toString(36).slice(2)),tipo:comboBfAtual.tipo,preco:comboBfAtual.preco,itens});
+  salvarCarrinhoComboBF();
+  fecharComboBf();
+  toast('Combo Black Friday adicionado à sacola!');
+}
+function removerComboBf(id){
+  carrinhoComboBF=carrinhoComboBF.filter(x=>x.id!==id);
+  salvarCarrinhoComboBF(); if($('#overlay').classList.contains('open'))renderCarrinho();
+}
+function cardComboBfHtml(def){
+  const precoUn=def.preco/def.unidades;
+  const precoUnTxt=precoUn.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return `<div class="cbf-card">
+    <span class="cbf-tag">BLACK FRIDAY</span>
+    <span class="cbf-etiqueta"><span class="fio"></span><span class="tag"><span class="furo"></span><span class="rs">R$</span><span class="num">${precoUnTxt}</span><span class="un">un</span></span></span>
+    <span class="cbf-un">Combo ${def.unidades} Unidades</span>
+    <span class="cbf-desc">${def.carne} carnes + ${def.frango} frangos · sabores à sua escolha</span>
+    <span class="cbf-preco">${money(def.preco)}</span>
+    <button class="btn-add" style="margin-top:6px" onclick="abrirComboBf('${def.tipo}')">Montar meu combo</button>
+  </div>`;
+}
+
 function atualizarBarra(){
   const n=qtdCarrinho();
   $('#cartbar').classList.toggle('show',n>0);
@@ -1193,12 +1390,18 @@ function renderCardapio(){
     if(ordemPorCategoria[i.categoria]===undefined)ordemPorCategoria[i.categoria]=i.categoria_ordem??999999;
   });
   const categorias=Object.keys(porCategoria).sort((a,b)=>ordemPorCategoria[a]-ordemPorCategoria[b]||a.localeCompare(b,'pt'));
-  const pillQueridinhos=destaques.length?`<button class="catpill active" data-cat="queridinhos" onclick="irParaCategoria('queridinhos')">Queridinhos</button>`:'';
-  $('#catnav').innerHTML=pillQueridinhos+categorias.map(cat=>`<button class="catpill${destaques.length?'':' active'}" data-cat="${slug(cat)}" onclick="irParaCategoria('${slug(cat)}')">${esc(capitalizar(cat))}</button>`).join('');
+  // Durante a Black Friday, o slot de destaque no topo (normalmente "Queridinhos") vira os 3
+  // cards de combo — some sozinho quando BLACK_FRIDAY_ATIVO voltar pra false.
+  const temDestaque=BLACK_FRIDAY_ATIVO||destaques.length;
+  const labelDestaque=BLACK_FRIDAY_ATIVO?'Combos Black Friday':'Queridinhos';
+  const pillQueridinhos=temDestaque?`<button class="catpill active" data-cat="queridinhos" onclick="irParaCategoria('queridinhos')">${esc(labelDestaque)}</button>`:'';
+  $('#catnav').innerHTML=pillQueridinhos+categorias.map(cat=>`<button class="catpill${temDestaque?'':' active'}" data-cat="${slug(cat)}" onclick="irParaCategoria('${slug(cat)}')">${esc(capitalizar(cat))}</button>`).join('');
   _cardBgCounter=0;
-  const destaquesHtml=destaques.length
-    ?`<div class="destaque-h" id="cat-queridinhos">Queridinhos</div><div class="grid-itens" style="margin-bottom:8px">${destaques.map(cardHtml).join('')}</div>`
-    :'';
+  const destaquesHtml=BLACK_FRIDAY_ATIVO
+    ?`<div class="destaque-h" id="cat-queridinhos">Combos Black Friday</div><div class="grid-itens" style="margin-bottom:8px">${COMBOS_BF.map(cardComboBfHtml).join('')}</div>`
+    :(destaques.length
+      ?`<div class="destaque-h" id="cat-queridinhos">Queridinhos</div><div class="grid-itens" style="margin-bottom:8px">${destaques.map(cardHtml).join('')}</div>`
+      :'');
   const categoriasHtml=categorias.map(cat=>{
     const itens=porCategoria[cat].map(cardHtml).join('');
     return `<div class="cat-h" id="cat-${slug(cat)}">${esc(capitalizar(cat))}</div><div class="grid-itens">${itens}</div>`;
@@ -1307,7 +1510,7 @@ function modalidadesHtml(){
 
 /* ===== Carrinho / checkout ===== */
 function abrirCarrinho(){
-  if(!qtdCarrinho()){ // já soma carrinho + custom + massa (ver qtdCarrinho)
+  if(!qtdCarrinho()){ // já soma carrinho + custom + massa + combo BF (ver qtdCarrinho)
     $('#sheet').innerHTML=`<div class="sheet-h"><h3>Seu pedido</h3><button class="x" onclick="fecharCarrinho()">✕</button></div>
       <div class="empty" style="padding:34px 10px">Seu carrinho está vazio.<br>Escolhe algo gostoso no cardápio! 😋</div>
       <button class="btn" onclick="fecharCarrinho()">Ver cardápio</button>`;
@@ -1319,7 +1522,7 @@ function abrirCarrinho(){
 function fecharCarrinho(){ $('#overlay').classList.remove('open'); }
 function renderCarrinho(){
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
-  if(!ids.length&&!carrinhoCustom.length&&!carrinhoMassa.length){ fecharCarrinho(); return; }
+  if(!ids.length&&!carrinhoCustom.length&&!carrinhoMassa.length&&!carrinhoComboBF.length){ fecharCarrinho(); return; }
   const linhas=ids.map(id=>{
     const it=itemPorId(id); if(!it)return'';
     return `<div class="line">
@@ -1337,6 +1540,12 @@ function renderCarrinho(){
     return `<div class="line">
       <div><div class="nome">🍝 ${esc(l.nome)}</div><div class="sub">${desc} · ${money(l.preco)} un.</div></div>
       <div class="stepper"><button onclick="alterarQtdMassa('${l.id}',-1)">−</button><span>${l.qtd}</span><button class="add" onclick="alterarQtdMassa('${l.id}',1)">+</button></div>
+    </div>`;
+  }).join('')+carrinhoComboBF.map(c=>{
+    const desc=c.itens.map(x=>`${x.qtd}× ${esc(x.nome)}`).join(', ');
+    return `<div class="line">
+      <div><div class="nome">🖤 Combo Black Friday — ${c.itens.reduce((a,x)=>a+x.qtd,0)} un.</div><div class="sub">${desc}</div><div class="sub" style="font-weight:700">${money(c.preco)} (combo fechado)</div></div>
+      <button class="rm" style="flex:none;background:none;border:none;color:var(--danger);font-size:17px;cursor:pointer;padding:0 2px" onclick="removerComboBf('${c.id}')">✕</button>
     </div>`;
   }).join('');
   const combo=comboAtivoCarrinho();
@@ -1407,7 +1616,7 @@ async function enviarPedido(formaPagamento){
     if(!endereco){ err.textContent='Informe o endereço para entrega.'; err.style.display='block'; return; }
   }
   const ids=Object.keys(carrinho).filter(id=>carrinho[id]>0);
-  if(!ids.length&&!carrinhoCustom.length&&!carrinhoMassa.length)return;
+  if(!ids.length&&!carrinhoCustom.length&&!carrinhoMassa.length&&!carrinhoComboBF.length)return;
   const btnOnline=$('#ck-btn-online'), btnEntrega=$('#ck-btn-entrega');
   const btnClicado=formaPagamento==='entrega'?btnEntrega:btnOnline;
   const textoOriginal=btnClicado.textContent;
@@ -1421,6 +1630,9 @@ async function enviarPedido(formaPagamento){
   const itens=ids.map(id=>({item_id:id,quantidade:carrinho[id]}))
     .concat(idsMassaUsados.map(id=>({item_id:id,quantidade:qtdMassaItem(id)})));
   const itensCustom=carrinhoCustom.map(l=>({quantidade:l.qtd,componentes:l.itens.map(x=>({item_id:x.item_id,gramas:x.gramas}))}));
+  // Combo Black Friday: manda os pratos reais escolhidos (não um item "combo" genérico), pra
+  // produção/planejamento contarem certinho — o banco recalcula o preço fechado e confere a cota.
+  const combosBf=carrinhoComboBF.map(c=>({tipo:c.tipo,itens:c.itens.map(x=>({item_id:x.item_id,quantidade:x.qtd}))}));
   const obsManual=$('#ck-obs').value.trim();
   const obsMassa=observacaoMassaTexto();
   const obsRemocoes=observacaoAcompTexto(); // ex.: "Bife Acebolado (2x): sem Arroz, com Purê de Salsa"
@@ -1430,12 +1642,13 @@ async function enviarPedido(formaPagamento){
     p_empresa_id:EMPRESA_ID, p_itens:itens, p_cliente_nome:nome, p_cliente_telefone:tel,
     p_observacao:observacaoFinal, p_id_externo:idSessao(), p_cliente_email:email||usuario?.email||null,
     p_cupom_codigo:cupomAplicado?cupomAplicado.codigo:null, p_forma_pagamento:formaPagamento,
-    p_itens_custom:itensCustom
+    p_itens_custom:itensCustom, p_combos_bf:combosBf
   });
   if(error){
     btnOnline.disabled=false; btnEntrega.disabled=false; btnClicado.textContent=textoOriginal;
     if(error.message.includes('Item indisponível'))err.textContent='Um item do seu carrinho ficou indisponível — atualize a página e monte o pedido novamente.';
     else if(error.message.includes('marmita personalizada')||error.message.includes('montagem'))err.textContent='Algo na sua marmita personalizada ficou indisponível — refaça a montagem e tente de novo.';
+    else if(error.message.includes('Combo Black Friday'))err.textContent='Algo no seu Combo Black Friday mudou — refaça a montagem do combo e tente de novo.';
     else if(error.message.includes('Loja indisponível'))err.textContent='A loja não está recebendo pedidos no momento. Tente novamente mais tarde.';
     else if(cupomAplicado){ err.textContent=error.message||'Não foi possível aplicar o cupom agora.'; cupomAplicado=null; renderCarrinho(); return; }
     else err.textContent='Não foi possível enviar seu pedido agora. Tente novamente em instantes.';
@@ -1453,7 +1666,7 @@ async function enviarPedido(formaPagamento){
   }
   const numeroPedido=data.numero;
   const pedidoIdCriado=data.pedido_id;
-  carrinho={}; carrinhoCustom=[]; carrinhoMassa=[]; localStorage.removeItem(CART_KEY); localStorage.removeItem(CART_CUSTOM_KEY); localStorage.removeItem(CART_MASSA_KEY); localStorage.removeItem(SESSAO_KEY);
+  carrinho={}; carrinhoCustom=[]; carrinhoMassa=[]; carrinhoComboBF=[]; localStorage.removeItem(CART_KEY); localStorage.removeItem(CART_CUSTOM_KEY); localStorage.removeItem(CART_MASSA_KEY); localStorage.removeItem(CART_COMBOBF_KEY); localStorage.removeItem(SESSAO_KEY);
   acomps={}; localStorage.removeItem(CART_ACOMP_KEY);
   modalidadeEscolhida=null; ckNome=null; ckTel=null; ckEmail=null; ckObs=null; ckEndereco=null;
   cupomAplicado=null; cupomErro=null; cupomCodigoDigitado='';
